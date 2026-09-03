@@ -1,0 +1,244 @@
+/* ==========================================================================
+   Additions for the Supabase integration.
+
+   The original form's look is untouched: everything here styles elements that
+   did not exist before (auth dialog, session chip, applications list) and
+   reuses the same custom properties, radii and weights so they read as part of
+   the same document.
+   ========================================================================== */
+
+[hidden] { display: none !important; }
+
+/* ===== Toolbar: session + sync ========================================== */
+
+.session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d7e6da;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sync-chip.ok      { color: #9be3b4; }
+.sync-chip.err     { color: #ffb3ab; background: rgba(194, 58, 46, 0.25); }
+.sync-chip.pending { color: #ffdf9a; }
+
+/* ===== Gating ============================================================ */
+
+/* Before sign-in the form is present but unreadable and inert; the auth
+   dialog sits on top of it. */
+body:not(.is-authenticated) .wrap {
+  filter: blur(5px);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The HR sections are marked "internal use only" -- so they are, and the
+   review data behind them is unreachable for applicants at the RLS level too. */
+body:not(.is-staff) .hr-only { display: none !important; }
+
+/* Reviewing someone else's application: their answers are read-only. */
+body.is-reviewing .section:not(.hr-only) .section-body {
+  background: #fafbf8;
+}
+
+body.is-reviewing input[readonly]:not(#age),
+body.is-reviewing textarea[readonly] {
+  background: #f4f5f2;
+  color: #55605a;
+}
+
+/* ===== Auth dialog ======================================================= */
+
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f2f4f0;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-tab.is-active {
+  background: var(--green);
+  color: #fff;
+}
+
+.auth-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #45504a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.auth-link {
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-link:hover { color: var(--green-dark); }
+
+.modal-box .submit-status { margin-top: 10px; line-height: 1.7; }
+
+.tbtn:disabled { opacity: 0.55; cursor: default; }
+
+/* ===== Applications list (HR / admin) ==================================== */
+
+.staff-box { max-width: 620px; }
+
+.staff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.staff-toolbar input {
+  flex: 1;
+  margin-bottom: 0 !important;
+}
+
+.staff-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.staff-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.staff-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  font-family: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.staff-row:last-child { border-bottom: none; }
+.staff-row:hover      { background: #f5f8f4; }
+.staff-row.is-selected { background: #eef6ef; box-shadow: inset 3px 0 0 var(--green); }
+
+html[dir='ltr'] .staff-row.is-selected { box-shadow: inset -3px 0 0 var(--green); }
+
+.staff-score {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--muted);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.staff-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.staff-name {
+  color: #1c211c;
+  font-size: 12.5px;
+  font-weight: 800;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.staff-meta {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.staff-state {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.staff-state.is-submitted { background: #e4f3e6; color: var(--green-dark); }
+.staff-state.is-draft     { background: #f1f2ee; color: var(--muted); }
+
+.staff-empty {
+  padding: 26px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ===== Print ============================================================= */
+
+@media print {
+  .session-chip,
+  .sync-chip { display: none !important; }
+
+  body:not(.is-authenticated) .wrap { filter: none; }
+}

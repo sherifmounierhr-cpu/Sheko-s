@@ -270,6 +270,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
   a{display:none;}
 }
 </style>
+<link rel="stylesheet" href="css/app-supabase.css">
 </head>
 <body>
 
@@ -278,9 +279,13 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <div class="mark-chip"><img class="mark" src="data:image/png;base64,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vgSssg6xgXvJD2WK1I3V3exJ5JMtpItkSbqc/MmKn7HOUrE7gRdkSfo56yASPzXZ0tWyJF0CXG0cY0NfbN8VFKkV47vZJ7jgnVFt2YwsSVdnSXoscCSw1DpPBT4P7Jsl6e+tg0hvUJMtdXCpdYANLLQOINKBK4F/GtR1wLsN6soQZEl6BbAP0LLOUpK/A40sSd/WvnEjUgk12VIHPwbusg4BXJcl6V+sQ4iMVPtudmJU/iQX/ASj2jKILEnvyJL0DcALgZ9b5ynILcAxwH5Zkv7QOoz0HjXZ0vXajy7vhrnUC60DiBTgK9jczZ4BvMugrgxDlqS/yJL0RcCzyL/vLrdNNCK/BY4A9s6S9LPa4idW1GRLXSw0rr8W+KJxBpGOtRetVnez3++CH2dUW4YhS9I/ZUn6NmAW+Z7tq+nuhvsm4DzyPdfPy5L0SjXXYm2MdQCRociS9EYX/CWA1WOar82S9D6j2sPxR2CJdYgusaiAa9xGdW+dF5F3qL5CPsLNYrTecxn6n+kDw/jcXrKsqkJZki4DrgCucMGPBw4AXgQcCDybfL+9hQeA3wA/A37Yfq6CSFfpGxgYKPSCU08/eQl2/+jk8V6bJenV1iFERCQuLvg+YGfgCcDewF7t/3sn8gXctsDoDkqsJR+beidwY/v1N+BPWZLe0cF1o+SCXwC81zrHFuyWJelt1iG2pOieWHeyRUREZNjaT4+8vf360aY+xwU/nXw//mRg6/aHJ5E/DXQ0sG6DT19GPkowI39H7r52DZFaUpMtIiIipciS9CHgIescIhZ08FFEREREpGCF38nOknRq0dcUEREREamTwg8+ioiIiIj0Om0XEREREREpmJpsEREREZGCqckWERERESmYmmwRERERkYKpyRYRERERKZiabBERERGRgqnJFhEREREpmJpsEREREZGCqckWERERESmYmmwRERERkYKpyRYRERERKZiabBERERGRgqnJFhEREREpmJpsEREREZGCqckWERERESmYmmwRERERkYKpyRYRERERKZiabBERERGRgqnJFhEREREp2P8Ps1S/6fhaCwsAAAAASUVORK5CYII=" alt="Everest"></div>
   </div>
   <div class="actions">
-    <button class="tbtn alt" onclick="toggleLang()"><span id="langBtnLabel">EN</span></button>
-    <button class="tbtn alt" onclick="openSettings()" data-ar="إعدادات الربط" data-en="Sheet Settings">إعدادات الربط</button>
-    <button class="tbtn gold" onclick="window.print()" data-ar="طباعة" data-en="Print">طباعة</button>
+    <span class="session-chip" id="sessionChip" hidden></span>
+    <span class="sync-chip" id="syncChip" hidden></span>
+    <button class="tbtn alt" id="langBtn" type="button"><span id="langBtnLabel">EN</span></button>
+    <button class="tbtn alt" id="staffBtn" type="button" hidden data-ar="الطلبات" data-en="Applications">الطلبات</button>
+    <button class="tbtn alt" id="settingsBtn" type="button" data-ar="إعدادات الربط" data-en="Sheet Settings">إعدادات الربط</button>
+    <button class="tbtn gold" id="printBtn" type="button" data-ar="طباعة" data-en="Print">طباعة</button>
+    <button class="tbtn alt" id="signOutBtn" type="button" hidden data-ar="خروج" data-en="Sign Out">خروج</button>
   </div>
 </div>
 
@@ -310,7 +315,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
   </div>
 
   <div class="submit-bar">
-    <button type="button" class="tbtn submit-btn" onclick="submitToSheet()" data-ar="إرسال الطلب" data-en="Submit Application">إرسال الطلب</button>
+    <button type="button" class="tbtn submit-btn" data-submit-application data-ar="إرسال الطلب" data-en="Submit Application">إرسال الطلب</button>
     <div class="submit-status" id="submitStatus"></div>
   </div>
 
@@ -348,7 +353,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <div class="section-body">
       <div class="field" style="margin-bottom:12px;"><label data-ar="الاسم بالكامل" data-en="Full Name">الاسم بالكامل</label><input type="text" name="full_name" id="full_name"></div>
       <div class="grid3">
-        <div class="field"><label data-ar="تاريخ الميلاد" data-en="Date of Birth">تاريخ الميلاد</label><input type="date" name="dob" id="dob" onchange="calcAge()"></div>
+        <div class="field"><label data-ar="تاريخ الميلاد" data-en="Date of Birth">تاريخ الميلاد</label><input type="date" name="dob" id="dob"></div>
         <div class="field readonly"><label data-ar="السن" data-en="Age">السن</label><input type="text" name="age" id="age" readonly></div>
         <div class="field"><label data-ar="الجنسية" data-en="Nationality">الجنسية</label><input type="text" name="nationality" value="مصري"></div>
       </div>
@@ -411,9 +416,9 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
       <div class="field" style="margin-top:14px;">
         <label data-ar="الوقت التقريبي للوصول إلى العمل:" data-en="Approx. Commute Time:">الوقت التقريبي للوصول إلى العمل:</label>
         <div class="radio-row" data-name="commute">
-          <label class="radio-opt"><input type="radio" name="commute" value="اقل من 30" onchange="updateScore()"><span data-ar="أقل من 30 دقيقة" data-en="Less than 30 min">أقل من 30 دقيقة</span></label>
-          <label class="radio-opt"><input type="radio" name="commute" value="30-60" onchange="updateScore()"><span data-ar="من 30 إلى 60 دقيقة" data-en="30–60 min">من 30 إلى 60 دقيقة</span></label>
-          <label class="radio-opt"><input type="radio" name="commute" value="اكثر من ساعة" onchange="updateScore()"><span data-ar="أكثر من ساعة" data-en="More than 1 hour">أكثر من ساعة</span></label>
+          <label class="radio-opt"><input type="radio" name="commute" value="اقل من 30"><span data-ar="أقل من 30 دقيقة" data-en="Less than 30 min">أقل من 30 دقيقة</span></label>
+          <label class="radio-opt"><input type="radio" name="commute" value="30-60"><span data-ar="من 30 إلى 60 دقيقة" data-en="30–60 min">من 30 إلى 60 دقيقة</span></label>
+          <label class="radio-opt"><input type="radio" name="commute" value="اكثر من ساعة"><span data-ar="أكثر من ساعة" data-en="More than 1 hour">أكثر من ساعة</span></label>
         </div>
       </div>
     </div>
@@ -543,19 +548,19 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
       <div class="field">
         <label data-ar="هل لديك خبرة في المبيعات؟" data-en="Do you have sales experience?">هل لديك خبرة في المبيعات؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="sales_exp" value="نعم" onchange="updateScore()"><span data-ar="نعم" data-en="Yes">نعم</span></label>
-          <label class="radio-opt"><input type="radio" name="sales_exp" value="لا" onchange="updateScore()"><span data-ar="لا" data-en="No">لا</span></label>
+          <label class="radio-opt"><input type="radio" name="sales_exp" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="sales_exp" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
       <div class="grid2" style="margin-top:12px;">
-        <div class="field"><label data-ar="عدد سنوات الخبرة في المبيعات" data-en="Years of Sales Experience">عدد سنوات الخبرة في المبيعات</label><input type="number" min="0" name="sales_years" oninput="updateScore()"></div>
+        <div class="field"><label data-ar="عدد سنوات الخبرة في المبيعات" data-en="Years of Sales Experience">عدد سنوات الخبرة في المبيعات</label><input type="number" min="0" name="sales_years"></div>
         <div class="field"><label data-ar="الشركة العقارية السابقة (إن وُجدت)" data-en="Previous Real Estate Company (if any)">الشركة العقارية السابقة (إن وُجدت)</label><input type="text" name="prev_re_company"></div>
       </div>
       <div class="field" style="margin-top:12px;">
         <label data-ar="هل لديك خبرة في مجال العقارات؟" data-en="Do you have real estate experience?">هل لديك خبرة في مجال العقارات؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="re_exp" value="نعم" onchange="updateScore()"><span data-ar="نعم" data-en="Yes">نعم</span></label>
-          <label class="radio-opt"><input type="radio" name="re_exp" value="لا" onchange="updateScore()"><span data-ar="لا" data-en="No">لا</span></label>
+          <label class="radio-opt"><input type="radio" name="re_exp" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="re_exp" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
     </div>
@@ -606,34 +611,34 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
       <div class="field" style="margin-top:14px;">
         <label data-ar="متى يمكنك الانضمام؟" data-en="When can you join?">متى يمكنك الانضمام؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="join_time" value="فورًا" onchange="updateScore()"><span data-ar="فورًا" data-en="Immediately">فورًا</span></label>
-          <label class="radio-opt"><input type="radio" name="join_time" value="خلال أسبوع" onchange="updateScore()"><span data-ar="خلال أسبوع" data-en="Within a week">خلال أسبوع</span></label>
-          <label class="radio-opt"><input type="radio" name="join_time" value="خلال أسبوعين" onchange="updateScore()"><span data-ar="خلال أسبوعين" data-en="Within 2 weeks">خلال أسبوعين</span></label>
-          <label class="radio-opt"><input type="radio" name="join_time" value="خلال شهر" onchange="updateScore()"><span data-ar="خلال شهر" data-en="Within a month">خلال شهر</span></label>
+          <label class="radio-opt"><input type="radio" name="join_time" value="فورًا"><span data-ar="فورًا" data-en="Immediately">فورًا</span></label>
+          <label class="radio-opt"><input type="radio" name="join_time" value="خلال أسبوع"><span data-ar="خلال أسبوع" data-en="Within a week">خلال أسبوع</span></label>
+          <label class="radio-opt"><input type="radio" name="join_time" value="خلال أسبوعين"><span data-ar="خلال أسبوعين" data-en="Within 2 weeks">خلال أسبوعين</span></label>
+          <label class="radio-opt"><input type="radio" name="join_time" value="خلال شهر"><span data-ar="خلال شهر" data-en="Within a month">خلال شهر</span></label>
         </div>
       </div>
 
       <div class="field" style="margin-top:14px;">
         <label data-ar="هل تقبل العمل وفقًا لأهداف ومؤشرات مبيعات؟" data-en="Do you accept working to sales targets/KPIs?">هل تقبل العمل وفقًا لأهداف ومؤشرات مبيعات؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="accept_kpi" value="نعم" onchange="updateScore()"><span data-ar="نعم" data-en="Yes">نعم</span></label>
-          <label class="radio-opt"><input type="radio" name="accept_kpi" value="لا" onchange="updateScore()"><span data-ar="لا" data-en="No">لا</span></label>
+          <label class="radio-opt"><input type="radio" name="accept_kpi" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="accept_kpi" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
 
       <div class="field" style="margin-top:14px;">
         <label data-ar="هل تقبل دخلًا يعتمد على العمولة؟" data-en="Do you accept commission-based income?">هل تقبل دخلًا يعتمد على العمولة؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="accept_commission" value="نعم" onchange="updateScore()"><span data-ar="نعم" data-en="Yes">نعم</span></label>
-          <label class="radio-opt"><input type="radio" name="accept_commission" value="لا" onchange="updateScore()"><span data-ar="لا" data-en="No">لا</span></label>
+          <label class="radio-opt"><input type="radio" name="accept_commission" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="accept_commission" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
 
       <div class="field" style="margin-top:14px;">
         <label data-ar="هل يمكنك العمل في عطلات نهاية الأسبوع عند الحاجة؟" data-en="Can you work weekends when needed?">هل يمكنك العمل في عطلات نهاية الأسبوع عند الحاجة؟</label>
         <div class="radio-row">
-          <label class="radio-opt"><input type="radio" name="weekend_work" value="نعم" onchange="updateScore()"><span data-ar="نعم" data-en="Yes">نعم</span></label>
-          <label class="radio-opt"><input type="radio" name="weekend_work" value="لا" onchange="updateScore()"><span data-ar="لا" data-en="No">لا</span></label>
+          <label class="radio-opt"><input type="radio" name="weekend_work" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="weekend_work" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
 
@@ -670,7 +675,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
   </div>
 
   <div class="submit-bar">
-    <button type="button" class="tbtn submit-btn" onclick="submitToSheet()" data-ar="إرسال الطلب" data-en="Submit Application">إرسال الطلب</button>
+    <button type="button" class="tbtn submit-btn" data-submit-application data-ar="إرسال الطلب" data-en="Submit Application">إرسال الطلب</button>
     <div class="submit-status" id="submitStatus2"></div>
   </div>
 
@@ -720,342 +725,108 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
 <!-- ============ Settings Modal ============ -->
 <div class="modal-overlay" id="settingsOverlay">
   <div class="modal-box">
-    <div class="modal-title" data-ar="إعدادات الربط بجوجل شيت" data-en="Google Sheet Link Settings">إعدادات الربط بجوجل شيت</div>
-    <div class="modal-text" data-ar="الصق هنا رابط Google Apps Script Web App بعد نشره (خطوات الإعداد موجودة في ملف التعليمات المرفق). هيتحفظ في المتصفح ده بس."
-      data-en="Paste your Google Apps Script Web App URL here after deploying it (setup steps are in the attached instructions file). It will be saved in this browser only.">
-      الصق هنا رابط Google Apps Script Web App بعد نشره (خطوات الإعداد موجودة في ملف التعليمات المرفق). هيتحفظ في المتصفح ده بس.
-    </div>
-    <input type="text" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/XXXXX/exec" dir="ltr">
-    <div class="modal-actions">
-      <button class="tbtn" onclick="saveSettings()" data-ar="حفظ" data-en="Save">حفظ</button>
-      <button class="tbtn alt" onclick="closeSettings()" data-ar="إغلاق" data-en="Close">إغلاق</button>
+    <div class="modal-title" data-ar="إعدادات الاتصال بقاعدة البيانات" data-en="Database Connection Settings">إعدادات الاتصال بقاعدة البيانات</div>
+    <div class="modal-text" data-ar="النموذج متصل بمشروع Supabase. البيانات دي محفوظة في المتصفح ده فقط، وتقدر تغيّرها لو عايز توجّه النموذج لمشروع تاني. المفتاح ده عام وآمن، وكل البيانات محمية بسياسات RLS."
+      data-en="This form is connected to a Supabase project. These values are stored in this browser only, and you can change them to point the form at a different project. The key is publishable and safe to expose; all data is protected by RLS policies.">
+      النموذج متصل بمشروع Supabase. البيانات دي محفوظة في المتصفح ده فقط، وتقدر تغيّرها لو عايز توجّه النموذج لمشروع تاني. المفتاح ده عام وآمن، وكل البيانات محمية بسياسات RLS.
     </div>
 
-    <div class="danger-zone">
+    <label class="auth-label" for="supabaseUrlInput" data-ar="رابط المشروع" data-en="Project URL">رابط المشروع</label>
+    <input type="text" id="supabaseUrlInput" placeholder="https://xxxxxxxx.supabase.co" dir="ltr">
+
+    <label class="auth-label" for="supabaseKeyInput" data-ar="المفتاح العام (publishable / anon)" data-en="Publishable (anon) key">المفتاح العام (publishable / anon)</label>
+    <input type="text" id="supabaseKeyInput" placeholder="sb_publishable_..." dir="ltr">
+
+    <div class="modal-actions">
+      <button class="tbtn alt" type="button" id="settingsDefaults" data-ar="استعادة الافتراضي" data-en="Restore Defaults">استعادة الافتراضي</button>
+      <button class="tbtn" type="button" id="settingsSave" data-ar="حفظ" data-en="Save">حفظ</button>
+      <button class="tbtn alt" type="button" id="settingsClose" data-ar="إغلاق" data-en="Close">إغلاق</button>
+    </div>
+    <div class="submit-status" id="settingsStatus"></div>
+
+    <div class="danger-zone" id="dangerZone" hidden>
       <div class="danger-title" data-ar="منطقة خطر" data-en="Danger Zone">منطقة خطر</div>
-      <div class="modal-text" data-ar="الزرار ده بيمسح كل صفوف البيانات في الشيت المربوط (وبيسيب صف العناوين). مفيش تراجع بعد الحذف."
-        data-en="This button deletes all data rows in the linked sheet (keeps the header row). This cannot be undone.">
-        الزرار ده بيمسح كل صفوف البيانات في الشيت المربوط (وبيسيب صف العناوين). مفيش تراجع بعد الحذف.
+      <div class="modal-text" data-ar="الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف."
+        data-en="This permanently deletes every application and every HR evaluation from the database. Administrators only, and it cannot be undone.">
+        الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف.
       </div>
-      <button class="tbtn danger" onclick="clearSheet()" data-ar="تفريغ الشيت" data-en="Clear Sheet">تفريغ الشيت</button>
+      <button class="tbtn danger" type="button" id="deleteAllBtn" data-ar="حذف كل الطلبات" data-en="Delete All Applications">حذف كل الطلبات</button>
       <div class="submit-status" id="clearStatus"></div>
     </div>
   </div>
 </div>
 
-<script>
-/* ===================== Language toggle ===================== */
-let currentLang = 'ar';
-function toggleLang(){
-  currentLang = currentLang === 'ar' ? 'en' : 'ar';
-  applyLang();
-}
-function applyLang(){
-  const root = document.getElementById('htmlRoot');
-  root.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
-  root.setAttribute('lang', currentLang);
-  document.getElementById('langBtnLabel').textContent = currentLang === 'ar' ? 'EN' : 'AR';
-  document.querySelectorAll('[data-ar]').forEach(el=>{
-    const val = currentLang === 'ar' ? el.getAttribute('data-ar') : el.getAttribute('data-en');
-    if(val !== null) el.textContent = val;
-  });
-}
 
-/* ===================== Age calc ===================== */
-function calcAge(){
-  const dob = document.getElementById('dob').value;
-  if(!dob) return;
-  const d = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const m = today.getMonth() - d.getMonth();
-  if(m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
-  document.getElementById('age').value = age;
-}
+<!-- ============ Sign in / Sign up ============ -->
+<div class="modal-overlay" id="authOverlay">
+  <div class="modal-box">
+    <div class="modal-title" id="authTitle" data-ar="تسجيل الدخول" data-en="Sign In">تسجيل الدخول</div>
+    <div class="modal-text" id="authHint"
+      data-ar="سجّل الدخول لحفظ طلبك ومتابعته. بياناتك محفوظة باسمك ولا يراها متقدم آخر."
+      data-en="Sign in to save and track your application. Your data is stored under your account and no other applicant can see it.">
+      سجّل الدخول لحفظ طلبك ومتابعته. بياناتك محفوظة باسمك ولا يراها متقدم آخر.
+    </div>
 
-/* ===================== Build skill / language tables ===================== */
-const skillsList = [
-  {ar:'التواصل', en:'Communication'},
-  {ar:'المبيعات', en:'Sales'},
-  {ar:'التفاوض', en:'Negotiation'},
-  {ar:'إتمام الصفقات', en:'Closing Deals'},
-  {ar:'خدمة العملاء', en:'Customer Service'},
-  {ar:'العمل الجماعي', en:'Teamwork'},
-  {ar:'القيادة', en:'Leadership'},
-  {ar:'إدارة الوقت', en:'Time Management'}
-];
-const skillsTable = document.getElementById('skillsTable');
-skillsList.forEach((s,i)=>{
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td data-ar="${s.ar}" data-en="${s.en}">${s.ar}</td>
-    <td><input type="radio" name="skill_${i}" value="ممتاز" onchange="updateScore()"></td>
-    <td><input type="radio" name="skill_${i}" value="جيد" onchange="updateScore()"></td>
-    <td><input type="radio" name="skill_${i}" value="متوسط" onchange="updateScore()"></td>
-    <td><input type="radio" name="skill_${i}" value="يحتاج تحسين" onchange="updateScore()"></td>`;
-  skillsTable.appendChild(tr);
-});
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab is-active" role="tab" data-auth-mode="signin"
+        data-ar="دخول" data-en="Sign In">دخول</button>
+      <button type="button" class="auth-tab" role="tab" data-auth-mode="signup"
+        data-ar="حساب جديد" data-en="Create Account">حساب جديد</button>
+    </div>
 
-const langList = [
-  {ar:'العربية', en:'Arabic'},
-  {ar:'الإنجليزية', en:'English'}
-];
-const langTable = document.getElementById('langTable');
-langList.forEach((s,i)=>{
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td data-ar="${s.ar}" data-en="${s.en}">${s.ar}</td>
-    <td><input type="radio" name="lang_${i}" value="ممتاز" ${i===1?'onchange="updateScore()"':''}></td>
-    <td><input type="radio" name="lang_${i}" value="جيد" ${i===1?'onchange="updateScore()"':''}></td>
-    <td><input type="radio" name="lang_${i}" value="أساسي" ${i===1?'onchange="updateScore()"':''}></td>`;
-  langTable.appendChild(tr);
-});
+    <label class="auth-label" for="authFullName" data-auth-signup-only hidden
+      data-ar="الاسم بالكامل" data-en="Full Name">الاسم بالكامل</label>
+    <input type="text" id="authFullName" autocomplete="name" data-auth-signup-only hidden>
 
-/* ===================== HR interview criteria ===================== */
-const criteriaList = [
-  {ar:'المظهر والاحترافية', en:'Appearance & Professionalism'},
-  {ar:'مهارات التواصل', en:'Communication Skills'},
-  {ar:'الثقة بالنفس', en:'Self Confidence'},
-  {ar:'مستوى النشاط', en:'Energy Level'},
-  {ar:'إمكانات المبيعات', en:'Sales Potential'},
-  {ar:'الطموح', en:'Ambition'},
-  {ar:'الشخصية', en:'Personality'},
-  {ar:'التوافق مع ثقافة الشركة', en:'Company Culture Fit'},
-  {ar:'الالتزام', en:'Commitment'}
-];
-const interviewTable = document.getElementById('interviewTable');
-criteriaList.forEach((c,i)=>{
-  const tr = document.createElement('tr');
-  tr.innerHTML = `<td data-ar="${c.ar}" data-en="${c.en}">${c.ar}</td><td><input type="number" min="0" max="10" name="int_${i}" oninput="calcInterviewTotal()"></td>`;
-  interviewTable.appendChild(tr);
-});
-function calcInterviewTotal(){
-  let total = 0;
-  criteriaList.forEach((c,i)=>{
-    const v = parseFloat(document.querySelector(`[name=int_${i}]`).value);
-    if(!isNaN(v)) total += v;
-  });
-  document.getElementById('interviewTotal').textContent = total;
-}
+    <label class="auth-label" for="authEmail" data-ar="البريد الإلكتروني" data-en="Email Address">البريد الإلكتروني</label>
+    <input type="email" id="authEmail" dir="ltr" autocomplete="email" placeholder="name@example.com">
 
-/* ===================== Preliminary scoring engine ===================== */
-function val(name){
-  const els = document.getElementsByName(name);
-  if(!els.length) return '';
-  if(els[0].type === 'radio'){
-    for(const el of els) if(el.checked) return el.value;
-    return '';
-  }
-  return els[0].value;
-}
+    <label class="auth-label" for="authPassword" data-ar="كلمة المرور" data-en="Password">كلمة المرور</label>
+    <input type="password" id="authPassword" dir="ltr" autocomplete="current-password">
 
-function updateScore(){
-  let score = 0;
+    <div class="modal-actions">
+      <button type="button" class="tbtn alt" id="authMagicLink"
+        data-ar="أرسل لي رابط دخول" data-en="Email me a link">أرسل لي رابط دخول</button>
+      <button type="button" class="tbtn" id="authSubmit" data-ar="دخول" data-en="Sign In">دخول</button>
+    </div>
 
-  // Real estate experience: 15
-  if(val('re_exp') === 'نعم') score += 15;
+    <div class="submit-status" id="authStatus"></div>
 
-  // Sales experience: 10 base + up to 10 by years (cap 5y)
-  if(val('sales_exp') === 'نعم'){
-    score += 10;
-    const years = parseFloat(val('sales_years')) || 0;
-    score += Math.min(years, 5) * 2;
-  }
+    <button type="button" class="auth-link" id="authForgot"
+      data-ar="نسيت كلمة المرور؟" data-en="Forgot your password?">نسيت كلمة المرور؟</button>
+  </div>
+</div>
 
-  // Self-rated skills: normalize to 20
-  const weight = {'ممتاز':4,'جيد':3,'متوسط':2,'يحتاج تحسين':1};
-  let skillSum = 0, skillCount = 0;
-  skillsList.forEach((s,i)=>{
-    const v = val('skill_'+i);
-    if(v){ skillSum += weight[v]; skillCount++; }
-  });
-  if(skillCount > 0) score += (skillSum / (skillCount*4)) * 20;
+<!-- ============ Applications list (HR / admin) ============ -->
+<div class="modal-overlay" id="staffOverlay">
+  <div class="modal-box staff-box">
+    <div class="modal-title" data-ar="الطلبات المستلمة" data-en="Received Applications">الطلبات المستلمة</div>
+    <div class="modal-text"
+      data-ar="اختر طلبًا لفتحه وتعبئة قسم تقييم الموارد البشرية. القائمة تتحدّث لحظيًا."
+      data-en="Pick an application to open it and fill in the HR evaluation. The list updates live.">
+      اختر طلبًا لفتحه وتعبئة قسم تقييم الموارد البشرية. القائمة تتحدّث لحظيًا.
+    </div>
 
-  // English level: 10
-  const eng = val('lang_1');
-  if(eng === 'ممتاز') score += 10;
-  else if(eng === 'جيد') score += 6;
-  else if(eng === 'أساسي') score += 2;
+    <div class="staff-toolbar">
+      <input type="search" id="staffSearch"
+        data-ar-placeholder="ابحث بالاسم أو البريد أو الوظيفة"
+        data-en-placeholder="Search by name, email or position"
+        placeholder="ابحث بالاسم أو البريد أو الوظيفة">
+      <span class="staff-count" id="staffCount"></span>
+    </div>
 
-  // Flexibility: 5+5+5
-  if(val('accept_kpi') === 'نعم') score += 5;
-  if(val('accept_commission') === 'نعم') score += 5;
-  if(val('weekend_work') === 'نعم') score += 5;
+    <div class="staff-list" id="staffList"></div>
+    <div class="submit-status" id="staffStatus"></div>
 
-  // Join speed: 10
-  const jt = val('join_time');
-  if(jt === 'فورًا') score += 10;
-  else if(jt === 'خلال أسبوع') score += 7;
-  else if(jt === 'خلال أسبوعين') score += 4;
-  else if(jt === 'خلال شهر') score += 2;
+    <div class="modal-actions">
+      <button type="button" class="tbtn alt" id="staffMine" data-ar="طلبي أنا" data-en="My application">طلبي أنا</button>
+      <button type="button" class="tbtn alt" id="staffRefresh" data-ar="تحديث" data-en="Refresh">تحديث</button>
+      <button type="button" class="tbtn alt" id="staffClose" data-ar="إغلاق" data-en="Close">إغلاق</button>
+    </div>
+  </div>
+</div>
 
-  // Commute time: 10
-  const cm = val('commute');
-  if(cm === 'اقل من 30') score += 10;
-  else if(cm === '30-60') score += 5;
-  else if(cm === 'اكثر من ساعة') score += 2;
-
-  score = Math.round(score);
-  document.getElementById('scoreNum').textContent = score;
-
-  const numEl = document.getElementById('scoreNum');
-  const tagEl = document.getElementById('scoreTag');
-  let color, ar, en;
-  if(score >= 80){ color = 'var(--ok)'; ar='مرشح قوي — يُوصى بمقابلة فورية'; en='Strong Candidate — Recommend Immediate Interview'; }
-  else if(score >= 60){ color = '#3f8f4f'; ar='مرشح جيد — يستحق مقابلة'; en='Good Candidate — Worth Interviewing'; }
-  else if(score >= 40){ color = 'var(--mid)'; ar='مرشح متوسط — يحتاج مراجعة إضافية'; en='Average Candidate — Needs Further Review'; }
-  else { color = 'var(--low)'; ar='لا يستوفي المعايير الأساسية حاليًا'; en='Does Not Currently Meet Baseline Criteria'; }
-
-  numEl.style.background = color;
-  tagEl.style.background = color;
-  tagEl.setAttribute('data-ar', ar);
-  tagEl.setAttribute('data-en', en);
-  tagEl.textContent = currentLang === 'ar' ? ar : en;
-}
-
-/* ===================== Google Sheet settings ===================== */
-const SETTINGS_KEY = 'everest_job_form_sheet_url';
-
-function openSettings(){
-  document.getElementById('scriptUrlInput').value = localStorage.getItem(SETTINGS_KEY) || '';
-  document.getElementById('settingsOverlay').classList.add('open');
-}
-function closeSettings(){
-  document.getElementById('settingsOverlay').classList.remove('open');
-}
-function saveSettings(){
-  const v = document.getElementById('scriptUrlInput').value.trim();
-  if(v){ localStorage.setItem(SETTINGS_KEY, v); }
-  else { localStorage.removeItem(SETTINGS_KEY); }
-  closeSettings();
-}
-function getScriptUrl(){
-  try { return localStorage.getItem(SETTINGS_KEY) || ''; }
-  catch(e){ return ''; }
-}
-
-/* ===================== Build row matching the Google Sheet columns ===================== */
-function buildRow(){
-  const f = document.getElementById('jobForm');
-  const data = new FormData(f);
-  const row = {};
-
-  const labelMap = {
-    position:'الوظيفة المتقدم إليها', app_date:'تاريخ تقديم الطلب', source:'كيف عرفت عنا', referrer:'اسم المُحيل',
-    full_name:'الاسم بالكامل', dob:'تاريخ الميلاد', age:'السن', nationality:'الجنسية', marital:'الحالة الاجتماعية',
-    mobile:'رقم الموبايل', whatsapp:'رقم واتساب', email:'البريد الإلكتروني', instagram:'انستجرام', facebook:'فيسبوك', linkedin:'لينكدإن',
-    address:'العنوان', governorate:'المحافظة', city:'المدينة', district:'المنطقة/الحي',
-    lives_with:'تقيم مع', transport:'وسيلة المواصلات', commute:'وقت الوصول للعمل',
-    father_name:'اسم الأب', father_job:'مهنة الأب', father_company:'نشاط الأب', mother_name:'اسم الأم', mother_job:'مهنة الأم', mother_company:'نشاط الأم',
-    brothers_count:'عدد الإخوة', sisters_count:'عدد الأخوات', sibling_order:'ترتيبه بين الإخوة',
-    edu_primary:'المرحلة الابتدائية', edu_prep:'المرحلة الإعدادية', edu_secondary:'المرحلة الثانوية', school_type:'نوع المدرسة', secondary_year:'سنة تخرج الثانوي',
-    university:'الجامعة', faculty:'الكلية', major:'التخصص', grad_year:'سنة التخرج', grade:'التقدير',
-    job1_company:'الشركة 1', job1_title:'المسمى 1', job1_period:'فترة العمل 1', job1_salary:'آخر راتب 1', job1_reason:'سبب الترك 1',
-    job2_company:'الشركة 2', job2_title:'المسمى 2', job2_period:'فترة العمل 2', job2_salary:'آخر راتب 2', job2_reason:'سبب الترك 2',
-    job3_company:'الشركة 3', job3_title:'المسمى 3', job3_period:'فترة العمل 3', job3_salary:'آخر راتب 3', job3_reason:'سبب الترك 3',
-    sales_exp:'خبرة مبيعات', sales_years:'سنوات خبرة المبيعات', prev_re_company:'شركة عقارية سابقة', re_exp:'خبرة عقارات',
-    skills_notes:'ملاحظات المهارات', other_lang_name:'لغة أخرى',
-    expected_salary:'الراتب المتوقع', expected_commission:'العمولة المتوقعة', join_time:'موعد الانضمام',
-    accept_kpi:'يقبل مؤشرات المبيعات', accept_commission:'يقبل دخل بالعمولة', weekend_work:'متاح للعمل بالويكند', career_goal:'الهدف المهني',
-    emg_name:'اسم جهة الطوارئ', emg_relation:'صلة القرابة', emg_phone:'هاتف جهة الطوارئ',
-    declare_name:'اسم المُقر', declare_date:'تاريخ الإقرار'
-  };
-
-  Object.keys(labelMap).forEach(key=>{
-    row[labelMap[key]] = data.get(key) || '';
-  });
-
-  skillsList.forEach((s,i)=>{ row['مهارة: '+s.ar] = val('skill_'+i); });
-  langList.forEach((s,i)=>{ row['لغة: '+s.ar] = val('lang_'+i); });
-
-  row['الدرجة المبدئية'] = document.getElementById('scoreNum').textContent;
-  row['التوصية المبدئية'] = document.getElementById('scoreTag').getAttribute('data-ar');
-
-  criteriaList.forEach((c,i)=>{
-    const v = document.querySelector(`[name=int_${i}]`).value;
-    row['مقابلة: '+c.ar] = v || '';
-  });
-  row['إجمالي درجة المقابلة'] = document.getElementById('interviewTotal').textContent;
-  row['تاريخ المقابلة'] = data.get('int_date') || '';
-  row['القائم بالمقابلة'] = data.get('int_by') || '';
-  row['ملاحظات HR'] = data.get('hr_notes') || '';
-  row['القرار النهائي'] = data.get('final_decision') || '';
-  row['ملاحظات إضافية نهائية'] = data.get('final_notes') || '';
-
-  return row;
-}
-
-/* ===================== Submit to Google Sheet ===================== */
-function setStatus(msg, cls){
-  ['submitStatus','submitStatus2'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.textContent = msg;
-    el.className = 'submit-status ' + (cls || '');
-  });
-}
-
-function submitToSheet(){
-  const url = getScriptUrl();
-  if(!url){
-    setStatus(currentLang==='ar' ? 'من فضلك اضبط رابط جوجل شيت أولًا من زر "إعدادات الربط"' : 'Please set the Google Sheet link first from "Sheet Settings"', 'err');
-    openSettings();
-    return;
-  }
-  const row = buildRow();
-  const fd = new FormData();
-  Object.keys(row).forEach(k => fd.append(k, row[k]));
-
-  setStatus(currentLang==='ar' ? 'جاري الإرسال...' : 'Sending...', 'pending');
-
-  fetch(url, { method:'POST', mode:'no-cors', body: fd })
-    .then(()=>{
-      setStatus(currentLang==='ar' ? 'تم إرسال الطلب بنجاح إلى قاعدة البيانات' : 'Application submitted successfully', 'ok');
-    })
-    .catch(()=>{
-      setStatus(currentLang==='ar' ? 'حصل خطأ أثناء الإرسال. تأكد من رابط الربط والاتصال بالإنترنت' : 'An error occurred while sending. Check the link and your internet connection.', 'err');
-    });
-}
-
-/* ===================== Clear sheet (danger zone) ===================== */
-function clearSheet(){
-  const url = getScriptUrl();
-  const statusEl = document.getElementById('clearStatus');
-  if(!url){
-    statusEl.textContent = currentLang==='ar' ? 'اضبط رابط الشيت الأول' : 'Set the sheet link first';
-    statusEl.className = 'submit-status err';
-    return;
-  }
-  const msg1 = currentLang==='ar'
-    ? 'هل أنت متأكد؟ هيتم حذف كل صفوف بيانات المتقدمين من الشيت المربوط نهائيًا.'
-    : 'Are you sure? All applicant data rows in the linked sheet will be permanently deleted.';
-  if(!confirm(msg1)) return;
-
-  const msg2 = currentLang==='ar'
-    ? 'تأكيد أخير: مفيش تراجع بعد كده. متأكد إنك عايز تفرّغ الشيت؟'
-    : 'Final confirmation: this cannot be undone. Clear the sheet?';
-  if(!confirm(msg2)) return;
-
-  statusEl.textContent = currentLang==='ar' ? 'جاري التفريغ...' : 'Clearing...';
-  statusEl.className = 'submit-status pending';
-
-  const fd = new FormData();
-  fd.append('action', 'clearSheet');
-
-  fetch(url, { method:'POST', mode:'no-cors', body: fd })
-    .then(()=>{
-      statusEl.textContent = currentLang==='ar' ? 'تم تفريغ الشيت بنجاح' : 'Sheet cleared successfully';
-      statusEl.className = 'submit-status ok';
-    })
-    .catch(()=>{
-      statusEl.textContent = currentLang==='ar' ? 'حصل خطأ أثناء التفريغ' : 'An error occurred while clearing';
-      statusEl.className = 'submit-status err';
-    });
-}
-
-applyLang();
-updateScore();
-</script>
+<script type="module" src="js/main.js"></script>
 
 </body>
 </html>
