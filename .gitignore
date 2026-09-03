@@ -1,0 +1,16 @@
+# Machine-local Claude Code permission state
+.claude/settings.local.json
+
+# OS cruft
+Thumbs.db
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Supabase CLI local stack, if you ever run one
+supabase/.branches/
+supabase/.temp/
+.env
+.env.*

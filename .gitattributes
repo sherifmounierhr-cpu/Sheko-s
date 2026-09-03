@@ -1,0 +1,6 @@
+# Keep line endings LF everywhere. The HTML carries base64 data: URIs on very
+# long lines; CRLF churn on those makes every diff unreadable.
+* text=auto eol=lf
+
+*.png binary
+*.ttf binary
