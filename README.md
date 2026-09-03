@@ -12,7 +12,7 @@ and the way the JavaScript is organised.
 
 | Before | After |
 | --- | --- |
-| One 300-line inline `<script>` | 13 ES modules under `js/` |
+| One 300-line inline `<script>` | 16 ES modules under `js/` |
 | Submitted to a Google Apps Script URL | Supabase Postgres, autosaved as you type |
 | Anyone with the file could submit | Supabase Auth; every row protected by RLS |
 | HR section visible to everyone | HR section is staff-only, in a separate table |
@@ -28,7 +28,7 @@ was promoted by the migration's backfill.
 ## Layout
 
 ```
-نموذج طلب توظيف - إيفرست.html   the form (markup unchanged, script swapped for a module)
+index.html                      the form (markup unchanged, script swapped for a module)
 css/app-supabase.css            styles for the new elements only
 js/
   config.js          project URL + publishable key, per-browser override, client id
@@ -104,7 +104,7 @@ It must be served over `http://` or `https://` — ES modules do not load from
 python -m http.server 4173
 ```
 
-Then open <http://localhost:4173/> and pick the HTML file.
+Then open <http://localhost:4173/>.
 
 ## Deploying it
 
@@ -119,8 +119,10 @@ dashboard once you know the public URL:
    confirmation. With it on, sign-up returns no session and the dialog tells the
    user to check their inbox.
 
-Consider renaming the HTML file to `index.html` (or adding a redirect) so the
-site has a clean root URL; the Arabic filename percent-encodes to a long path.
+The form lives at `index.html`, so the deployed root URL serves it directly.
+(It was originally named `نموذج طلب توظيف - إيفرست.html`; a static host has
+nothing to serve at `/` unless the entry file is called `index.html`, which is
+what produced a 404 on the first deploy.)
 
 ---
 
