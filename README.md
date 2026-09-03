@@ -12,7 +12,7 @@ and the way the JavaScript is organised.
 
 | Before | After |
 | --- | --- |
-| One 300-line inline `<script>` | 15 ES modules under `js/` |
+| One 300-line inline `<script>` | 16 ES modules under `js/` |
 | Submitted to a Google Apps Script URL | Supabase Postgres, autosaved as you type |
 | Anyone with the file could submit | Supabase Auth; every row protected by RLS |
 | HR section visible to everyone | HR section is staff-only, in a separate table |
@@ -39,6 +39,7 @@ js/
   formState.js       reads/writes the DOM form
   scoring.js         preliminary score, age, interview total
   auth.js            sign in/up, session, role
+  authRedirect.js    reads the email-callback params before the client strips them
   applications.js    queries against applications + application_reviews
   realtime.js        one channel, both tables, self-echo filtered
   main.js            wiring and bootstrap
@@ -114,9 +115,11 @@ Upload the repository as-is to any static host — Netlify, Vercel, GitHub Pages
 Cloudflare Pages, S3. There is no build step. Two things to set in the Supabase
 dashboard once you know the public URL:
 
-1. **Authentication → URL Configuration** — add the deployed URL to *Site URL*
-   and *Redirect URLs*, or magic links and email confirmations will bounce back
-   to localhost.
+1. **Authentication → URL Configuration** — set *Site URL* to the deployed
+   origin and add it to *Redirect URLs*. If this still says `localhost`, every
+   confirmation email sends the recipient to a page their device cannot reach
+   ("This site can't be reached"), which looks like a broken signup but is
+   purely this setting.
 2. **Authentication → Providers → Email** — decide whether to require email
    confirmation. With it on, sign-up returns no session and the dialog tells the
    user to check their inbox.

@@ -6,6 +6,8 @@
  */
 
 import { AUTOSAVE_DELAY_MS, isConfigured } from './config.js';
+// Imported early: it snapshots the URL before the Supabase client strips it.
+import { callbackMessage, clearCallbackFromUrl } from './authRedirect.js';
 import { applyLang, toggleLang, getLang, onLangChange } from './i18n.js';
 import { APPLICANT_FIELDS, HR_FIELDS, ROLE_LABELS } from './formSchema.js';
 import { renderGeneratedTables } from './formBuilder.js';
@@ -38,7 +40,7 @@ import {
 import { subscribe, unsubscribe } from './realtime.js';
 
 import { $, debounce, setText, closeModal } from './ui/dom.js';
-import { setSubmitStatus, setSyncStatus, describeError } from './ui/status.js';
+import { setSubmitStatus, setSyncStatus, setPanelStatus, describeError } from './ui/status.js';
 import { initAuthPanel, openAuthPanel, closeAuthPanel } from './ui/authPanel.js';
 import {
   initStaffPanel,
@@ -546,6 +548,15 @@ async function bootstrap() {
 
     if (session) await handleSignedIn();
     else openAuthPanel();
+
+    // Someone arriving from a confirmation / magic link deserves to be told
+    // what just happened, rather than silently landing on a form.
+    const callback = callbackMessage();
+    if (callback) {
+      if (session) setSubmitStatus(callback.message, callback.tone);
+      else setPanelStatus('authStatus', callback.message, callback.tone);
+    }
+    clearCallbackFromUrl();
   } catch (err) {
     console.error('[bootstrap]', err);
     setSubmitStatus(describeError(err), 'err');
