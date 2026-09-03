@@ -125,6 +125,17 @@ body.is-reviewing textarea[readonly] {
 
 .tbtn:disabled { opacity: 0.55; cursor: default; }
 
+/* .tbtn.alt was designed for the dark toolbar: translucent white on white
+   text. Dropped into a white modal it renders invisible, so secondary buttons
+   inside a dialog get a light-background treatment instead. */
+.modal-box .tbtn.alt {
+  background: #eef0ec;
+  border: 1px solid #d8dcd3;
+  color: #3d463f;
+}
+
+.modal-box .tbtn.alt:hover { background: #e3e7e0; }
+
 /* ===== Applications list (HR / admin) ==================================== */
 
 .staff-box { max-width: 620px; }

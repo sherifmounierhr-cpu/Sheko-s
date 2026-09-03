@@ -48,7 +48,6 @@ import {
   removeRow,
   markSelected
 } from './ui/staffPanel.js';
-import { initSettingsPanel, openSettings } from './ui/settingsPanel.js';
 
 /* -------------------------------------------------------------------------- */
 /* State                                                                      */
@@ -479,7 +478,6 @@ async function bootstrap() {
   updateScore();
 
   initAuthPanel();
-  initSettingsPanel();
   initStaffPanel({
     onOpenApplication: openApplication,
     onOpenOwn: async () => {
@@ -495,7 +493,6 @@ async function bootstrap() {
   $('jobForm')?.addEventListener('change', handleFormChange);
 
   $('langBtn')?.addEventListener('click', toggleLang);
-  $('settingsBtn')?.addEventListener('click', openSettings);
   $('printBtn')?.addEventListener('click', () => window.print());
   $('staffBtn')?.addEventListener('click', openStaffPanel);
   $('signOutBtn')?.addEventListener('click', async () => {
@@ -512,15 +509,15 @@ async function bootstrap() {
 
   onLangChange(renderSessionChip);
 
+  // Only trips if js/config.js was deployed with placeholder credentials.
   if (!isConfigured()) {
     setSubmitStatus(
       {
-        ar: 'لم يتم ضبط الاتصال بقاعدة البيانات. افتح "إعدادات الربط" وأدخل بيانات مشروع Supabase.',
-        en: 'Database connection is not configured. Open "Sheet Settings" and enter your Supabase project details.'
+        ar: 'إعدادات الاتصال بقاعدة البيانات ناقصة في js/config.js.',
+        en: 'Database credentials are missing from js/config.js.'
       },
       'err'
     );
-    openSettings();
     return;
   }
 
@@ -552,7 +549,6 @@ async function bootstrap() {
   } catch (err) {
     console.error('[bootstrap]', err);
     setSubmitStatus(describeError(err), 'err');
-    openSettings();
   }
 }
 

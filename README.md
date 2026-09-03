@@ -12,12 +12,12 @@ and the way the JavaScript is organised.
 
 | Before | After |
 | --- | --- |
-| One 300-line inline `<script>` | 16 ES modules under `js/` |
+| One 300-line inline `<script>` | 15 ES modules under `js/` |
 | Submitted to a Google Apps Script URL | Supabase Postgres, autosaved as you type |
 | Anyone with the file could submit | Supabase Auth; every row protected by RLS |
 | HR section visible to everyone | HR section is staff-only, in a separate table |
 | No multi-device story | Realtime sync across tabs and devices |
-| "Clear Sheet" wiped the spreadsheet | "Delete All Applications", admin-only |
+| "Clear Sheet" wiped the spreadsheet | "Delete All Applications", admin-only, inside the applications panel |
 
 `sherifmounierhr@gmail.com` is granted the `admin` role automatically, by a
 database trigger, on sign-up. That account already existed in the project and
@@ -31,7 +31,7 @@ was promoted by the migration's backfill.
 index.html                      the form (markup unchanged, script swapped for a module)
 css/app-supabase.css            styles for the new elements only
 js/
-  config.js          project URL + publishable key, per-browser override, client id
+  config.js          project URL + publishable key, client id
   supabaseClient.js  the single client, imported from the jsDelivr CDN
   i18n.js            AR/EN toggle
   formSchema.js      skills, languages, criteria, field lists — one source of truth
@@ -43,7 +43,7 @@ js/
   realtime.js        one channel, both tables, self-echo filtered
   main.js            wiring and bootstrap
   ui/
-    dom.js  status.js  authPanel.js  staffPanel.js  settingsPanel.js
+    dom.js  status.js  authPanel.js  staffPanel.js
 supabase/migrations/
   0001_init.sql                  tables, roles, triggers, RLS, realtime
   0002_harden_functions.sql      linter fixes: search_path, RPC surface
@@ -87,7 +87,9 @@ still read nothing extra.
   email to the bootstrap admin address. Email changes only flow in from
   `auth.users` via a trigger that sets a transaction-local flag.
 - The publishable key in `js/config.js` is a public credential by design. Never
-  put a service-role key there.
+  put a service-role key there. There is no in-app settings dialog: applicants
+  have no business repointing the form, so the credentials live in `config.js`
+  and changing project means editing that file and redeploying.
 
 These were verified against the live database with throwaway fixtures (since
 deleted): a probe applicant saw 1 application and **0** reviews; the admin saw

@@ -6,23 +6,22 @@
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { readConfig, isConfigured } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, isConfigured } from './config.js';
 
 let client = null;
 
 /**
  * @returns {import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm').SupabaseClient}
- * @throws {Error} when no project URL / key has been configured yet
+ * @throws {Error} when config.js still holds placeholder credentials
  */
 export function getClient() {
   if (client) return client;
 
-  const config = readConfig();
-  if (!isConfigured(config)) {
+  if (!isConfigured()) {
     throw new Error('SUPABASE_NOT_CONFIGURED');
   }
 
-  client = createClient(config.url, config.anonKey, {
+  client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -37,21 +36,6 @@ export function getClient() {
   });
 
   return client;
-}
-
-/**
- * Drops the cached instance so the next getClient() picks up new credentials.
- * Called after the settings dialog saves a different project.
- */
-export async function resetClient() {
-  if (client) {
-    try {
-      await client.removeAllChannels();
-    } catch {
-      /* channel teardown is best-effort */
-    }
-  }
-  client = null;
 }
 
 export function hasClient() {

@@ -12,7 +12,8 @@
 import { $, openModal, closeModal, escapeHtml, setText } from './dom.js';
 import { setPanelStatus, describeError } from './status.js';
 import { getLang, onLangChange, t } from '../i18n.js';
-import { listApplications } from '../applications.js';
+import { listApplications, deleteAllApplications } from '../applications.js';
+import { isAdmin } from '../auth.js';
 import { bandFor } from '../scoring.js';
 
 /** @type {Map<string, object>} applications by id, newest activity first */
@@ -141,7 +142,61 @@ export async function refreshStaffList() {
   }
 }
 
+/**
+ * Wipes every application and review.
+ *
+ * The button is only rendered for admins and this re-checks the role, but
+ * neither is the boundary: the delete runs under RLS, which for a non-admin
+ * matches only their own row.
+ */
+async function deleteEverything() {
+  if (!isAdmin()) {
+    setPanelStatus(
+      'clearStatus',
+      { ar: 'هذا الإجراء متاح لمدير النظام فقط', en: 'This action is available to administrators only' },
+      'err'
+    );
+    return;
+  }
+
+  const first = t(
+    'هل أنت متأكد؟ سيتم حذف كل طلبات التوظيف وتقييمات الموارد البشرية نهائيًا.',
+    'Are you sure? Every application and HR evaluation will be permanently deleted.'
+  );
+  if (!window.confirm(first)) return;
+
+  const second = t(
+    'تأكيد أخير: لا يمكن التراجع بعد هذه الخطوة. متأكد؟',
+    'Final confirmation: this cannot be undone. Proceed?'
+  );
+  if (!window.confirm(second)) return;
+
+  setPanelStatus('clearStatus', { ar: 'جاري الحذف...', en: 'Deleting...' }, 'pending');
+
+  try {
+    const removed = await deleteAllApplications();
+    rows.clear();
+    render();
+
+    setPanelStatus(
+      'clearStatus',
+      {
+        ar: `تم حذف ${removed} طلب`,
+        en: `Deleted ${removed} application${removed === 1 ? '' : 's'}`
+      },
+      'ok'
+    );
+  } catch (err) {
+    setPanelStatus('clearStatus', describeError(err), 'err');
+  }
+}
+
 export function openStaffPanel() {
+  // The danger zone is admin-only; HR staff never see it.
+  const zone = $('dangerZone');
+  if (zone) zone.hidden = !isAdmin();
+
+  setPanelStatus('clearStatus', null);
   openModal($('staffOverlay'));
   refreshStaffList();
 }
@@ -155,6 +210,7 @@ export function initStaffPanel(handlers = {}) {
 
   $('staffClose')?.addEventListener('click', closeStaffPanel);
   $('staffRefresh')?.addEventListener('click', refreshStaffList);
+  $('deleteAllBtn')?.addEventListener('click', deleteEverything);
 
   // Without this there is no way back from reviewing someone else's form.
   $('staffMine')?.addEventListener('click', async () => {

@@ -283,7 +283,6 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <span class="sync-chip" id="syncChip" hidden></span>
     <button class="tbtn alt" id="langBtn" type="button"><span id="langBtnLabel">EN</span></button>
     <button class="tbtn alt" id="staffBtn" type="button" hidden data-ar="الطلبات" data-en="Applications">الطلبات</button>
-    <button class="tbtn alt" id="settingsBtn" type="button" data-ar="إعدادات الربط" data-en="Sheet Settings">إعدادات الربط</button>
     <button class="tbtn gold" id="printBtn" type="button" data-ar="طباعة" data-en="Print">طباعة</button>
     <button class="tbtn alt" id="signOutBtn" type="button" hidden data-ar="خروج" data-en="Sign Out">خروج</button>
   </div>
@@ -722,41 +721,6 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
   <div class="footer-note" data-ar="نموذج طلب توظيف — إيفرست للعقارات" data-en="Job Application Form — Everest Real Estate">نموذج طلب توظيف — إيفرست للعقارات</div>
 </div>
 
-<!-- ============ Settings Modal ============ -->
-<div class="modal-overlay" id="settingsOverlay">
-  <div class="modal-box">
-    <div class="modal-title" data-ar="إعدادات الاتصال بقاعدة البيانات" data-en="Database Connection Settings">إعدادات الاتصال بقاعدة البيانات</div>
-    <div class="modal-text" data-ar="النموذج متصل بمشروع Supabase. البيانات دي محفوظة في المتصفح ده فقط، وتقدر تغيّرها لو عايز توجّه النموذج لمشروع تاني. المفتاح ده عام وآمن، وكل البيانات محمية بسياسات RLS."
-      data-en="This form is connected to a Supabase project. These values are stored in this browser only, and you can change them to point the form at a different project. The key is publishable and safe to expose; all data is protected by RLS policies.">
-      النموذج متصل بمشروع Supabase. البيانات دي محفوظة في المتصفح ده فقط، وتقدر تغيّرها لو عايز توجّه النموذج لمشروع تاني. المفتاح ده عام وآمن، وكل البيانات محمية بسياسات RLS.
-    </div>
-
-    <label class="auth-label" for="supabaseUrlInput" data-ar="رابط المشروع" data-en="Project URL">رابط المشروع</label>
-    <input type="text" id="supabaseUrlInput" placeholder="https://xxxxxxxx.supabase.co" dir="ltr">
-
-    <label class="auth-label" for="supabaseKeyInput" data-ar="المفتاح العام (publishable / anon)" data-en="Publishable (anon) key">المفتاح العام (publishable / anon)</label>
-    <input type="text" id="supabaseKeyInput" placeholder="sb_publishable_..." dir="ltr">
-
-    <div class="modal-actions">
-      <button class="tbtn alt" type="button" id="settingsDefaults" data-ar="استعادة الافتراضي" data-en="Restore Defaults">استعادة الافتراضي</button>
-      <button class="tbtn" type="button" id="settingsSave" data-ar="حفظ" data-en="Save">حفظ</button>
-      <button class="tbtn alt" type="button" id="settingsClose" data-ar="إغلاق" data-en="Close">إغلاق</button>
-    </div>
-    <div class="submit-status" id="settingsStatus"></div>
-
-    <div class="danger-zone" id="dangerZone" hidden>
-      <div class="danger-title" data-ar="منطقة خطر" data-en="Danger Zone">منطقة خطر</div>
-      <div class="modal-text" data-ar="الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف."
-        data-en="This permanently deletes every application and every HR evaluation from the database. Administrators only, and it cannot be undone.">
-        الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف.
-      </div>
-      <button class="tbtn danger" type="button" id="deleteAllBtn" data-ar="حذف كل الطلبات" data-en="Delete All Applications">حذف كل الطلبات</button>
-      <div class="submit-status" id="clearStatus"></div>
-    </div>
-  </div>
-</div>
-
-
 <!-- ============ Sign in / Sign up ============ -->
 <div class="modal-overlay" id="authOverlay">
   <div class="modal-box">
@@ -822,6 +786,16 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
       <button type="button" class="tbtn alt" id="staffMine" data-ar="طلبي أنا" data-en="My application">طلبي أنا</button>
       <button type="button" class="tbtn alt" id="staffRefresh" data-ar="تحديث" data-en="Refresh">تحديث</button>
       <button type="button" class="tbtn alt" id="staffClose" data-ar="إغلاق" data-en="Close">إغلاق</button>
+    </div>
+
+    <div class="danger-zone" id="dangerZone" hidden>
+      <div class="danger-title" data-ar="منطقة خطر" data-en="Danger Zone">منطقة خطر</div>
+      <div class="modal-text" data-ar="الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف."
+        data-en="This permanently deletes every application and every HR evaluation from the database. Administrators only, and it cannot be undone.">
+        الزرار ده بيمسح كل طلبات التوظيف وكل تقييمات الموارد البشرية من قاعدة البيانات نهائيًا. متاح لمدير النظام فقط، ومفيش تراجع بعد الحذف.
+      </div>
+      <button class="tbtn danger" type="button" id="deleteAllBtn" data-ar="حذف كل الطلبات" data-en="Delete All Applications">حذف كل الطلبات</button>
+      <div class="submit-status" id="clearStatus"></div>
     </div>
   </div>
 </div>
