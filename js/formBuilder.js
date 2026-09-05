@@ -6,7 +6,14 @@
  * single delegated listener on the form, wired up in main.js.
  */
 
-import { skillsList, skillRatings, langList, langRatings, criteriaList } from './formSchema.js';
+import {
+  positionsList,
+  skillsList,
+  skillRatings,
+  langList,
+  langRatings,
+  criteriaList
+} from './formSchema.js';
 
 function labelCell(entry) {
   const td = document.createElement('td');
@@ -79,8 +86,34 @@ export function renderInterviewTable(table = document.getElementById('interviewT
   );
 }
 
-/** Builds all three. Call once, before the first hydration. */
+/**
+ * Fills the "position applied for" dropdown from positionsList.
+ *
+ * Each option carries an explicit value, so the stored answer stays Arabic
+ * even when the applicant switches the interface to English -- the language
+ * toggle rewrites option text, and an option without a value attribute would
+ * silently change what gets saved.
+ */
+export function renderPositionsSelect(select = document.querySelector('select[name="position"]')) {
+  if (!select) return;
+
+  const fragment = document.createDocumentFragment();
+
+  positionsList.forEach((position) => {
+    const option = document.createElement('option');
+    option.value = position.ar;
+    option.setAttribute('data-ar', position.ar);
+    option.setAttribute('data-en', position.en);
+    option.textContent = position.ar;
+    fragment.appendChild(option);
+  });
+
+  select.appendChild(fragment);
+}
+
+/** Builds everything generated from the schema. Call once, before hydration. */
 export function renderGeneratedTables() {
+  renderPositionsSelect();
   renderSkillsTable();
   renderLangTable();
   renderInterviewTable();

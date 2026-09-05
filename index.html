@@ -325,20 +325,27 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <div class="section-head"><div class="section-num">1</div><div class="section-title" data-ar="بيانات الوظيفة" data-en="Job Information">بيانات الوظيفة</div></div>
     <div class="section-body">
       <div class="grid2">
-        <div class="field"><label data-ar="الوظيفة المتقدم إليها" data-en="Position Applied For">الوظيفة المتقدم إليها</label><input type="text" name="position"></div>
+        <div class="field">
+          <label data-ar="الوظيفة المتقدم إليها" data-en="Position Applied For">الوظيفة المتقدم إليها</label>
+          <!-- Options are rendered from positionsList in js/formSchema.js -->
+          <select name="position">
+            <option value="" data-ar="اختر" data-en="Select">اختر</option>
+          </select>
+        </div>
         <div class="field"><label data-ar="تاريخ تقديم الطلب" data-en="Application Date">تاريخ تقديم الطلب</label><input type="date" name="app_date"></div>
       </div>
+      <div class="field" style="margin-top:12px;" data-show-when="position=أخرى"><label data-ar="حدد الوظيفة المطلوبة" data-en="Specify the position">حدد الوظيفة المطلوبة</label><input type="text" name="position_other"></div>
       <div class="grid2" style="margin-top:12px;">
         <div class="field">
           <label data-ar="كيف عرفت عنّا؟" data-en="How did you hear about us?">كيف عرفت عنّا؟</label>
           <select name="source">
             <option value="" data-ar="اختر" data-en="Select">اختر</option>
-            <option data-ar="موقع الشركة" data-en="Company Website">موقع الشركة</option>
-            <option data-ar="فيسبوك" data-en="Facebook">فيسبوك</option>
-            <option data-ar="انستجرام" data-en="Instagram">انستجرام</option>
-            <option data-ar="لينكدإن" data-en="LinkedIn">لينكدإن</option>
-            <option data-ar="توصية من شخص" data-en="Personal Referral">توصية من شخص</option>
-            <option data-ar="أخرى" data-en="Other">أخرى</option>
+            <option value="موقع الشركة" data-ar="موقع الشركة" data-en="Company Website">موقع الشركة</option>
+            <option value="فيسبوك" data-ar="فيسبوك" data-en="Facebook">فيسبوك</option>
+            <option value="انستجرام" data-ar="انستجرام" data-en="Instagram">انستجرام</option>
+            <option value="لينكدإن" data-ar="لينكدإن" data-en="LinkedIn">لينكدإن</option>
+            <option value="توصية من شخص" data-ar="توصية من شخص" data-en="Personal Referral">توصية من شخص</option>
+            <option value="أخرى" data-ar="أخرى" data-en="Other">أخرى</option>
           </select>
         </div>
         <div class="field"><label data-ar="اسم الشخص المُحيل (إن وُجد)" data-en="Referrer Name (if any)">اسم الشخص المُحيل (إن وُجد)</label><input type="text" name="referrer"></div>
@@ -360,10 +367,10 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
         <div class="field">
           <label data-ar="الحالة الاجتماعية" data-en="Marital Status">الحالة الاجتماعية</label>
           <select name="marital">
-            <option data-ar="أعزب / آنسة" data-en="Single">أعزب / آنسة</option>
-            <option data-ar="متزوج" data-en="Married">متزوج</option>
-            <option data-ar="مطلق" data-en="Divorced">مطلق</option>
-            <option data-ar="أرمل" data-en="Widowed">أرمل</option>
+            <option value="أعزب / آنسة" data-ar="أعزب / آنسة" data-en="Single">أعزب / آنسة</option>
+            <option value="متزوج" data-ar="متزوج" data-en="Married">متزوج</option>
+            <option value="مطلق" data-ar="مطلق" data-en="Divorced">مطلق</option>
+            <option value="أرمل" data-ar="أرمل" data-en="Widowed">أرمل</option>
           </select>
         </div>
         <div class="field"><label data-ar="رقم الهاتف المحمول" data-en="Mobile Number">رقم الهاتف المحمول</label><input type="tel" name="mobile"></div>
@@ -389,6 +396,24 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
         </div>
       </div>
       <div class="field" style="margin-top:12px;" data-show-when="club_member=نعم"><label data-ar="اسم النادى" data-en="Club name">اسم النادى</label><input type="text" name="club_name"></div>
+
+      <div class="field" style="margin-top:14px;">
+        <label data-ar="الحالة الصحية العامة" data-en="General health">الحالة الصحية العامة</label>
+        <div class="radio-row" data-name="health_status">
+          <label class="radio-opt"><input type="radio" name="health_status" value="ممتازة"><span data-ar="ممتازة" data-en="Excellent">ممتازة</span></label>
+          <label class="radio-opt"><input type="radio" name="health_status" value="جيدة"><span data-ar="جيدة" data-en="Good">جيدة</span></label>
+          <label class="radio-opt"><input type="radio" name="health_status" value="متوسطة"><span data-ar="متوسطة" data-en="Fair">متوسطة</span></label>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:14px;">
+        <label data-ar="هل لديك أمراض مزمنة؟" data-en="Do you have any chronic illness?">هل لديك أمراض مزمنة؟</label>
+        <div class="radio-row" data-name="chronic_disease">
+          <label class="radio-opt"><input type="radio" name="chronic_disease" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
+          <label class="radio-opt"><input type="radio" name="chronic_disease" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px;" data-show-when="chronic_disease=نعم"><label data-ar="اذكر الأمراض المزمنة وأي أدوية منتظمة" data-en="List the chronic conditions and any regular medication">اذكر الأمراض المزمنة وأي أدوية منتظمة</label><textarea name="chronic_details"></textarea></div>
 
       <div class="grid3" style="margin-top:12px;">
         <div class="field"><label data-ar="حساب انستجرام" data-en="Instagram">حساب انستجرام</label><input type="text" name="instagram"></div>

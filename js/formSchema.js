@@ -6,6 +6,31 @@
  * or an interview criterion is a one-line change.
  */
 
+/**
+ * The positions the form accepts applications for.
+ *
+ * Edit this array to change the dropdown — it is the only place the list
+ * lives. `ar` is stored as the answer, so it stays stable no matter which
+ * language the applicant filled the form in.
+ *
+ * 'أخرى' reveals a free-text box (see data-show-when in the markup).
+ */
+export const positionsList = Object.freeze([
+  { ar: 'مستشار مبيعات عقاري', en: 'Property Consultant' },
+  { ar: 'كبير مستشاري المبيعات', en: 'Senior Property Consultant' },
+  { ar: 'قائد فريق مبيعات', en: 'Sales Team Leader' },
+  { ar: 'مدير مبيعات', en: 'Sales Manager' },
+  { ar: 'أخصائي تسويق', en: 'Marketing Specialist' },
+  { ar: 'أخصائي سوشيال ميديا', en: 'Social Media Specialist' },
+  { ar: 'مصمم جرافيك', en: 'Graphic Designer' },
+  { ar: 'مصور ومونتير', en: 'Photographer / Video Editor' },
+  { ar: 'خدمة عملاء', en: 'Customer Service' },
+  { ar: 'موارد بشرية', en: 'Human Resources' },
+  { ar: 'محاسب', en: 'Accountant' },
+  { ar: 'إداري / سكرتارية', en: 'Admin / Secretary' },
+  { ar: 'أخرى', en: 'Other' }
+]);
+
 export const skillsList = Object.freeze([
   { ar: 'التواصل', en: 'Communication' },
   { ar: 'المبيعات', en: 'Sales' },
@@ -50,6 +75,7 @@ export const criteriaList = Object.freeze([
  */
 export const labelMap = Object.freeze({
   position: 'الوظيفة المتقدم إليها',
+  position_other: 'وظيفة أخرى (حددها)',
   app_date: 'تاريخ تقديم الطلب',
   source: 'كيف عرفت عنا',
   referrer: 'اسم المُحيل',
@@ -65,6 +91,9 @@ export const labelMap = Object.freeze({
   travel_countries: 'الدول التي سافر إليها',
   club_member: 'مشترك في نادى',
   club_name: 'اسم النادى',
+  health_status: 'الحالة الصحية',
+  chronic_disease: 'أمراض مزمنة',
+  chronic_details: 'تفاصيل الأمراض المزمنة',
   instagram: 'انستجرام',
   facebook: 'فيسبوك',
   linkedin: 'لينكدإن',
