@@ -12,7 +12,7 @@ and the way the JavaScript is organised.
 
 | Before | After |
 | --- | --- |
-| One 300-line inline `<script>` | 16 ES modules under `js/` |
+| One 300-line inline `<script>` | 17 ES modules under `js/` |
 | Submitted to a Google Apps Script URL | Supabase Postgres, autosaved as you type |
 | Anyone with the file could submit | Supabase Auth; every row protected by RLS |
 | HR section visible to everyone | HR section is staff-only, in a separate table |
@@ -36,6 +36,7 @@ js/
   i18n.js            AR/EN toggle
   formSchema.js      skills, languages, criteria, field lists — one source of truth
   formBuilder.js     renders the three generated tables
+  conditionalFields.js follow-ups shown only after a given answer (data-show-when)
   formState.js       reads/writes the DOM form
   scoring.js         preliminary score, age, interview total
   auth.js            sign in/up, session, role

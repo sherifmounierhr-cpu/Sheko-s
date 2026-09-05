@@ -379,16 +379,16 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
           <label class="radio-opt"><input type="radio" name="traveled" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
-      <div class="field" style="margin-top:12px;"><label data-ar="الدول التي سافرت إليها" data-en="Countries you have travelled to">الدول التي سافرت إليها</label><input type="text" name="travel_countries"></div>
+      <div class="field" style="margin-top:12px;" data-show-when="traveled=نعم"><label data-ar="الدول التي سافرت إليها" data-en="Countries you have travelled to">الدول التي سافرت إليها</label><input type="text" name="travel_countries"></div>
 
       <div class="field" style="margin-top:14px;">
-        <label data-ar="هل أنت مشترك في نادٍ؟" data-en="Are you a member of a club?">هل أنت مشترك في نادٍ؟</label>
+        <label data-ar="هل أنت مشترك في نادى؟" data-en="Are you a member of a club?">هل أنت مشترك في نادى؟</label>
         <div class="radio-row" data-name="club_member">
           <label class="radio-opt"><input type="radio" name="club_member" value="نعم"><span data-ar="نعم" data-en="Yes">نعم</span></label>
           <label class="radio-opt"><input type="radio" name="club_member" value="لا"><span data-ar="لا" data-en="No">لا</span></label>
         </div>
       </div>
-      <div class="field" style="margin-top:12px;"><label data-ar="اسم النادي" data-en="Club name">اسم النادي</label><input type="text" name="club_name"></div>
+      <div class="field" style="margin-top:12px;" data-show-when="club_member=نعم"><label data-ar="اسم النادى" data-en="Club name">اسم النادى</label><input type="text" name="club_name"></div>
 
       <div class="grid3" style="margin-top:12px;">
         <div class="field"><label data-ar="حساب انستجرام" data-en="Instagram">حساب انستجرام</label><input type="text" name="instagram"></div>

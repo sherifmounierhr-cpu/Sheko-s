@@ -11,6 +11,7 @@ import { callbackMessage, clearCallbackFromUrl } from './authRedirect.js';
 import { applyLang, toggleLang, getLang, onLangChange } from './i18n.js';
 import { APPLICANT_FIELDS, HR_FIELDS, ROLE_LABELS } from './formSchema.js';
 import { renderGeneratedTables } from './formBuilder.js';
+import { initConditionalFields, applyConditionalFields } from './conditionalFields.js';
 import {
   collectAnswers,
   applyAnswers,
@@ -184,6 +185,7 @@ async function hydrate(application, review) {
     calcAge();
     calcInterviewTotal();
     updateScore();
+    applyConditionalFields();
   } finally {
     state.hydrating = false;
   }
@@ -293,6 +295,7 @@ async function startRealtime() {
         applyAnswers(row.answers ?? {});
         calcAge();
         updateScore();
+        applyConditionalFields();
         state.status = row.status;
       } finally {
         state.hydrating = false;
@@ -460,6 +463,7 @@ async function handleSignedOut() {
   clearForm();
   setApplicantFieldsEditable(true);
   updateScore();
+  applyConditionalFields();
   applyRoleClasses();
   renderSessionChip();
 
@@ -491,6 +495,8 @@ async function bootstrap() {
 
   // One delegated pair of listeners replaces every inline onchange/oninput the
   // original markup carried.
+  initConditionalFields();
+
   $('jobForm')?.addEventListener('input', handleFormChange);
   $('jobForm')?.addEventListener('change', handleFormChange);
 
