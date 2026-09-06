@@ -62,6 +62,10 @@ body:not(.is-staff) .hr-only { display: none !important; }
    being screened. It is still computed and stored -- just not shown to them. */
 body:not(.is-staff) .score-panel { display: none !important; }
 
+/* Printing is an HR need (a paper copy for a file, an interview folder) --
+   not something an applicant filling in the form from their phone needs. */
+body:not(.is-staff) #printBtn { display: none !important; }
+
 /* ===== Required fields ==================================================== */
 
 .req {
