@@ -58,6 +58,44 @@ body:not(.is-authenticated) .wrap {
    review data behind them is unreachable for applicants at the RLS level too. */
 body:not(.is-staff) .hr-only { display: none !important; }
 
+/* The automatic score is a screening aid for HR, not feedback for the person
+   being screened. It is still computed and stored -- just not shown to them. */
+body:not(.is-staff) .score-panel { display: none !important; }
+
+/* ===== Required fields ==================================================== */
+
+.req {
+  margin-inline-start: 3px;
+  color: var(--danger);
+  font-weight: 900;
+}
+
+.field.is-invalid > label { color: var(--danger); }
+
+.field.is-invalid input,
+.field.is-invalid select,
+.field.is-invalid textarea {
+  border-color: var(--danger);
+  background: #fdf6f5;
+}
+
+.field.is-invalid .radio-row {
+  padding: 4px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+
+/* ===== Human verification ================================================= */
+
+.human-box { max-width: 380px; text-align: center; }
+
+.human-widget {
+  display: flex;
+  justify-content: center;
+  min-height: 70px;
+  margin-top: 6px;
+}
+
 /* Reviewing someone else's application: their answers are read-only. */
 body.is-reviewing .section:not(.hr-only) .section-body {
   background: #fafbf8;

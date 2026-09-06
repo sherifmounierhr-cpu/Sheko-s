@@ -193,6 +193,29 @@ export const HR_FIELDS = Object.freeze([
   'final_notes'
 ]);
 
+/**
+ * Fields the applicant must fill before the form can be submitted.
+ *
+ * This one list drives both halves of the behaviour: the red asterisk drawn
+ * next to each label and the check that runs on submit. Keeping them from a
+ * single source is the point — a form that marks a field required but does not
+ * enforce it (or worse, the other way round) is how people lose their work.
+ *
+ * Do not put conditionally shown fields here; a hidden field cannot be filled.
+ */
+export const REQUIRED_FIELDS = Object.freeze([
+  'position',
+  'full_name',
+  'dob',
+  'mobile',
+  'email',
+  'address',
+  'governorate',
+  'city',
+  'declare_name',
+  'declare_date'
+]);
+
 export const ROLE_LABELS = Object.freeze({
   applicant: { ar: 'متقدم', en: 'Applicant' },
   hr: { ar: 'موارد بشرية', en: 'HR' },

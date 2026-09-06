@@ -17,6 +17,20 @@ export const SUPABASE_ANON_KEY = 'sb_publishable_-w_EpUVpf2q9Kv0JvyIVbQ_7uwd-2z9
 /** Email that the database grants the `admin` role to on sign-up. */
 export const BOOTSTRAP_ADMIN_EMAIL = 'sherifmounierhr@gmail.com';
 
+/**
+ * Cloudflare Turnstile site key, for the "are you human?" check in front of
+ * anonymous applications.
+ *
+ * Empty means the check is switched off and the form still works -- which is
+ * the state to leave it in until the matching *secret* key is entered in
+ * Supabase (Authentication -> Attack Protection -> Enable CAPTCHA protection).
+ * A site key set here without the secret set there makes every sign-in fail,
+ * so turn the two on together.
+ *
+ * Free keys: https://dash.cloudflare.com/?to=/:account/turnstile
+ */
+export const TURNSTILE_SITE_KEY = '';
+
 /** Debounce window for autosaving the form to Postgres, in milliseconds. */
 export const AUTOSAVE_DELAY_MS = 1200;
 

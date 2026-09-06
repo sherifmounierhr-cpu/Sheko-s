@@ -52,6 +52,39 @@ export function isAdmin() {
   return getRole() === 'admin';
 }
 
+/**
+ * True for an applicant who arrived through the shared link and never signed
+ * up. Supabase marks these sessions with an is_anonymous claim; they still
+ * carry the ordinary `authenticated` role, which is why every RLS policy keeps
+ * working without a special case.
+ */
+export function isAnonymous() {
+  return Boolean(state.session?.user?.is_anonymous);
+}
+
+/**
+ * Opens a throwaway session so an applicant can fill and submit the form
+ * without creating an account.
+ *
+ * @param {string|null} captchaToken from the Turnstile challenge, when enabled
+ * @throws {Error} ANONYMOUS_SIGNIN_DISABLED when the project has anonymous
+ *   sign-ins switched off, which is the default for a new project
+ */
+export async function signInAnonymously(captchaToken = null) {
+  const options = captchaToken ? { captchaToken } : undefined;
+
+  const { data, error } = await getClient().auth.signInAnonymously({ options });
+
+  if (error) {
+    if (/anonymous.*(disabled|not enabled)/i.test(error.message || '')) {
+      throw new Error('ANONYMOUS_SIGNIN_DISABLED');
+    }
+    throw error;
+  }
+
+  return data;
+}
+
 export function isBootstrapAdminEmail(email) {
   return (email || '').trim().toLowerCase() === BOOTSTRAP_ADMIN_EMAIL;
 }

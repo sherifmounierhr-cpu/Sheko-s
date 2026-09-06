@@ -283,6 +283,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <span class="sync-chip" id="syncChip" hidden></span>
     <button class="tbtn alt" id="langBtn" type="button"><span id="langBtnLabel">EN</span></button>
     <button class="tbtn alt" id="staffBtn" type="button" hidden data-ar="الطلبات" data-en="Applications">الطلبات</button>
+    <button class="tbtn alt" id="staffLoginBtn" type="button" hidden data-ar="دخول الموظفين" data-en="Staff Sign In">دخول الموظفين</button>
     <button class="tbtn gold" id="printBtn" type="button" data-ar="طباعة" data-en="Print">طباعة</button>
     <button class="tbtn alt" id="signOutBtn" type="button" hidden data-ar="خروج" data-en="Sign Out">خروج</button>
   </div>
@@ -764,7 +765,20 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
   <div class="footer-note" data-ar="نموذج طلب توظيف — إيفرست للعقارات" data-en="Job Application Form — Everest Real Estate">نموذج طلب توظيف — إيفرست للعقارات</div>
 </div>
 
-<!-- ============ Sign in / Sign up ============ -->
+<!-- ============ Human verification ============ -->
+<div class="modal-overlay" id="humanOverlay">
+  <div class="modal-box human-box">
+    <div class="modal-title" data-ar="تحقق سريع" data-en="Quick check">تحقق سريع</div>
+    <div class="modal-text"
+      data-ar="من فضلك أكّد أنك لست روبوت قبل فتح النموذج. الخطوة دي بتتم مرة واحدة."
+      data-en="Please confirm you are not a robot before the form opens. This happens once.">
+      من فضلك أكّد أنك لست روبوت قبل فتح النموذج. الخطوة دي بتتم مرة واحدة.
+    </div>
+    <div id="humanWidget" class="human-widget"></div>
+  </div>
+</div>
+
+<!-- ============ Staff sign in ============ -->
 <div class="modal-overlay" id="authOverlay">
   <div class="modal-box">
     <div class="modal-title" id="authTitle" data-ar="تسجيل الدخول" data-en="Sign In">تسجيل الدخول</div>
@@ -792,6 +806,7 @@ html[dir="ltr"] [data-en-only]{display:inline !important;}
     <input type="password" id="authPassword" dir="ltr" autocomplete="current-password">
 
     <div class="modal-actions">
+      <button type="button" class="tbtn alt" id="authClose" data-ar="إغلاق" data-en="Close">إغلاق</button>
       <button type="button" class="tbtn alt" id="authMagicLink"
         data-ar="أرسل لي رابط دخول" data-en="Email me a link">أرسل لي رابط دخول</button>
       <button type="button" class="tbtn" id="authSubmit" data-ar="دخول" data-en="Sign In">دخول</button>

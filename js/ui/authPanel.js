@@ -22,19 +22,19 @@ let busy = false;
 
 const COPY = {
   signin: {
-    title: { ar: 'تسجيل الدخول', en: 'Sign In' },
+    title: { ar: 'دخول الموظفين', en: 'Staff Sign In' },
     action: { ar: 'دخول', en: 'Sign In' },
     hint: {
-      ar: 'سجّل الدخول لحفظ طلبك ومتابعته. بياناتك محفوظة باسمك ولا يراها متقدم آخر.',
-      en: 'Sign in to save and track your application. Your data is stored under your account and no other applicant can see it.'
+      ar: 'هذه الشاشة لفريق الموارد البشرية فقط. المتقدمون للوظائف لا يحتاجون حسابًا — يكفي فتح الرابط وملء النموذج.',
+      en: 'This screen is for the HR team only. Applicants do not need an account — opening the link and filling in the form is enough.'
     }
   },
   signup: {
-    title: { ar: 'إنشاء حساب جديد', en: 'Create an Account' },
+    title: { ar: 'حساب موظف جديد', en: 'New Staff Account' },
     action: { ar: 'إنشاء الحساب', en: 'Create Account' },
     hint: {
-      ar: 'أنشئ حسابًا بالبريد الإلكتروني. قد تحتاج لتأكيد بريدك من رسالة تصلك.',
-      en: 'Create an account with your email. You may need to confirm it from a message we send you.'
+      ar: 'أنشئ حسابًا بالبريد الإلكتروني، ثم اطلب من مدير النظام منحك صلاحية الموارد البشرية.',
+      en: 'Create an account with your email, then ask an administrator to grant you the HR role.'
     }
   }
 };
@@ -236,6 +236,7 @@ export function initAuthPanel() {
   });
 
   $('authSubmit')?.addEventListener('click', handleSubmit);
+  $('authClose')?.addEventListener('click', closeAuthPanel);
   $('authMagicLink')?.addEventListener('click', handleMagicLink);
   $('authForgot')?.addEventListener('click', handleForgot);
 

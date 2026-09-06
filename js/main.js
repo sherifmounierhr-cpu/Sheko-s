@@ -10,6 +10,13 @@ import { AUTOSAVE_DELAY_MS, isConfigured } from './config.js';
 import { callbackMessage, clearCallbackFromUrl } from './authRedirect.js';
 import { applyLang, toggleLang, getLang, onLangChange } from './i18n.js';
 import { APPLICANT_FIELDS, HR_FIELDS, ROLE_LABELS } from './formSchema.js';
+import {
+  initRequiredFields,
+  validateRequired,
+  focusFirstInvalid,
+  clearInvalid
+} from './requiredFields.js';
+import { getHumanToken } from './humanCheck.js';
 import { renderGeneratedTables } from './formBuilder.js';
 import { initConditionalFields, applyConditionalFields } from './conditionalFields.js';
 import {
@@ -29,6 +36,8 @@ import {
   getRole,
   isStaff,
   isAdmin,
+  isAnonymous,
+  signInAnonymously,
   signOut
 } from './auth.js';
 import {
@@ -98,8 +107,13 @@ function applyRoleClasses() {
   const staffBtn = $('staffBtn');
   if (staffBtn) staffBtn.hidden = !isStaff();
 
+  // An anonymous applicant has no account to sign out of, and signing out
+  // would silently orphan their draft, so the button stays hidden for them.
   const signOutBtn = $('signOutBtn');
-  if (signOutBtn) signOutBtn.hidden = !getUser();
+  if (signOutBtn) signOutBtn.hidden = !getUser() || isAnonymous();
+
+  const staffLoginBtn = $('staffLoginBtn');
+  if (staffLoginBtn) staffLoginBtn.hidden = Boolean(getUser()) && !isAnonymous();
 }
 
 /**
@@ -363,23 +377,18 @@ async function submitApplication() {
     return;
   }
 
-  if (!readField('full_name').trim()) {
-    setSubmitStatus(
-      { ar: 'من فضلك اكتب الاسم بالكامل قبل الإرسال', en: 'Please enter your full name before submitting' },
-      'err'
-    );
-    document.getElementById('full_name')?.focus();
-    return;
-  }
-
-  if (!readField('mobile').trim() && !readField('email').trim()) {
+  const check = validateRequired();
+  if (!check.ok) {
     setSubmitStatus(
       {
-        ar: 'من فضلك أدخل رقم الموبايل أو البريد الإلكتروني للتواصل',
-        en: 'Please provide a mobile number or an email address so we can reach you'
+        ar: `من فضلك أكمل ${check.missing.length} من الحقول المطلوبة (المعلّمة بـ *)`,
+        en: `Please complete ${check.missing.length} required field${
+          check.missing.length === 1 ? '' : 's'
+        } (marked with *)`
       },
       'err'
     );
+    focusFirstInvalid(check.first);
     return;
   }
 
@@ -401,6 +410,7 @@ async function submitApplication() {
     state.applicationId = row.id;
     state.status = row.status;
 
+    clearInvalid();
     setSubmitStatus(
       { ar: 'تم إرسال الطلب بنجاح وحفظه في قاعدة البيانات', en: 'Application submitted and saved successfully' },
       'ok'
@@ -442,6 +452,47 @@ function handleFormChange(event) {
 /* Auth transitions                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Opens the throwaway session an applicant gets from the shared link.
+ *
+ * Anonymous sign-ins are off by default on a new Supabase project, so this
+ * degrades to the staff dialog with an explanation rather than leaving the
+ * visitor staring at a blurred form.
+ */
+async function startApplicantSession() {
+  try {
+    const token = await getHumanToken();
+    await signInAnonymously(token);
+    // handleSignedIn() runs from the auth listener.
+  } catch (err) {
+    console.error('[applicant session]', err);
+
+    if (err.message === 'ANONYMOUS_SIGNIN_DISABLED') {
+      setPanelStatus(
+        'authStatus',
+        {
+          ar: 'التقديم بدون حساب غير مفعّل بعد. فعّل "Anonymous sign-ins" من لوحة تحكم Supabase.',
+          en: 'Applying without an account is not enabled yet. Turn on "Anonymous sign-ins" in the Supabase dashboard.'
+        },
+        'err'
+      );
+    } else if (String(err.message).startsWith('HUMAN_CHECK')) {
+      setPanelStatus(
+        'authStatus',
+        {
+          ar: 'تعذّر التحقق من أنك لست روبوت. حدّث الصفحة وحاول مرة أخرى.',
+          en: 'The human check could not be completed. Refresh the page and try again.'
+        },
+        'err'
+      );
+    } else {
+      setPanelStatus('authStatus', describeError(err), 'err');
+    }
+
+    openAuthPanel();
+  }
+}
+
 async function handleSignedIn() {
   closeAuthPanel();
   applyRoleClasses();
@@ -471,7 +522,9 @@ async function handleSignedOut() {
   setSyncStatus(null);
 
   closeModal($('staffOverlay'));
-  openAuthPanel();
+
+  // Staff signing out drop back to the same anonymous view an applicant gets.
+  await startApplicantSession();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -496,6 +549,7 @@ async function bootstrap() {
   // One delegated pair of listeners replaces every inline onchange/oninput the
   // original markup carried.
   initConditionalFields();
+  initRequiredFields();
 
   $('jobForm')?.addEventListener('input', handleFormChange);
   $('jobForm')?.addEventListener('change', handleFormChange);
@@ -503,6 +557,7 @@ async function bootstrap() {
   $('langBtn')?.addEventListener('click', toggleLang);
   $('printBtn')?.addEventListener('click', () => window.print());
   $('staffBtn')?.addEventListener('click', openStaffPanel);
+  $('staffLoginBtn')?.addEventListener('click', openAuthPanel);
   $('signOutBtn')?.addEventListener('click', async () => {
     try {
       await signOut();
@@ -553,7 +608,7 @@ async function bootstrap() {
     });
 
     if (session) await handleSignedIn();
-    else openAuthPanel();
+    else await startApplicantSession();
 
     // Someone arriving from a confirmation / magic link deserves to be told
     // what just happened, rather than silently landing on a form.

@@ -12,9 +12,9 @@ and the way the JavaScript is organised.
 
 | Before | After |
 | --- | --- |
-| One 300-line inline `<script>` | 17 ES modules under `js/` |
+| One 300-line inline `<script>` | 20 ES modules under `js/` |
 | Submitted to a Google Apps Script URL | Supabase Postgres, autosaved as you type |
-| Anyone with the file could submit | Supabase Auth; every row protected by RLS |
+| Anyone with the file could submit | Applicants submit anonymously; staff sign in; every row protected by RLS |
 | HR section visible to everyone | HR section is staff-only, in a separate table |
 | No multi-device story | Realtime sync across tabs and devices |
 | "Clear Sheet" wiped the spreadsheet | "Delete All Applications", admin-only, inside the applications panel |
@@ -39,7 +39,9 @@ js/
   conditionalFields.js follow-ups shown only after a given answer (data-show-when)
   formState.js       reads/writes the DOM form
   scoring.js         preliminary score, age, interview total
-  auth.js            sign in/up, session, role
+  auth.js            sign in/up, anonymous sessions, role
+  humanCheck.js      Cloudflare Turnstile in front of anonymous sign-in
+  requiredFields.js  red asterisks + submit validation, from one list
   authRedirect.js    reads the email-callback params before the client strips them
   applications.js    queries against applications + application_reviews
   realtime.js        one channel, both tables, self-echo filtered
@@ -50,9 +52,10 @@ supabase/migrations/
   0001_init.sql                  tables, roles, triggers, RLS, realtime
   0002_harden_functions.sql      linter fixes: search_path, RPC surface
   0003_application_profile_fk.sql lets PostgREST embed the applicant profile
+  0004_anonymous_applicants.sql  makes profiles.email nullable for anonymous users
 ```
 
-All three migrations are already applied to project `nhmbbulidexzczrwjmyx`.
+All four migrations are already applied to project `nhmbbulidexzczrwjmyx`.
 
 ---
 
@@ -113,7 +116,7 @@ Then open <http://localhost:4173/>.
 ## Deploying it
 
 Upload the repository as-is to any static host — Netlify, Vercel, GitHub Pages,
-Cloudflare Pages, S3. There is no build step. Two things to set in the Supabase
+Cloudflare Pages, S3. There is no build step. Four things to set in the Supabase
 dashboard once you know the public URL:
 
 1. **Authentication → URL Configuration** — set *Site URL* to the deployed
@@ -121,9 +124,16 @@ dashboard once you know the public URL:
    confirmation email sends the recipient to a page their device cannot reach
    ("This site can't be reached"), which looks like a broken signup but is
    purely this setting.
-2. **Authentication → Providers → Email** — decide whether to require email
-   confirmation. With it on, sign-up returns no session and the dialog tells the
-   user to check their inbox.
+2. **Authentication → Sign In / Providers → Anonymous sign-ins** — turn this
+   **on**. Applicants never create an account; they get an anonymous session,
+   which is what ties their answers to a row only they can read. With it off the
+   form falls back to the staff dialog and says so.
+3. **Authentication → Attack Protection → Enable CAPTCHA protection** — choose
+   Cloudflare Turnstile and paste the *secret* key, then put the matching *site*
+   key in `TURNSTILE_SITE_KEY` in `js/config.js`. Both halves must be switched on
+   together, or every sign-in fails. Leaving both empty skips the check.
+4. **Authentication → Providers → Email** — decide whether to require email
+   confirmation for staff accounts.
 
 The form lives at `index.html`, so the deployed root URL serves it directly.
 (It was originally named `نموذج طلب توظيف - إيفرست.html`; a static host has
@@ -144,6 +154,10 @@ what produced a 404 on the first deploy.)
   (Run as the service role, or while signed in as an admin.)
 - **No CSV export.** The Arabic column labels the old Google Sheet used are
   still in `js/formSchema.js` if you want to add one.
+- **Anonymous drafts are per browser.** The session lives in localStorage, so an
+  applicant returning on the same device resumes their draft, but the same
+  person on a different device starts over. There is no way to recover a draft
+  from a lost session -- which is the trade for not making them register.
 
 The original single-file version is the first commit in this repository, so
 `git diff <first-commit> -- '*.html'` shows exactly what the migration changed
