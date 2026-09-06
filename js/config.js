@@ -29,7 +29,7 @@ export const BOOTSTRAP_ADMIN_EMAIL = 'sherifmounierhr@gmail.com';
  *
  * Free keys: https://dash.cloudflare.com/?to=/:account/turnstile
  */
-export const TURNSTILE_SITE_KEY = '';
+export const TURNSTILE_SITE_KEY = '0x4AAAAAAEqMoBs9L81DpMy_';
 
 /** Debounce window for autosaving the form to Postgres, in milliseconds. */
 export const AUTOSAVE_DELAY_MS = 1200;
