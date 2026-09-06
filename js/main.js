@@ -588,26 +588,34 @@ async function bootstrap() {
     return;
   }
 
-  let signedIn = false;
+  // Tracked by user id rather than "is there a session", because every
+  // applicant already has a truthy anonymous session from the moment they
+  // land. Comparing booleans made a staff member signing in over that
+  // anonymous session invisible to this listener -- session went from
+  // truthy to truthy, so it fell into the "just re-render" branch and
+  // handleSignedIn() (which closes the dialog, loads *their* application,
+  // re-authorises realtime for the new identity) never ran. The dialog would
+  // stay open forever over a perfectly successful sign-in.
+  let currentUserId = null;
 
   try {
     // initAuth() emits synchronously for a restored session, so the listener is
     // registered afterwards -- otherwise the restore would be handled twice.
     const { session } = await initAuth();
-    signedIn = Boolean(session);
+    currentUserId = session?.user?.id ?? null;
 
     onAuthChange((next) => {
-      const nowSignedIn = Boolean(next.session);
+      const nextUserId = next.session?.user?.id ?? null;
 
-      if (nowSignedIn === signedIn) {
-        // Same session, new profile data (role resolved, name changed).
+      if (nextUserId === currentUserId) {
+        // Same identity, new profile data (role resolved, name changed).
         renderSessionChip();
         applyRoleClasses();
         return;
       }
 
-      signedIn = nowSignedIn;
-      if (nowSignedIn) handleSignedIn();
+      currentUserId = nextUserId;
+      if (nextUserId) handleSignedIn();
       else handleSignedOut();
     });
 
