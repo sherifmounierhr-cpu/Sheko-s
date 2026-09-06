@@ -132,6 +132,17 @@ dashboard once you know the public URL:
    Cloudflare Turnstile and paste the *secret* key, then put the matching *site*
    key in `TURNSTILE_SITE_KEY` in `js/config.js`. Both halves must be switched on
    together, or every sign-in fails. Leaving both empty skips the check.
+
+   This setting is project-wide: it also gates the staff sign-in dialog, not
+   only the applicant's anonymous session. Both paths get a token from the same
+   Turnstile widget before calling Supabase -- see js/humanCheck.js and
+   resolveHumanToken() in js/ui/authPanel.js. A staff sign-in that fails with
+   "no captcha_token found" or "invalid-input-response" almost always means the
+   site key here and the secret key in Supabase belong to two different
+   Cloudflare widgets -- each widget has its own matched pair, and they are not
+   interchangeable.
+   Also confirm the widget's Hostname Management in the Cloudflare dashboard
+   lists the exact deployed domain -- Turnstile error 110200 means it does not.
 4. **Authentication → Providers → Email** — decide whether to require email
    confirmation for staff accounts.
 

@@ -15,6 +15,7 @@ import {
   sendPasswordReset,
   isBootstrapAdminEmail
 } from '../auth.js';
+import { getHumanToken } from '../humanCheck.js';
 
 /** @type {'signin'|'signup'} */
 let mode = 'signin';
@@ -100,6 +101,38 @@ function requireEmail(email) {
   return false;
 }
 
+/**
+ * Supabase's "Enable CAPTCHA protection" setting is project-wide -- it does
+ * not distinguish the applicant's anonymous sign-in from a staff member
+ * typing a password here. Every call into auth.js from this dialog needs the
+ * same token that startApplicantSession() gets in main.js, or Supabase
+ * rejects it with "no captcha_token found" regardless of how correct the
+ * password is.
+ *
+ * @returns {Promise<string|null>} null when the check is off, so callers can
+ *   pass it straight through to auth.js unconditionally
+ * @throws {Error} HUMAN_CHECK_UNAVAILABLE | HUMAN_CHECK_FAILED
+ */
+async function resolveHumanToken() {
+  try {
+    return await getHumanToken();
+  } catch (err) {
+    const message =
+      err.message === 'HUMAN_CHECK_UNAVAILABLE'
+        ? {
+            ar: 'تعذّر تحميل أداة التحقق. تأكد من اتصالك بالإنترنت وحدّث الصفحة.',
+            en: 'Could not load the verification check. Check your connection and refresh the page.'
+          }
+        : {
+            ar: 'تعذّر التحقق من أنك لست روبوت. حدّث الصفحة وحاول مرة أخرى.',
+            en: 'The human check could not be completed. Refresh the page and try again.'
+          };
+
+    setPanelStatus('authStatus', message, 'err');
+    throw err;
+  }
+}
+
 async function handleSubmit() {
   if (busy) return;
 
@@ -116,6 +149,15 @@ async function handleSubmit() {
   }
 
   setBusy(true);
+
+  let captchaToken;
+  try {
+    captchaToken = await resolveHumanToken();
+  } catch {
+    setBusy(false);
+    return;
+  }
+
   setPanelStatus(
     'authStatus',
     mode === 'signup'
@@ -126,7 +168,7 @@ async function handleSubmit() {
 
   try {
     if (mode === 'signup') {
-      const result = await signUpWithPassword(email, password, fullName);
+      const result = await signUpWithPassword(email, password, fullName, captchaToken);
 
       // With email confirmation on, signUp returns a user but no session.
       if (!result.session) {
@@ -142,7 +184,7 @@ async function handleSubmit() {
         return;
       }
     } else {
-      await signInWithPassword(email, password);
+      await signInWithPassword(email, password, captchaToken);
     }
 
     // The auth listener in main.js closes the dialog once the session lands.
@@ -167,10 +209,19 @@ async function handleMagicLink() {
   if (!requireEmail(email)) return;
 
   setBusy(true);
+
+  let captchaToken;
+  try {
+    captchaToken = await resolveHumanToken();
+  } catch {
+    setBusy(false);
+    return;
+  }
+
   setPanelStatus('authStatus', { ar: 'جاري الإرسال...', en: 'Sending...' }, 'pending');
 
   try {
-    await sendMagicLink(email);
+    await sendMagicLink(email, captchaToken);
     setPanelStatus(
       'authStatus',
       {
@@ -193,10 +244,19 @@ async function handleForgot() {
   if (!requireEmail(email)) return;
 
   setBusy(true);
+
+  let captchaToken;
+  try {
+    captchaToken = await resolveHumanToken();
+  } catch {
+    setBusy(false);
+    return;
+  }
+
   setPanelStatus('authStatus', { ar: 'جاري الإرسال...', en: 'Sending...' }, 'pending');
 
   try {
-    await sendPasswordReset(email);
+    await sendPasswordReset(email, captchaToken);
     setPanelStatus(
       'authStatus',
       {

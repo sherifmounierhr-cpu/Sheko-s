@@ -165,39 +165,53 @@ export async function initAuth() {
   return { ...state };
 }
 
-export async function signInWithPassword(email, password) {
+/**
+ * Turning on Supabase's "Enable CAPTCHA protection" applies to every auth
+ * endpoint in the project -- signInWithPassword, signUp, signInWithOtp,
+ * resetPasswordForEmail and signInAnonymously alike. Each of the functions
+ * below therefore takes the same optional token and forwards it the same way;
+ * omitting it is fine only while that project setting is off.
+ */
+
+export async function signInWithPassword(email, password, captchaToken = null) {
   const { data, error } = await getClient().auth.signInWithPassword({
     email: email.trim(),
-    password
+    password,
+    options: captchaToken ? { captchaToken } : undefined
   });
   if (error) throw error;
   return data;
 }
 
-export async function signUpWithPassword(email, password, fullName) {
+export async function signUpWithPassword(email, password, fullName, captchaToken = null) {
   const { data, error } = await getClient().auth.signUp({
     email: email.trim(),
     password,
     options: {
       data: { full_name: (fullName || '').trim() || null },
-      emailRedirectTo: window.location.href.split('#')[0]
+      emailRedirectTo: window.location.href.split('#')[0],
+      ...(captchaToken ? { captchaToken } : null)
     }
   });
   if (error) throw error;
   return data;
 }
 
-export async function sendMagicLink(email) {
+export async function sendMagicLink(email, captchaToken = null) {
   const { error } = await getClient().auth.signInWithOtp({
     email: email.trim(),
-    options: { emailRedirectTo: window.location.href.split('#')[0] }
+    options: {
+      emailRedirectTo: window.location.href.split('#')[0],
+      ...(captchaToken ? { captchaToken } : null)
+    }
   });
   if (error) throw error;
 }
 
-export async function sendPasswordReset(email) {
+export async function sendPasswordReset(email, captchaToken = null) {
   const { error } = await getClient().auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: window.location.href.split('#')[0]
+    redirectTo: window.location.href.split('#')[0],
+    ...(captchaToken ? { captchaToken } : null)
   });
   if (error) throw error;
 }

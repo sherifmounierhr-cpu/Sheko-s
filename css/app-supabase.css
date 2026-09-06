@@ -91,6 +91,10 @@ body:not(.is-staff) #printBtn { display: none !important; }
 
 /* ===== Human verification ================================================= */
 
+/* Higher than the shared .modal-overlay z-index (100) so the challenge is
+   never hidden behind the auth or staff dialog that triggered it. */
+#humanOverlay { z-index: 200; }
+
 .human-box { max-width: 380px; text-align: center; }
 
 .human-widget {
