@@ -7,6 +7,7 @@
 
 import { REQUIRED_FIELDS } from './formSchema.js';
 import { readField } from './formState.js';
+import { onLangChange } from './i18n.js';
 
 /** Finds the .field wrapper a named input belongs to. */
 function wrapperFor(name) {
@@ -76,6 +77,11 @@ export function focusFirstInvalid(wrapper) {
  */
 export function initRequiredFields(form = document.getElementById('jobForm')) {
   markRequiredFields();
+
+  // applyLang() rewrites label.textContent, which throws away the asterisk
+  // along with it. Redrawing after every switch is why markRequiredFields()
+  // is idempotent.
+  onLangChange(markRequiredFields);
 
   form?.addEventListener('input', (event) => {
     const name = event.target?.name;

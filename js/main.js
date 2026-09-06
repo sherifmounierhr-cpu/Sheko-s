@@ -91,9 +91,13 @@ function renderSessionChip() {
   }
 
   const role = ROLE_LABELS[getRole()] ?? ROLE_LABELS.applicant;
-  const name = getProfile()?.full_name || user.email;
+  const roleText = getLang() === 'ar' ? role.ar : role.en;
 
-  setText(chip, `${name} · ${getLang() === 'ar' ? role.ar : role.en}`);
+  // An anonymous applicant has neither a profile name nor an email, so the
+  // role on its own is the whole label -- otherwise the chip reads "· متقدم".
+  const name = getProfile()?.full_name || user.email || '';
+
+  setText(chip, name ? `${name} · ${roleText}` : roleText);
   chip.hidden = false;
 }
 
