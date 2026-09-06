@@ -56,6 +56,15 @@ function whenReady() {
 /**
  * Shows the challenge and resolves with a token to pass to Supabase Auth.
  *
+ * A fresh render() runs every time rather than reusing a widget with
+ * turnstile.reset(). reset() is documented for recovering a *single* widget
+ * from a timeout or expiry mid-life -- not for "run the challenge again from
+ * a clean state" -- and it does not reliably re-fire the success callback on
+ * a widget that already solved once. remove() + render() is the documented
+ * pair for that: remove() tears the widget down without invoking any
+ * callback, so the next render() always starts a real, verifiable challenge
+ * and always calls back.
+ *
  * @returns {Promise<string|null>} null when the check is switched off
  * @throws {Error} HUMAN_CHECK_UNAVAILABLE | HUMAN_CHECK_FAILED
  */
@@ -69,6 +78,17 @@ export async function getHumanToken() {
   const container = document.getElementById('humanWidget');
   if (!container) throw new Error('HUMAN_CHECK_UNAVAILABLE');
 
+  if (widgetId !== null) {
+    // Best-effort: an already-torn-down or racing widget throwing here must
+    // not block issuing a fresh one.
+    try {
+      window.turnstile.remove(widgetId);
+    } catch {
+      /* nothing useful to do with a teardown error on a widget we're discarding */
+    }
+    widgetId = null;
+  }
+
   overlay?.classList.add('open');
 
   try {
@@ -77,11 +97,6 @@ export async function getHumanToken() {
         overlay?.classList.remove('open');
         fn(value);
       };
-
-      // A second attempt has to reuse the widget rather than stack another one.
-      if (widgetId !== null) {
-        window.turnstile.reset(widgetId);
-      }
 
       widgetId = window.turnstile.render(container, {
         sitekey: TURNSTILE_SITE_KEY,
