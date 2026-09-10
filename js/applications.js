@@ -163,6 +163,19 @@ export function reviewToFields(review) {
  * rows" -- it refuses an unfiltered DELETE. RLS still limits this to rows the
  * caller may delete, which for a non-admin is only their own.
  */
+/**
+ * Deletes one application (and, by cascade, its review).
+ *
+ * RLS limits DELETE on applications to the caller's own row or an admin, so a
+ * plain HR account gets a permission-denied error back rather than a silent
+ * no-op -- the UI hides the button from them, but this is the real boundary.
+ */
+export async function deleteApplication(applicationId) {
+  const { error } = await getClient().from('applications').delete().eq('id', applicationId);
+
+  if (error) throw error;
+}
+
 export async function deleteAllApplications() {
   const { error, count } = await getClient()
     .from('applications')

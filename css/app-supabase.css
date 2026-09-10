@@ -212,18 +212,14 @@ body.is-reviewing textarea[readonly] {
   border-radius: 10px;
 }
 
+/* A plain container, not a button -- it holds two independent buttons
+   (open / delete), and a <button> cannot nest another <button>. */
 .staff-row {
   display: flex;
-  gap: 10px;
   align-items: center;
   width: 100%;
-  padding: 10px 12px;
-  border: none;
   border-bottom: 1px solid var(--line);
   background: #fff;
-  font-family: inherit;
-  text-align: inherit;
-  cursor: pointer;
 }
 
 .staff-row:last-child { border-bottom: none; }
@@ -231,6 +227,44 @@ body.is-reviewing textarea[readonly] {
 .staff-row.is-selected { background: #eef6ef; box-shadow: inset 3px 0 0 var(--green); }
 
 html[dir='ltr'] .staff-row.is-selected { box-shadow: inset -3px 0 0 var(--green); }
+
+.staff-row-open {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.staff-delete {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-inline-end: 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.staff-delete:hover {
+  border-color: #eec4bc;
+  background: #fdf1ef;
+  color: var(--danger);
+}
 
 .staff-score {
   flex: 0 0 auto;

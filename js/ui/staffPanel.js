@@ -12,7 +12,7 @@
 import { $, openModal, closeModal, escapeHtml, setText } from './dom.js';
 import { setPanelStatus, describeError } from './status.js';
 import { getLang, onLangChange, t } from '../i18n.js';
-import { listApplications, deleteAllApplications } from '../applications.js';
+import { listApplications, deleteApplication, deleteAllApplications } from '../applications.js';
 import { isAdmin } from '../auth.js';
 import { bandFor } from '../scoring.js';
 
@@ -65,21 +65,32 @@ function formatDate(value) {
 function rowHtml(row) {
   const band = bandFor(row.score ?? 0);
   const submitted = row.status === 'submitted';
+  const deleteLabel = t('حذف الطلب', 'Delete application');
 
+  // A <button> cannot nest another <button>, so the row is a plain container
+  // with two independent buttons: one to open the application, one -- admins
+  // only, per the RLS boundary in applications.js -- to delete it outright.
   return `
-    <button type="button" class="staff-row${row.id === selectedId ? ' is-selected' : ''}" data-application-id="${escapeHtml(row.id)}">
-      <span class="staff-score" style="background:${band.color}">${escapeHtml(row.score ?? 0)}</span>
-      <span class="staff-main">
-        <span class="staff-name">${escapeHtml(applicantName(row))}</span>
-        <span class="staff-meta">
-          ${escapeHtml(row.answers?.position || t('وظيفة غير محددة', 'No position given'))}
-          &middot; ${escapeHtml(formatDate(row.updated_at))}
+    <div class="staff-row${row.id === selectedId ? ' is-selected' : ''}" data-application-id="${escapeHtml(row.id)}">
+      <button type="button" class="staff-row-open" data-open-id="${escapeHtml(row.id)}">
+        <span class="staff-score" style="background:${band.color}">${escapeHtml(row.score ?? 0)}</span>
+        <span class="staff-main">
+          <span class="staff-name">${escapeHtml(applicantName(row))}</span>
+          <span class="staff-meta">
+            ${escapeHtml(row.answers?.position || t('وظيفة غير محددة', 'No position given'))}
+            &middot; ${escapeHtml(formatDate(row.updated_at))}
+          </span>
         </span>
-      </span>
-      <span class="staff-state ${submitted ? 'is-submitted' : 'is-draft'}">
-        ${escapeHtml(submitted ? t('مُرسل', 'Submitted') : t('مسودة', 'Draft'))}
-      </span>
-    </button>
+        <span class="staff-state ${submitted ? 'is-submitted' : 'is-draft'}">
+          ${escapeHtml(submitted ? t('مُرسل', 'Submitted') : t('مسودة', 'Draft'))}
+        </span>
+      </button>
+      ${
+        isAdmin()
+          ? `<button type="button" class="staff-delete" data-delete-id="${escapeHtml(row.id)}" title="${escapeHtml(deleteLabel)}" aria-label="${escapeHtml(deleteLabel)}">&times;</button>`
+          : ''
+      }
+    </div>
   `;
 }
 
@@ -191,6 +202,40 @@ async function deleteEverything() {
   }
 }
 
+/**
+ * Deletes one application after a confirmation.
+ *
+ * Single confirm, not the double confirm the danger zone uses -- this removes
+ * one candidate's record, not the whole project's data, and the row it was
+ * just clicked from is right there to identify by name.
+ */
+async function handleDeleteRow(id) {
+  if (!isAdmin()) return; // the button is not rendered for anyone else; this is belt-and-braces
+
+  const row = rows.get(id);
+  const name = row ? applicantName(row) : id;
+
+  const confirmMsg = t(
+    `هل تريد حذف طلب "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`,
+    `Delete the application from "${name}"? This cannot be undone.`
+  );
+  if (!window.confirm(confirmMsg)) return;
+
+  setPanelStatus('staffStatus', { ar: 'جاري الحذف...', en: 'Deleting...' }, 'pending');
+
+  try {
+    await deleteApplication(id);
+
+    rows.delete(id);
+    if (selectedId === id) selectedId = null;
+    render();
+
+    setPanelStatus('staffStatus', { ar: 'تم حذف الطلب', en: 'Application deleted' }, 'ok');
+  } catch (err) {
+    setPanelStatus('staffStatus', describeError(err), 'err');
+  }
+}
+
 export function openStaffPanel() {
   // The danger zone is admin-only; HR staff never see it.
   const zone = $('dangerZone');
@@ -224,10 +269,16 @@ export function initStaffPanel(handlers = {}) {
   });
 
   $('staffList')?.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-application-id]');
-    if (!button) return;
+    const deleteBtn = event.target.closest('[data-delete-id]');
+    if (deleteBtn) {
+      handleDeleteRow(deleteBtn.dataset.deleteId);
+      return;
+    }
 
-    const id = button.dataset.applicationId;
+    const openBtn = event.target.closest('[data-open-id]');
+    if (!openBtn) return;
+
+    const id = openBtn.dataset.openId;
     const row = rows.get(id);
     if (!row) return;
 
