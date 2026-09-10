@@ -17,8 +17,20 @@ import { getLang } from './i18n.js';
 
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
+/**
+ * A visitor who lands anonymously and then opens the staff dialog solves two
+ * separate challenges within seconds -- one automatic (the anonymous session),
+ * one for their sign-in, each needing its own single-use token. That pattern
+ * is rare enough that Turnstile occasionally refuses the second one outright
+ * (error-callback fires with no challenge ever shown), even for a genuine
+ * visitor on the correct domain. One silent retry, each attempt in a brand
+ * new container, clears that in practice without bothering anyone with it.
+ */
+const MAX_ATTEMPTS = 2;
+
 let scriptPromise = null;
-let widgetId = null;
+/** The <div> currently holding a live (or just-finished) widget, if any. */
+let mountEl = null;
 
 export function isHumanCheckEnabled() {
   return Boolean(TURNSTILE_SITE_KEY);
@@ -54,16 +66,44 @@ function whenReady() {
 }
 
 /**
+ * Tears down whatever widget is currently mounted and gives the next attempt
+ * a brand new, empty element to render into -- rather than remove() followed
+ * by render() on the *same* container, which is the pattern that was in place
+ * when the second-challenge-in-one-session failures were reported. remove()
+ * is documented to clear its own DOM, but nothing rules out Cloudflare keeping
+ * state keyed to the container element itself across that remove/render pair;
+ * a fresh element sidesteps the question rather than depending on the answer.
+ */
+function remount(container) {
+  if (mountEl) {
+    try {
+      window.turnstile.remove(mountEl);
+    } catch {
+      /* best-effort teardown of a widget we're discarding regardless */
+    }
+  }
+
+  mountEl = document.createElement('div');
+  container.replaceChildren(mountEl);
+  return mountEl;
+}
+
+/** One render-and-wait cycle. Resolves with a token or rejects HUMAN_CHECK_FAILED. */
+function runChallenge(el) {
+  return new Promise((resolve, reject) => {
+    let widgetId = window.turnstile.render(el, {
+      sitekey: TURNSTILE_SITE_KEY,
+      language: getLang() === 'ar' ? 'ar' : 'en',
+      callback: resolve,
+      'error-callback': () => reject(new Error('HUMAN_CHECK_FAILED')),
+      'timeout-callback': () => reject(new Error('HUMAN_CHECK_FAILED')),
+      'expired-callback': () => window.turnstile.reset(widgetId)
+    });
+  });
+}
+
+/**
  * Shows the challenge and resolves with a token to pass to Supabase Auth.
- *
- * A fresh render() runs every time rather than reusing a widget with
- * turnstile.reset(). reset() is documented for recovering a *single* widget
- * from a timeout or expiry mid-life -- not for "run the challenge again from
- * a clean state" -- and it does not reliably re-fire the success callback on
- * a widget that already solved once. remove() + render() is the documented
- * pair for that: remove() tears the widget down without invoking any
- * callback, so the next render() always starts a real, verifiable challenge
- * and always calls back.
  *
  * @returns {Promise<string|null>} null when the check is switched off
  * @throws {Error} HUMAN_CHECK_UNAVAILABLE | HUMAN_CHECK_FAILED
@@ -78,37 +118,21 @@ export async function getHumanToken() {
   const container = document.getElementById('humanWidget');
   if (!container) throw new Error('HUMAN_CHECK_UNAVAILABLE');
 
-  if (widgetId !== null) {
-    // Best-effort: an already-torn-down or racing widget throwing here must
-    // not block issuing a fresh one.
-    try {
-      window.turnstile.remove(widgetId);
-    } catch {
-      /* nothing useful to do with a teardown error on a widget we're discarding */
-    }
-    widgetId = null;
-  }
-
   overlay?.classList.add('open');
 
   try {
-    return await new Promise((resolve, reject) => {
-      const finish = (fn, value) => {
-        overlay?.classList.remove('open');
-        fn(value);
-      };
+    let lastError;
 
-      widgetId = window.turnstile.render(container, {
-        sitekey: TURNSTILE_SITE_KEY,
-        language: getLang() === 'ar' ? 'ar' : 'en',
-        callback: (token) => finish(resolve, token),
-        'error-callback': () => finish(reject, new Error('HUMAN_CHECK_FAILED')),
-        'timeout-callback': () => finish(reject, new Error('HUMAN_CHECK_FAILED')),
-        'expired-callback': () => window.turnstile.reset(widgetId)
-      });
-    });
-  } catch (err) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        return await runChallenge(remount(container));
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    throw lastError;
+  } finally {
     overlay?.classList.remove('open');
-    throw err;
   }
 }
