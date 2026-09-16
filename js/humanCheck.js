@@ -28,6 +28,17 @@ const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render
  */
 const MAX_ATTEMPTS = 2;
 
+/**
+ * Observed in production: a widget can also sit there showing nothing and
+ * calling nothing -- no success, no error-callback, no timeout-callback --
+ * indefinitely. That is presumably Cloudflare quietly stalling a client it
+ * has decided not to trust, but the visitor on the other end has no way to
+ * tell "still checking" from "broken," and no way out short of reloading the
+ * page themselves. Cloudflare's own timeout-callback cannot be relied on to
+ * ever fire, so each attempt gets a hard client-side deadline instead.
+ */
+const CHALLENGE_TIMEOUT_MS = 20000;
+
 let scriptPromise = null;
 /** The <div> currently holding a live (or just-finished) widget, if any. */
 let mountEl = null;
@@ -103,6 +114,29 @@ function runChallenge(el) {
 }
 
 /**
+ * runChallenge(), but guaranteed to settle within CHALLENGE_TIMEOUT_MS even if
+ * Cloudflare never calls back at all. The abandoned widget is left for the
+ * next remount() to tear down -- there is nothing more this attempt can do
+ * with it once its own promise has already settled.
+ */
+function runChallengeWithDeadline(el) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('HUMAN_CHECK_FAILED')), CHALLENGE_TIMEOUT_MS);
+
+    runChallenge(el).then(
+      (token) => {
+        clearTimeout(timer);
+        resolve(token);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+/**
  * Shows the challenge and resolves with a token to pass to Supabase Auth.
  *
  * @returns {Promise<string|null>} null when the check is switched off
@@ -125,7 +159,7 @@ export async function getHumanToken() {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
-        return await runChallenge(remount(container));
+        return await runChallengeWithDeadline(remount(container));
       } catch (err) {
         lastError = err;
       }
