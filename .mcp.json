@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lighthouse": {
+      "command": "npx",
+      "args": ["-y", "lighthouse-mcp"],
+      "env": {}
+    }
+  }
+}

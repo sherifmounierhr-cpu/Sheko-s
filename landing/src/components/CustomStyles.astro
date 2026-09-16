@@ -1,0 +1,50 @@
+---
+// Cairo Variable (Arabic + Latin) is self-hosted from
+// @fontsource-variable/cairo, imported at the top of
+// src/assets/styles/tailwind.css. To switch typefaces, install another
+// @fontsource package, swap that import, and repoint `--aw-font-*` below.
+//
+// Palette: Everest Real Estate — deep navy + gold.
+---
+
+<style is:inline>
+  :root {
+    --aw-font-sans: 'Cairo Variable';
+    --aw-font-serif: 'Cairo Variable';
+    --aw-font-heading: 'Cairo Variable';
+
+    --aw-color-primary: rgb(11 42 74);
+    --aw-color-secondary: rgb(7 29 53);
+    --aw-color-accent: rgb(197 160 89);
+
+    --aw-color-text-heading: rgb(11 25 41);
+    --aw-color-text-default: rgb(32 42 54);
+    --aw-color-text-muted: rgb(32 42 54 / 70%);
+    --aw-color-bg-page: rgb(255 255 255);
+
+    --aw-color-bg-page-dark: rgb(7 16 28);
+
+    ::selection {
+      background-color: rgb(197 160 89 / 35%);
+    }
+  }
+
+  .dark {
+    --aw-font-sans: 'Cairo Variable';
+    --aw-font-serif: 'Cairo Variable';
+    --aw-font-heading: 'Cairo Variable';
+
+    --aw-color-primary: rgb(197 160 89);
+    --aw-color-secondary: rgb(176 140 70);
+    --aw-color-accent: rgb(224 196 137);
+
+    --aw-color-text-heading: rgb(247 248 248);
+    --aw-color-text-default: rgb(229 236 246);
+    --aw-color-text-muted: rgb(229 236 246 / 66%);
+    --aw-color-bg-page: var(--aw-color-bg-page-dark);
+
+    ::selection {
+      background-color: rgb(197 160 89 / 35%);
+    }
+  }
+</style>

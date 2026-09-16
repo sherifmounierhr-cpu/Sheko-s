@@ -1,0 +1,246 @@
+---
+import Layout from '~/layouts/PageLayout.astro';
+
+import Hero from '~/components/widgets/Hero.astro';
+import Stats from '~/components/widgets/Stats.astro';
+import Content from '~/components/widgets/Content.astro';
+import Features from '~/components/widgets/Features.astro';
+import Pricing from '~/components/widgets/Pricing.astro';
+import Steps from '~/components/widgets/Steps.astro';
+import FAQs from '~/components/widgets/FAQs.astro';
+import ContactUs from '~/components/widgets/Contact.astro';
+import CallToAction from '~/components/widgets/CallToAction.astro';
+
+import heroImage from '~/assets/images/hero-image.png';
+
+// نصوص العرض كلها بيانات مبدئية (placeholder) لحد ما نحط بيانات المشروع الحقيقية.
+const metadata = {
+  title: 'مشروع الساحل الشمالي — شاليهات على البحر مباشرة',
+  description:
+    'شاليهات وفيلات في الساحل الشمالي، على البحر مباشرة، بمقدم ٥٪ وتقسيط حتى ٨ سنوات. احجز معاينتك مع إيفرست العقارية.',
+  ignoreTitleTemplate: true,
+};
+---
+
+<Layout metadata={metadata}>
+  <Hero
+    id="hero"
+    tagline="إيفرست العقارية"
+    actions={[
+      { variant: 'primary', text: 'احجز معاينة مجانية', href: '#contact', icon: 'tabler:calendar-check' },
+      { variant: 'secondary', text: 'حمّل كتيب المشروع', href: '#contact', icon: 'tabler:download' },
+    ]}
+    image={{ src: heroImage, alt: 'واجهة المشروع على البحر' }}
+  >
+    <Fragment slot="title">شاليهك على البحر مباشرة<br /><span class="text-accent">في قلب الساحل الشمالي</span></Fragment
+    >
+    <Fragment slot="subtitle">
+      وحدات متشطبة بالكامل، مقدم يبدأ من ٥٪ وتقسيط حتى ٨ سنوات، بإطلالة مباشرة على البحر. عدد محدود من الوحدات في
+      المرحلة الأولى.
+    </Fragment>
+  </Hero>
+
+  <Stats
+    countUp
+    stats={[
+      { title: 'متر واجهة بحرية', amount: '٦٥٠' },
+      { title: 'فدان مساحة المشروع', amount: '١٢٠' },
+      { title: 'مساحات خضراء ومياه', amount: '٨٠٪' },
+      { title: 'سنوات تقسيط', amount: '٨' },
+    ]}
+  />
+
+  <Content
+    id="about"
+    tagline="عن المشروع"
+    title="مجتمع متكامل على البحر، مش مجرد شاليه"
+    content="المشروع مقام على مساحة ١٢٠ فدان بواجهة بحرية ٦٥٠ متر، بتصميم متدرج يضمن إطلالة بحر لأكبر عدد من الوحدات. المرحلة الأولى بتضم شاليهات وتاون هاوس وفيلات مستقلة، متشطبة بالكامل."
+    items={[
+      {
+        title: 'تصميم متدرج',
+        description: 'كل صف وحدات أعلى من اللي قدامه عشان الإطلالة ما تتحجبش.',
+        icon: 'tabler:building-arch',
+      },
+      {
+        title: 'تشطيب كامل',
+        description: 'الوحدة بتتسلم متشطبة بالكامل بالمطبخ والتكييفات.',
+        icon: 'tabler:home-check',
+      },
+      {
+        title: 'إدارة فندقية',
+        description: 'خدمات وصيانة على مدار السنة مع نظام تأجير اختياري.',
+        icon: 'tabler:building-skyscraper',
+      },
+    ]}
+    image={{ src: heroImage, alt: 'ماستر بلان المشروع' }}
+  />
+
+  <Features
+    id="features"
+    tagline="المميزات"
+    title="ليه المشروع ده تحديداً"
+    columns={3}
+    items={[
+      { title: 'على البحر مباشرة', description: 'واجهة بحرية ٦٥٠ متر وشاطئ خاص للملاك.', icon: 'tabler:beach' },
+      { title: 'مقدم ٥٪', description: 'أقل مقدم في المنطقة مع تقسيط يوصل ٨ سنوات بدون فوائد.', icon: 'tabler:cash' },
+      {
+        title: 'موقع استراتيجي',
+        description: 'على طريق الساحل الرئيسي، قريب من أهم الخدمات والمولات.',
+        icon: 'tabler:map-pin',
+      },
+      { title: 'كلوب هاوس', description: 'حمامات سباحة، جيم، مطاعم وكافيهات داخل المشروع.', icon: 'tabler:pool' },
+      {
+        title: 'أمن ٢٤ ساعة',
+        description: 'بوابات إلكترونية وحراسة ومراقبة على مدار اليوم.',
+        icon: 'tabler:shield-lock',
+      },
+      {
+        title: 'عائد استثماري',
+        description: 'نظام تأجير مُدار بعائد سنوي متوقع على الوحدة.',
+        icon: 'tabler:trending-up',
+      },
+    ]}
+  />
+
+  <Pricing
+    id="units"
+    tagline="الوحدات"
+    title="المساحات وأنظمة السداد"
+    currency="ج.م"
+    prices={[
+      {
+        title: 'شاليه غرفتين',
+        subtitle: 'من ٩٥ م² + جاردن',
+        price: '٤٫٢ م',
+        period: 'تبدأ من',
+        note: 'مقدم ٥٪ · تقسيط ٨ سنوات',
+        items: [
+          { description: 'غرفتين + ريسبشن' },
+          { description: 'تشطيب كامل' },
+          { description: 'إطلالة بحر أو لاجون' },
+        ],
+        callToAction: { text: 'اطلب التفاصيل', href: '#contact' },
+      },
+      {
+        title: 'تاون هاوس',
+        subtitle: 'من ١٧٥ م²',
+        price: '٨٫٥ م',
+        period: 'تبدأ من',
+        note: 'الأكثر طلباً',
+        hasRibbon: true,
+        ribbonTitle: 'الأكثر طلباً',
+        highlight: true,
+        items: [{ description: '٣ غرف + حديقة خاصة' }, { description: 'تشطيب كامل' }, { description: 'روف خاص' }],
+        callToAction: { text: 'اطلب التفاصيل', href: '#contact' },
+      },
+      {
+        title: 'فيلا مستقلة',
+        subtitle: 'من ٢٩٠ م²',
+        price: '١٦ م',
+        period: 'تبدأ من',
+        note: 'عدد محدود',
+        items: [
+          { description: '٤ غرف + حمام سباحة خاص' },
+          { description: 'حديقة ٢٠٠ م²' },
+          { description: 'إطلالة بحر مباشرة' },
+        ],
+        callToAction: { text: 'اطلب التفاصيل', href: '#contact' },
+      },
+    ]}
+  />
+
+  <Steps
+    id="payment"
+    tagline="خطوات الحجز"
+    title="من أول اتصال لحد استلام المفتاح"
+    items={[
+      {
+        title: 'سيب بياناتك',
+        description: 'املأ الفورم وهيتواصل معاك مستشار مبيعات خلال ٢٤ ساعة.',
+        icon: 'tabler:phone-call',
+      },
+      {
+        title: 'معاينة الموقع',
+        description: 'زيارة مجانية للمشروع مع مواصلات من القاهرة أو الإسكندرية.',
+        icon: 'tabler:car',
+      },
+      {
+        title: 'اختيار الوحدة',
+        description: 'نساعدك تختار الوحدة ونظام السداد اللي يناسب ميزانيتك.',
+        icon: 'tabler:home-search',
+      },
+      { title: 'التعاقد', description: 'توقيع العقد ودفع المقدم، وتبدأ خطة التقسيط.', icon: 'tabler:file-check' },
+    ]}
+    image={{ src: heroImage, alt: 'خطوات الحجز' }}
+  />
+
+  <Content
+    id="location"
+    isReversed
+    tagline="الموقع"
+    title="على طريق الساحل الشمالي الرئيسي"
+    content="المشروع في موقع متوسط بين الإسكندرية ومرسى مطروح، على بعد دقائق من أهم المولات والخدمات."
+    items={[
+      { title: 'من الإسكندرية', description: 'ساعة ونص بالسيارة.', icon: 'tabler:route' },
+      { title: 'من القاهرة', description: 'ساعتين عن طريق الضبعة الجديد.', icon: 'tabler:road' },
+      { title: 'الخدمات', description: 'مولات، مستشفيات ومدارس على بعد دقائق.', icon: 'tabler:building-store' },
+    ]}
+    image={{ src: heroImage, alt: 'موقع المشروع على الخريطة' }}
+  />
+
+  <FAQs
+    id="faqs"
+    tagline="أسئلة شائعة"
+    title="الأسئلة اللي بتتكرر من العملاء"
+    schema
+    collapsible
+    items={[
+      {
+        title: 'إيه أقل مقدم للحجز؟',
+        description: 'المقدم يبدأ من ٥٪ من إجمالي سعر الوحدة، والباقي تقسيط حتى ٨ سنوات.',
+      },
+      { title: 'الوحدات بتتسلم متشطبة؟', description: 'أيوه، كل الوحدات بتتسلم متشطبة بالكامل بالمطبخ والتكييفات.' },
+      { title: 'إمتى موعد التسليم؟', description: 'المرحلة الأولى تسليم خلال ٣ سنوات من تاريخ التعاقد.' },
+      {
+        title: 'فيه رسوم صيانة؟',
+        description: 'أيوه، رسوم صيانة سنوية بتغطي الأمن والنظافة والمساحات الخضراء والخدمات.',
+      },
+      { title: 'أقدر أأجّر الوحدة؟', description: 'أيوه، فيه نظام تأجير مُدار اختياري عن طريق إدارة المشروع.' },
+    ]}
+  />
+
+  <ContactUs
+    id="contact"
+    tagline="تواصل معنا"
+    title="سيب بياناتك ونتواصل معاك خلال ٢٤ ساعة"
+    subtitle="مستشار المبيعات هيرجعلك بكل التفاصيل والأسعار وخطط السداد المتاحة."
+    inputs={[
+      { type: 'text', name: 'name', label: 'الاسم', placeholder: 'اكتب اسمك' },
+      { type: 'tel', name: 'phone', label: 'رقم الموبايل', placeholder: '01XXXXXXXXX', autocomplete: 'tel' },
+      {
+        type: 'email',
+        name: 'email',
+        label: 'البريد الإلكتروني (اختياري)',
+        placeholder: 'name@example.com',
+        autocomplete: 'email',
+      },
+    ]}
+    textarea={{ name: 'message', label: 'رسالتك (اختياري)', placeholder: 'المساحة أو النوع اللي بتدور عليه', rows: 3 }}
+    disclaimer={{ label: 'بإرسال البيانات أنت موافق إننا نتواصل معاك بخصوص المشروع.' }}
+    button="ابعت بياناتي"
+    description="أو كلّمنا على واتساب مباشرة."
+  />
+
+  <CallToAction
+    actions={[
+      {
+        variant: 'primary',
+        text: 'تواصل على واتساب',
+        href: 'https://wa.me/20XXXXXXXXXX',
+        icon: 'tabler:brand-whatsapp',
+      },
+    ]}
+    title="عدد الوحدات في المرحلة الأولى محدود"
+    subtitle="احجز معاينتك دلوقتي قبل ما أسعار المرحلة الجاية تزيد."
+  />
+</Layout>

@@ -1,0 +1,72 @@
+site:
+  name: Everest Real Estate
+  site: 'https://everest-realestate.net'
+  base: '/'
+  trailingSlash: false
+
+  googleSiteVerificationId: ''
+
+# Default SEO metadata
+metadata:
+  title:
+    default: إيفرست العقارية — الساحل الشمالي والإسكندرية
+    template: '%s — إيفرست العقارية'
+  description: 'إيفرست العقارية: وحدات وشاليهات للبيع في الساحل الشمالي والإسكندرية، بأفضل أنظمة السداد ومن كبار المطورين.'
+  robots:
+    index: true
+    follow: true
+  openGraph:
+    site_name: Everest Real Estate
+    images:
+      - url: '~/assets/images/default.png'
+        width: 1200
+        height: 628
+    type: website
+  twitter:
+    handle: ''
+    site: ''
+    cardType: summary_large_image
+
+i18n:
+  language: ar
+  textDirection: rtl
+
+apps:
+  blog:
+    isEnabled: false
+    postsPerPage: 8
+
+    post:
+      isEnabled: false
+      permalink: '/%slug%'
+      robots:
+        index: true
+
+    list:
+      isEnabled: false
+      pathname: 'blog'
+      robots:
+        index: true
+
+    category:
+      isEnabled: false
+      pathname: 'category'
+      robots:
+        index: true
+
+    tag:
+      isEnabled: false
+      pathname: 'tag'
+      robots:
+        index: false
+
+    isRelatedPostsEnabled: false
+    relatedPostsCount: 4
+
+analytics:
+  vendors:
+    googleAnalytics:
+      id: null # حط هنا G-XXXXXXXXXX لما نوصّل التتبع
+
+ui:
+  theme: 'light:only'
