@@ -26,6 +26,12 @@ const whenExternalScripts = (items: (() => AstroIntegration) | (() => AstroInteg
 export default defineConfig({
   output: 'static',
 
+  build: {
+    // Not `_astro`: a leading underscore is reserved or hidden by several
+    // static hosts, which then serve the page without its CSS and fonts.
+    assets: 'assets',
+  },
+
   // Prefetch links as they enter the viewport for snappier navigations
   // (works together with <ClientRouter />, which enables prefetch by default).
   prefetch: {
