@@ -141,6 +141,18 @@ function indexPunches(){
     for(const p of list){const d=p.slice(0,10),m=toMin(p.slice(11,16));(punchIdx[code+"|"+d]??=[]).push(m);if(d>lastPunchDate)lastPunchDate=d}
   }
 }
+/* permission balance: each employee gets permAllowH hours a month, charged in permUnit-minute steps, oldest first */
+let LEDGER={};
+const isPerm=p=>p.status==="معتمد"&&!p.type.startsWith("إجازة");
+function buildLedger(){
+  LEDGER={};const st=S.settings,allow=(Number(st.permAllowH)||0)*60,unit=Number(st.permUnit)||0,used={};
+  S.perms.map((p,i)=>[p,i]).filter(([p])=>isPerm(p)).sort((a,b)=>a[0].from.localeCompare(b[0].from)||a[1]-b[1]).forEach(([p])=>{
+    const k=p.code+"|"+p.from.slice(0,7),d=dur(p.tFrom,p.tTo),charge=unit>0?Math.ceil(d/unit)*unit:d,before=used[k]||0;
+    const covered=Math.min(d,Math.max(0,allow-before));used[k]=before+charge;
+    LEDGER[p.id]={charge,covered,before,left:Math.max(0,allow-before-charge),over:before+charge>allow};
+  });
+}
+function permUsed(code,ym){return S.perms.filter(p=>p.code===code&&isPerm(p)&&p.from.startsWith(ym)).reduce((a,p)=>a+(LEDGER[p.id]?.charge||0),0)}
 function tier(v,t){let r=0;for(const[from,ded]of t)if(v>=from)r=ded;return r}
 function dayRow(e,d){
   const st=S.settings,w=wd(d),code=e.code;
@@ -151,7 +163,7 @@ function dayRow(e,d){
   const rin=toMin(e.in||st.in),rout=toMin(e.out||st.out);
   const ok=x=>x.code===code&&x.status==="معتمد";
   const leave=S.perms.some(p=>ok(p)&&p.type.startsWith("إجازة")&&p.from<=d&&(p.to||p.from)>=d);
-  const permMin=S.perms.filter(p=>ok(p)&&!p.type.startsWith("إجازة")&&p.from===d).reduce((a,p)=>a+dur(p.tFrom,p.tTo),0);
+  const permMin=S.perms.filter(p=>ok(p)&&!p.type.startsWith("إجازة")&&p.from===d).reduce((a,p)=>a+(LEDGER[p.id]?.covered||0),0);
   const meets=S.meetings.filter(m=>ok(m)&&m.date===d);
   const meetMin=meets.reduce((a,m)=>a+dur(m.tFrom,m.tTo),0);
   const late=pin==null?null:Math.max(0,pin-rin), early=pout==null?null:Math.max(0,rout-pout);
@@ -193,7 +205,7 @@ function summary(e,ym){
   const latec=ex?0:rows.filter(r=>r.lateHit&&r.type==="يوم عمل").length;
   const latem=ex?0:rows.reduce((a,r)=>a+(r.type==="يوم عمل"&&r.nlate?r.nlate:0),0);
   const earlyc=ex?0:rows.filter(r=>r.earlyHit&&r.type==="يوم عمل").length;
-  const permH=rows.reduce((a,r)=>a+r.permMin,0)/60;
+  const permH=permUsed(e.code,ym)/60;
   const ms=S.meetings.filter(m=>m.code===e.code&&m.status==="معتمد"&&m.date.startsWith(ym));
   const meetH=ms.reduce((a,m)=>a+dur(m.tFrom,m.tTo),0)/60;
   const deals=ms.filter(m=>m.result==="حجز / تعاقد").length;
@@ -220,7 +232,7 @@ function renderShell(){
   $("#save").disabled=readOnly;
   if(readOnly)$("#save").textContent="عرض فقط";
 }
-function render(){renderShell();const ym=S.meta.month;$("#main").innerHTML=`<section class="panel">${({dash,daily,meet,perm,sum,emp,set})[tab](ym)}</section>`;restoreBanner()}
+function render(){buildLedger();renderShell();const ym=S.meta.month;$("#main").innerHTML=`<section class="panel">${({dash,daily,meet,perm,sum,emp,set})[tab](ym)}</section>`;restoreBanner()}
 
 function dash(ym){
   const sums=S.employees.map(e=>summary(e,ym));
@@ -332,7 +344,7 @@ function perm(ym){
   const list=S.perms.filter(p=>p.from.startsWith(ym)||(p.to||"").startsWith(ym)).sort((a,b)=>b.from.localeCompare(a.from));
   return `
   <div class="card"><h2>إذن أو إجازة جديدة</h2>
-  <p class="note">الإذن محتاج (من / إلى) ساعة. الإجازة محتاجة تاريخ البداية والنهاية بس. الحساب بياخد المعتمد بس.</p>
+  <p class="note">رصيد الأذونات ${n2(S.settings.permAllowH)} ساعة في الشهر لكل موظف، وبيتخصم بوحدات ${S.settings.permUnit} دقيقة (مثلًا إذن ساعتين مرة واحدة، أو إذنين كل واحد ساعة). اللي يزيد عن الرصيد بيتحسب تأخير أو انصراف مبكر عادي. الإجازة محتاجة تاريخ البداية والنهاية بس، والحساب بياخد المعتمد بس.</p>
   <form class="add" id="permForm">
     <label>الموظف<select name="code" required>${empOpts("","اختار")}</select></label>
     <label>النوع<select name="type">${opts(PERM_TYPES)}</select></label>
@@ -345,10 +357,15 @@ function perm(ym){
     <label class="wide">السبب<input type="text" name="note"></label>
     <div><button class="btn primary" type="submit">إضافة</button></div>
   </form></div>
-  <div class="tbl"><table><thead><tr><th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>الوقت</th><th>المدة</th><th>الحالة</th><th>المعتمد من</th><th>السبب</th><th></th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>الوقت</th><th>المدة (د)</th><th>من الرصيد (د)</th><th>الباقي بعده</th><th>الحالة</th><th>المعتمد من</th><th>السبب</th><th></th></tr></thead><tbody>
   ${list.map(p=>`<tr><td>${esc(empBy(p.code)?empName(empBy(p.code)):p.code)}</td><td>${esc(p.type)}</td><td>${fmtDate(p.from)}</td><td>${p.to?fmtDate(p.to):""}</td><td>${p.tFrom?to12(toMin(p.tFrom))+" - "+to12(toMin(p.tTo)):""}</td><td class="num">${dur(p.tFrom,p.tTo)||""}</td>
-    <td><select id="ps-${p.id}" data-pstat="${p.id}">${opts(STATUSES,p.status)}</select></td><td>${esc(p.by)}</td><td>${esc(p.note)}</td><td><button class="btn danger" data-pdel="${p.id}">حذف</button></td></tr>`).join("")||`<tr><td colspan="10" class="note">مفيش أذونات أو إجازات في الشهر ده.</td></tr>`}
-  </tbody></table></div>`;
+    <td class="num">${LEDGER[p.id]?`${LEDGER[p.id].charge}${LEDGER[p.id].over?' <span class="pill p-bad">تجاوز الرصيد</span>':""}`:""}</td><td class="num">${LEDGER[p.id]?fmtMin(LEDGER[p.id].left):""}</td>
+    <td><select id="ps-${p.id}" data-pstat="${p.id}">${opts(STATUSES,p.status)}</select></td><td>${esc(p.by)}</td><td>${esc(p.note)}</td><td><button class="btn danger" data-pdel="${p.id}">حذف</button></td></tr>`).join("")||`<tr><td colspan="12" class="note">مفيش أذونات أو إجازات في الشهر ده.</td></tr>`}
+  </tbody></table></div>
+  <div class="card"><h2>رصيد الأذونات في الشهر ده</h2>
+  <div class="tbl" style="border:0"><table><thead><tr><th>الموظف</th><th>المستخدم</th><th>الباقي</th></tr></thead><tbody>
+  ${S.employees.filter(e=>!e.exempt).map(e=>{const u=permUsed(e.code,ym),a=S.settings.permAllowH*60,l=a-u;return`<tr><td>${esc(empName(e))}</td><td class="num">${fmtMin(u)}</td><td class="num"><span class="pill ${l<0?"p-bad":l===0?"p-warn":"p-ok"}">${l<0?"متجاوز "+fmtMin(-l):fmtMin(l)}</span></td></tr>`}).join("")}
+  </tbody></table></div></div>`;
 }
 
 function sum(ym){
@@ -404,6 +421,7 @@ function set(){
     <label>خصم البصمة الناقصة (يوم)<input type="number" step="0.25" id="s-miss" data-s="missDed" value="${st.missDed}"></label>
     <label>خصم الغياب بدون إذن (يوم)<input type="number" step="0.25" id="s-abs" data-s="absDed" value="${st.absDed}"></label>
     <label>رصيد الأذونات الشهري (ساعات)<input type="number" step="0.5" id="s-allow" data-s="permAllowH" value="${st.permAllowH}"></label>
+    <label>وحدة خصم الإذن (دقيقة)<input type="number" step="15" min="0" id="s-unit" data-s="permUnit" value="${st.permUnit??60}"></label>
   </form>
   <div class="row"><span class="note">الإجازة الأسبوعية:</span>${DAYS.map((d,i)=>`<label class="row" style="gap:4px"><input type="checkbox" id="wk-${i}" data-wk="${i}"${st.weekend.includes(i)?" checked":""}>${d}</label>`).join("")}</div></div>
   <div class="tiers">${tierT("lateTiers","شرائح خصم التأخير")}${tierT("earlyTiers","شرائح خصم الانصراف المبكر")}
@@ -497,7 +515,7 @@ function cleanOv(k){const o=S.overrides[k];if(o&&(o.ded===""||o.ded==null)&&!o.n
 document.addEventListener("submit",ev=>{
   ev.preventDefault();const f=ev.target,v=Object.fromEntries(new FormData(f));
   if(f.id==="meetForm"){if(dur(v.tFrom,v.tTo)<=0){toast("ميعاد النهاية لازم يكون بعد البداية");return}S.meetings.push({id:uid(),...v});S.meta.month=v.date.slice(0,7);toast("اتسجل الاجتماع")}
-  if(f.id==="permForm"){if(!v.type.startsWith("إجازة")&&dur(v.tFrom,v.tTo)<=0){toast("الإذن محتاج ساعة بداية ونهاية");return}S.perms.push({id:uid(),...v});toast("اتسجل")}
+  if(f.id==="permForm"){if(!v.type.startsWith("إجازة")&&dur(v.tFrom,v.tTo)<=0){toast("الإذن محتاج ساعة بداية ونهاية");return}S.perms.push({id:uid(),...v});buildLedger();const L=LEDGER[S.perms.at(-1).id];toast(L?.over?"اتسجل، بس الموظف ده عدّى رصيد الأذونات بتاعه في الشهر، والزيادة هتتحسب تأخير":"اتسجل")}
   if(f.id==="empForm"){if(empBy(v.code.trim())){toast("الكود ده موجود");return}S.employees.push({code:v.code.trim(),device:"",name:v.name,dept:"",job:"",salary:0,in:"",out:"",off:""});S.employees.sort((a,b)=>Number(a.code)-Number(b.code))}
   touch();render();
 });
@@ -538,6 +556,7 @@ window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.return
   try{const r=await fetch("state.json",{cache:"no-store"});if(!r.ok)throw 0;S=await r.json()}
   catch(e){$("#main").innerHTML='<section class="panel"><p class="note">مقدرتش أحمّل بيانات الحضور. حدّث الصفحة.</p></section>';return}
   S.settings.weekend=S.settings.weekend.map(Number);
+  S.settings.permUnit??=60;
   indexPunches();render();
 })();
 </script>
