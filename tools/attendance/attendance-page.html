@@ -163,6 +163,7 @@ function dayRow(e,d){
   if(type!=="يوم عمل")status=type;
   else if(leave)status="إجازة";
   else if(future)status="لم يأتِ بعد";
+  else if(e.exempt)status="معفى من البصمة";
   else if(pin==null)status=meetMin>0?"مهمة خارجية":"غياب";
   else if(pout==null)status=meetMin>0?"حاضر - مهمة خارجية":"بصمة ناقصة";
   else if(lateHit&&earlyHit)status="تأخير وانصراف مبكر";
@@ -170,7 +171,7 @@ function dayRow(e,d){
   else if(earlyHit)status="انصراف مبكر";
   else status="حاضر";
   let dl=0,de=0,dm=0,da=0;
-  if(type==="يوم عمل"&&!leave&&!future){
+  if(type==="يوم عمل"&&!leave&&!future&&!e.exempt){
     if(nlate>0)dl=tier(nlate,st.lateTiers);
     if(nearly>0)de=tier(nearly,st.earlyTiers);
     if(status==="بصمة ناقصة")dm=st.missDed;
@@ -188,22 +189,23 @@ function summary(e,ym){
   const c=s=>rows.filter(r=>r.status===s).length;
   const abs=c("غياب"),lv=c("إجازة"),miss=c("بصمة ناقصة");
   const onTime=rows.filter(r=>r.status==="حاضر"||r.status==="حاضر - مهمة خارجية"||r.status==="مهمة خارجية").length;
-  const latec=rows.filter(r=>r.lateHit&&r.type==="يوم عمل").length;
-  const latem=rows.reduce((a,r)=>a+(r.type==="يوم عمل"&&r.nlate?r.nlate:0),0);
-  const earlyc=rows.filter(r=>r.earlyHit&&r.type==="يوم عمل").length;
+  const ex=!!e.exempt;
+  const latec=ex?0:rows.filter(r=>r.lateHit&&r.type==="يوم عمل").length;
+  const latem=ex?0:rows.reduce((a,r)=>a+(r.type==="يوم عمل"&&r.nlate?r.nlate:0),0);
+  const earlyc=ex?0:rows.filter(r=>r.earlyHit&&r.type==="يوم عمل").length;
   const permH=rows.reduce((a,r)=>a+r.permMin,0)/60;
   const ms=S.meetings.filter(m=>m.code===e.code&&m.status==="معتمد"&&m.date.startsWith(ym));
   const meetH=ms.reduce((a,m)=>a+dur(m.tFrom,m.tTo),0)/60;
   const deals=ms.filter(m=>m.result==="حجز / تعاقد").length;
   const denom=work.length-lv;
-  const commit=denom>0?onTime/denom:null;
+  const commit=ex?null:denom>0?onTime/denom:null;
   const ddays=rows.reduce((a,r)=>a+r.fin,0);
   const sal=Number(e.salary)||0,rate=st.workDays?sal/st.workDays:0,damt=Math.round(ddays*rate*100)/100;
   const adj=S.adjust[e.code+"|"+ym]||{},other=Number(adj.other)||0,bonus=Number(adj.bonus)||0;
   return{e,rows,req:work.length,pres:work.length-abs-lv,abs,lv,miss,latec,latem,earlyc,permH,permOver:permH>st.permAllowH,meetC:ms.length,meetH,deals,commit,ddays,sal,rate,damt,other,bonus,net:sal-damt-other+bonus};
 }
 function pill(s){
-  const m={"حاضر":"p-ok","حاضر - مهمة خارجية":"p-ok","مهمة خارجية":"p-info","تأخير":"p-warn","انصراف مبكر":"p-warn","تأخير وانصراف مبكر":"p-warn","بصمة ناقصة":"p-warn","غياب":"p-bad","إجازة":"p-acc","إجازة أسبوعية":"p-mute","إجازة رسمية":"p-mute","لم يأتِ بعد":"p-mute"};
+  const m={"حاضر":"p-ok","حاضر - مهمة خارجية":"p-ok","مهمة خارجية":"p-info","تأخير":"p-warn","انصراف مبكر":"p-warn","تأخير وانصراف مبكر":"p-warn","بصمة ناقصة":"p-warn","غياب":"p-bad","إجازة":"p-acc","إجازة أسبوعية":"p-mute","إجازة رسمية":"p-mute","لم يأتِ بعد":"p-mute","معفى من البصمة":"p-info"};
   return `<span class="pill ${m[s]||"p-mute"}">${esc(s)}</span>`;
 }
 const opts=(list,sel,blank)=>(blank!=null?`<option value="">${esc(blank)}</option>`:"")+list.map(v=>{const[val,lab]=Array.isArray(v)?v:[v,v];return`<option value="${esc(val)}"${String(val)===String(sel)?" selected":""}>${esc(lab)}</option>`}).join("");
@@ -222,14 +224,15 @@ function render(){renderShell();const ym=S.meta.month;$("#main").innerHTML=`<sec
 
 function dash(ym){
   const sums=S.employees.map(e=>summary(e,ym));
-  const active=sums.filter(s=>s.rows.some(r=>r.count>0));
+  const active=sums.filter(s=>!s.e.exempt&&s.rows.some(r=>r.count>0));
+  const exemptN=S.employees.filter(e=>e.exempt).length;
   const cm=active.filter(s=>s.commit!=null);
   const avg=cm.length?cm.reduce((a,s)=>a+s.commit,0)/cm.length:0;
   const tot=k=>sums.reduce((a,s)=>a+s[k],0);
   const nameless=S.employees.filter(e=>!e.name?.trim()).length;
   // daily chart
   const days=monthDays(ym);
-  const series=days.map(d=>{let p=0,l=0,a=0,w=false;for(const e of S.employees){const r=dayRow(e,d);if(r.type!=="يوم عمل"||r.future)continue;w=true;if(r.status==="غياب")a++;else if(/تأخير|انصراف|ناقصة/.test(r.status))l++;else if(r.status!=="إجازة")p++}return{d,p,l,a,w}});
+  const series=days.map(d=>{let p=0,l=0,a=0,w=false;for(const e of S.employees){if(e.exempt)continue;const r=dayRow(e,d);if(r.type!=="يوم عمل"||r.future)continue;w=true;if(r.status==="غياب")a++;else if(/تأخير|انصراف|ناقصة/.test(r.status))l++;else if(r.status!=="إجازة")p++}return{d,p,l,a,w}});
   const max=Math.max(1,...series.map(s=>s.p+s.l+s.a));
   const W=640,H=200,pl=28,pb=22,bw=(W-pl-8)/days.length;
   const y=v=>H-pb-(v/max)*(H-pb-10);
@@ -246,6 +249,7 @@ function dash(ym){
   ${nameless?`<div class="banner">فيه ${nameless} موظفين من غير اسم في جهاز البصمة. <button class="btn" data-go="emp">اكتب أسماءهم</button></div>`:""}
   <div class="kpis">
     <div class="kpi"><span>موظفين بصموا الشهر ده</span><b>${active.length}</b></div>
+    <div class="kpi"><span>مرفوع عنهم البصمة</span><b>${exemptN}</b></div>
     <div class="kpi ${avg>=.8?"ok":avg<.6?"bad":""}"><span>متوسط الالتزام بالمواعيد</span><b>${Math.round(avg*100)}%</b></div>
     <div class="kpi bad"><span>أيام غياب</span><b>${tot("abs")}</b></div>
     <div class="kpi"><span>مرات تأخير</span><b>${tot("latec")}</b></div>
@@ -276,7 +280,7 @@ function daily(ym){
   let rows=s.rows; if(dailyFilter)rows=rows.filter(r=>r.status.includes(dailyFilter));
   return `
   <div class="row"><label class="row" style="gap:6px">الموظف <select id="dailyEmp">${empOpts(dailyEmp)}</select></label>
-    <label class="row" style="gap:6px">الحالة <select id="dailyFilter">${opts(["غياب","تأخير","انصراف مبكر","بصمة ناقصة","مهمة خارجية","إجازة","حاضر"],dailyFilter,"الكل")}</select></label>
+    <label class="row" style="gap:6px">الحالة <select id="dailyFilter">${opts(["غياب","تأخير","انصراف مبكر","بصمة ناقصة","مهمة خارجية","إجازة","حاضر","معفى"],dailyFilter,"الكل")}</select></label>
     <button class="btn" id="exportDaily">تصدير CSV</button></div>
   <div class="kpis">
     <div class="kpi"><span>أيام العمل</span><b>${s.req}</b></div><div class="kpi ok"><span>الالتزام</span><b>${s.commit==null?"-":Math.round(s.commit*100)+"%"}</b></div>
@@ -356,7 +360,7 @@ function sum(ym){
   ${sums.map(s=>{const k=s.e.code+"|"+ym,p=s.commit==null?null:Math.round(s.commit*100);return`<tr class="${!s.e.name?.trim()?"missing-name":""}"><td>${esc(s.e.code)}</td><td><button class="btn" style="padding:2px 8px" data-emp="${esc(s.e.code)}">${esc(empName(s.e))}</button></td><td>${esc(s.e.dept)}</td>
     <td class="num">${s.req}</td><td class="num">${s.pres}</td><td class="num">${s.abs?`<span class="pill ${s.abs>=2?"p-bad":"p-warn"}">${s.abs}</span>`:0}</td><td class="num">${s.lv}</td><td class="num">${s.latec}</td><td class="num">${s.latem}</td><td class="num">${s.earlyc}</td><td class="num">${s.miss}</td>
     <td class="num">${s.permH?`<span class="pill ${s.permOver?"p-bad":"p-mute"}">${n2(s.permH)}</span>`:""}</td><td class="num">${s.meetC||""}</td><td class="num">${s.deals||""}</td>
-    <td class="num">${p==null?"-":`<span class="pill ${p>=80?"p-ok":p>=60?"p-warn":"p-bad"}">${p}%</span>`}</td><td class="num"><b>${n2(s.ddays)}</b></td><td class="num">${s.sal?money(s.sal):'<span class="note">-</span>'}</td><td class="num">${s.damt?money(s.damt):""}</td>
+    <td class="num">${s.e.exempt?'<span class="pill p-info">معفى</span>':p==null?"-":`<span class="pill ${p>=80?"p-ok":p>=60?"p-warn":"p-bad"}">${p}%</span>`}</td><td class="num"><b>${n2(s.ddays)}</b></td><td class="num">${s.sal?money(s.sal):'<span class="note">-</span>'}</td><td class="num">${s.damt?money(s.damt):""}</td>
     <td><input type="number" min="0" style="width:90px" id="ao-${esc(k)}" data-adj="${esc(k)}" data-f="other" value="${S.adjust[k]?.other??""}" aria-label="خصومات أخرى"></td>
     <td><input type="number" min="0" style="width:90px" id="ab-${esc(k)}" data-adj="${esc(k)}" data-f="bonus" value="${S.adjust[k]?.bonus??""}" aria-label="مكافآت"></td>
     <td class="num"><b>${s.sal?money(s.net):""}</b></td></tr>`}).join("")}
@@ -365,11 +369,11 @@ function sum(ym){
 }
 
 function emp(){
-  let list=S.employees; if(empFilter==="nameless")list=list.filter(e=>!e.name?.trim());
+  let list=S.employees; if(empFilter==="nameless")list=list.filter(e=>!e.name?.trim());if(empFilter==="exempt")list=list.filter(e=>e.exempt);
   return `
-  <div class="row"><label class="row" style="gap:6px">عرض <select id="empFilter">${opts([["nameless","بدون اسم بس"]],empFilter,"كل الموظفين")}</select></label>
-  <p class="note">الصفوف الحمرا = موظفين متسجلين في الجهاز من غير اسم. اكتب الاسم وهيتحدث في كل الصفحات.</p></div>
-  <div class="tbl"><table><thead><tr><th>كود البصمة</th><th>الاسم في الجهاز</th><th>الاسم</th><th>القسم</th><th>الوظيفة</th><th>الراتب الأساسي</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة خاص</th><th></th></tr></thead><tbody>
+  <div class="row"><label class="row" style="gap:6px">عرض <select id="empFilter">${opts([["nameless","بدون اسم بس"],["exempt","مرفوع عنهم البصمة"]],empFilter,"كل الموظفين")}</select></label>
+  <p class="note">الصفوف الحمرا = موظفين متسجلين في الجهاز من غير اسم. اكتب الاسم وهيتحدث في كل الصفحات. علّم على (مرفوع عنه البصمة) للموظف اللي مبيتحسبش عليه تأخير أو غياب.</p></div>
+  <div class="tbl"><table><thead><tr><th>كود البصمة</th><th>الاسم في الجهاز</th><th>الاسم</th><th>القسم</th><th>الوظيفة</th><th>الراتب الأساسي</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة خاص</th><th>مرفوع عنه البصمة</th><th></th></tr></thead><tbody>
   ${list.map(e=>`<tr class="${!e.name?.trim()?"missing-name":""}"><td>${esc(e.code)}</td><td class="note">${esc(e.device)}</td>
     <td><input type="text" id="en-${esc(e.code)}" data-e="${esc(e.code)}" data-f="name" value="${esc(e.name)}" placeholder="اكتب الاسم" style="width:170px"></td>
     <td><input type="text" id="ed-${esc(e.code)}" data-e="${esc(e.code)}" data-f="dept" value="${esc(e.dept)}" style="width:110px" list="depts"></td>
@@ -378,6 +382,7 @@ function emp(){
     <td><input type="time" id="ei-${esc(e.code)}" data-e="${esc(e.code)}" data-f="in" value="${esc(e.in)}"></td>
     <td><input type="time" id="eo-${esc(e.code)}" data-e="${esc(e.code)}" data-f="out" value="${esc(e.out)}"></td>
     <td><select id="ef-${esc(e.code)}" data-e="${esc(e.code)}" data-f="off">${opts(DAYS.map((d,i)=>[i,d]),e.off,"لا يوجد")}</select></td>
+    <td class="num"><input type="checkbox" id="ex-${esc(e.code)}" data-e="${esc(e.code)}" data-f="exempt"${e.exempt?" checked":""} aria-label="مرفوع عنه البصمة"></td>
     <td><button class="btn" style="padding:2px 8px" data-emp="${esc(e.code)}">الحضور</button></td></tr>`).join("")}
   </tbody></table></div>
   <datalist id="depts">${["المبيعات","التسويق","الإدارة","خدمة العملاء","الحسابات","الموارد البشرية"].map(d=>`<option value="${d}">`).join("")}</datalist>
@@ -477,7 +482,7 @@ document.addEventListener("change",ev=>{
   if(t.id==="dailyFilter"){dailyFilter=t.value;render();return}
   if(t.id==="empFilter"){empFilter=t.value;render();return}
   if(t.id==="imp"&&t.files[0]){doImport(t.files[0]);return}
-  if(d.e){const e=empBy(d.e);e[d.f]=d.f==="salary"?Number(t.value)||0:t.value;touch();if(d.f==="name")renderShell();return}
+  if(d.e){const e=empBy(d.e);e[d.f]=d.f==="exempt"?t.checked:d.f==="salary"?Number(t.value)||0:t.value;touch();if(d.f==="name")renderShell();return}
   if(d.ov!=null){const o=S.overrides[d.ov]??={};o.ded=t.value===""?"":Number(t.value);cleanOv(d.ov);touch();render();return}
   if(d.ovn!=null){const o=S.overrides[d.ovn]??={};o.note=t.value;cleanOv(d.ovn);touch();return}
   if(d.adj){const a=S.adjust[d.adj]??={};a[d.f]=t.value===""?"":Number(t.value);touch();render();return}

@@ -115,7 +115,7 @@ def lst(col):
 
 
 def dv(ws, rng, src):
-    d = DataValidation(type="list", formula1=f"={src}", allow_blank=True)
+    d = DataValidation(type="list", formula1=src if src.startswith('"') else f"={src}", allow_blank=True)
     d.error = "اختار من القائمة"
     d.errorTitle = "قيمة غير صحيحة"
     ws.add_data_validation(d)
@@ -208,8 +208,8 @@ ws["A15"].font = Font(name=F, italic=True, color="7F7F7F")
 ws = s_emp
 title(ws, "بيانات الموظفين", 9)
 cols = ["كود البصمة", "الاسم", "القسم", "الوظيفة", "الراتب الأساسي (ج.م)",
-        "ميعاد حضور خاص", "ميعاد انصراف خاص", "يوم إجازة خاص", "الموبايل", "الاسم في الجهاز", "ملاحظات"]
-header(ws, 3, cols, [13, 26, 16, 20, 18, 15, 15, 15, 16, 20, 26])
+        "ميعاد حضور خاص", "ميعاد انصراف خاص", "يوم إجازة خاص", "الموبايل", "الاسم في الجهاز", "ملاحظات", "مرفوع عنه البصمة"]
+header(ws, 3, cols, [13, 26, 16, 20, 18, 15, 15, 15, 16, 20, 26, 14])
 import collections
 seen = collections.OrderedDict()
 for code, name, _ in RAW:
@@ -218,7 +218,7 @@ emps = sorted(((int(c), "" if n.strip() == c else n.strip().title(), n) for c, n
 for r in range(4, 4 + EMP_SLOTS):
     e = emps[r - 4] if r - 4 < len(emps) else None
     vals = [e[0], e[1] or None, None, None, None, None, None, None, None, e[2]] if e else [None] * 10
-    for ci, fmt in enumerate(["0", None, None, None, "#,##0", "hh:mm", "hh:mm", None, "@", None, None], 1):
+    for ci, fmt in enumerate(["0", None, None, None, "#,##0", "hh:mm", "hh:mm", None, "@", None, None, None], 1):
         v = vals[ci - 1] if ci <= len(vals) else None
         cell = ws.cell(row=r, column=ci, value=v)
         if ci == 10:
@@ -226,6 +226,10 @@ for r in range(4, 4 + EMP_SLOTS):
         else:
             style(cell, INPUT, fmt, color="0000FF")
 dv(ws, f"H4:H{3 + EMP_SLOTS}", lst("A"))
+dv(ws, f"L4:L{3 + EMP_SLOTS}", '"نعم,لا"')
+ws.conditional_formatting.add(f"A4:L{3 + EMP_SLOTS}", FormulaRule(
+    formula=['$L4="نعم"'], fill=PatternFill("solid", fgColor="E2EFDA")))
+ws["L3"].comment = Comment("اختار (نعم) للموظف المرفوع عنه البصمة: مش هيتحسب عليه تأخير أو غياب أو بصمة ناقصة، ومش هيدخل في نسب الالتزام.", "Everest")
 ws.conditional_formatting.add(f"B4:B{3 + EMP_SLOTS}", FormulaRule(
     formula=['AND($A4<>"",$B4="")'], fill=PatternFill("solid", fgColor="F8CBAD")))
 ws["B3"].comment = Comment("الخانات الحمرا = موظف متسجل في الجهاز من غير اسم. اكتب اسمه هنا وهيتحدث في كل الشيتات.", "Everest")
@@ -361,13 +365,13 @@ for idx in range(EMP_SLOTS * DAYS):
         "early": f'=IF(OR({blank},{c["pout"]}=""),"",MAX(0,ROUND(({c["rout"]}-{c["pout"]})*1440,0)))',
         "nlate": f'=IF({c["late"]}="","",MAX(0,{c["late"]}-{c["perm"]}-{c["meet"]}))',
         "nearly": f'=IF({c["early"]}="","",MAX(0,{c["early"]}-MAX(0,{c["perm"]}+{c["meet"]}-N({c["late"]}))))',
-        "status": (f'=IF({blank},"",IF({c["type"]}<>"يوم عمل",{c["type"]},IF({c["leave"]}>0,"إجازة",'
+        "status": (f'=IF({blank},"",IF({c["type"]}<>"يوم عمل",{c["type"]},IF({c["leave"]}>0,"إجازة",IF(الموظفين!$L${er}="نعم","معفى من البصمة",'
                    f'IF({c["pin"]}="",IF({c["meet"]}>0,"مهمة خارجية","غياب"),'
                    f'IF({c["pout"]}="",IF({c["meet"]}>0,"حاضر - مهمة خارجية","بصمة ناقصة"),'
                    f'IF(AND({c["dlate"]}>0,{c["dearly"]}>0),"تأخير وانصراف مبكر",'
-                   f'IF({c["dlate"]}>0,"تأخير",IF({c["dearly"]}>0,"انصراف مبكر","حاضر"))))))))'),
-        "dlate": f'=IF({blank},"",IF(OR({c["type"]}<>"يوم عمل",{c["leave"]}>0,N({c["nlate"]})=0),0,LOOKUP({c["nlate"]},{LATE_M},{LATE_D})))',
-        "dearly": f'=IF({blank},"",IF(OR({c["type"]}<>"يوم عمل",{c["leave"]}>0,N({c["nearly"]})=0),0,LOOKUP({c["nearly"]},{EARLY_M},{EARLY_D})))',
+                   f'IF({c["dlate"]}>0,"تأخير",IF({c["dearly"]}>0,"انصراف مبكر","حاضر")))))))))'),
+        "dlate": f'=IF({blank},"",IF(OR({c["type"]}<>"يوم عمل",{c["leave"]}>0,الموظفين!$L${er}="نعم",N({c["nlate"]})=0),0,LOOKUP({c["nlate"]},{LATE_M},{LATE_D})))',
+        "dearly": f'=IF({blank},"",IF(OR({c["type"]}<>"يوم عمل",{c["leave"]}>0,الموظفين!$L${er}="نعم",N({c["nearly"]})=0),0,LOOKUP({c["nearly"]},{EARLY_M},{EARLY_D})))',
         "dmiss": f'=IF({blank},"",IF({c["status"]}="بصمة ناقصة",{SET["miss"]},0))',
         "dabs": f'=IF({blank},"",IF({c["status"]}="غياب",{SET["abs"]},0))',
         "dcalc": f'=IF({blank},"",{c["dlate"]}+{c["dearly"]}+{c["dmiss"]}+{c["dabs"]})',
@@ -397,7 +401,7 @@ ws[C["dman"] + "3"].comment = Comment("اكتب هنا رقم الخصم الل�
 st = f"{C['status']}{D0}:{C['status']}{DL}"
 for text, color in [("غياب", "F8CBAD"), ("بصمة ناقصة", "FFE699"), ("تأخير", "FCE4D6"),
                     ("انصراف مبكر", "FCE4D6"), ("إجازة", "DDEBF7"), ("مهمة خارجية", "E2EFDA"),
-                    ("حاضر", "C6EFCE")]:
+                    ("معفى", "E2EFDA"), ("حاضر", "C6EFCE")]:
     ws.conditional_formatting.add(
         st, FormulaRule(formula=[f'ISNUMBER(SEARCH("{text}",{C["status"]}{D0}))'],
                         fill=PatternFill("solid", fgColor=color), stopIfTrue=True))
@@ -448,7 +452,7 @@ for i in range(EMP_SLOTS):
         "lv": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("status")},"إجازة"))',
         "pres": f'=IF({nb},"",{c["req"]}-{c["abs"]}-{c["lv"]})',
         "latec": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("dlate")},">0"))',
-        "latem": f'=IF({nb},"",SUMIFS({DAY("nlate")},{DAY("code")},{code},{DAY("type")},"يوم عمل"))',
+        "latem": f'=IF({nb},"",IF(الموظفين!$L${er}="نعم",0,SUMIFS({DAY("nlate")},{DAY("code")},{code},{DAY("type")},"يوم عمل")))',
         "earlyc": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("dearly")},">0"))',
         "miss": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("status")},"بصمة ناقصة"))',
         "permh": f'=IF({nb},"",SUMIFS({DAY("perm")},{DAY("code")},{code})/60)',
@@ -456,7 +460,7 @@ for i in range(EMP_SLOTS):
         "meetc": f'=IF({nb},"",COUNTIFS({MEET("A")},{code},{MEET("O")},"معتمد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend}))',
         "meeth": f'=IF({nb},"",SUMIFS({MEET("F")},{MEET("A")},{code},{MEET("O")},"معتمد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend})/60)',
         "deals": f'=IF({nb},"",COUNTIFS({MEET("A")},{code},{MEET("O")},"معتمد",{MEET("M")},"حجز / تعاقد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend}))',
-        "commit": f'=IF({nb},"",IF({c["req"]}-{c["lv"]}<=0,"",(COUNTIFS({DAY("code")},{code},{DAY("status")},"حاضر*")+COUNTIFS({DAY("code")},{code},{DAY("status")},"مهمة خارجية"))/({c["req"]}-{c["lv"]})))',
+        "commit": f'=IF({nb},"",IF(الموظفين!$L${er}="نعم","معفى",IF({c["req"]}-{c["lv"]}<=0,"",(COUNTIFS({DAY("code")},{code},{DAY("status")},"حاضر*")+COUNTIFS({DAY("code")},{code},{DAY("status")},"مهمة خارجية"))/({c["req"]}-{c["lv"]}))))',
         "ddays": f'=IF({nb},"",SUMIFS({DAY("dfin")},{DAY("code")},{code}))',
         "rate": f'=IF({nb},"",IF({SET["days"]}=0,0,{c["sal"]}/{SET["days"]}))',
         "damt": f'=IF({nb},"",ROUND({c["ddays"]}*{c["rate"]},2))',
@@ -546,6 +550,7 @@ lines = [
     ("- بصمة واحدة بس في اليوم = بصمة ناقصة، إلا لو عنده اجتماع أو مأمورية معتمدة في نفس اليوم.", False),
     ("- مفيش بصمة خالص + اجتماع أو مأمورية معتمدة = مهمة خارجية بدون خصم. من غيرها = غياب.", False),
     ("- الإجازة المعتمدة بتلغي كل خصومات اليوم.", False),
+    ("- الموظف اللي قدامه (نعم) في عمود (مرفوع عنه البصمة) في شيت الموظفين مبيتحسبش عليه أي خصم بصمة، ومبيدخلش في نسب الالتزام.", False),
     ("", False),
     ("ملاحظات", True),
     ("- السعة: 50 موظف، و5,000 بصمة في الشهر، و300 إذن، و300 اجتماع. لو محتاج أكتر قولّي أكبّرها.", False),
