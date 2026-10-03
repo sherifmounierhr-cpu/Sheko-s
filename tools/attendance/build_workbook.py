@@ -448,7 +448,7 @@ for i in range(EMP_SLOTS):
         "lv": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("status")},"إجازة"))',
         "pres": f'=IF({nb},"",{c["req"]}-{c["abs"]}-{c["lv"]})',
         "latec": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("dlate")},">0"))',
-        "latem": f'=IF({nb},"",SUMIFS({DAY("nlate")},{DAY("code")},{code}))',
+        "latem": f'=IF({nb},"",SUMIFS({DAY("nlate")},{DAY("code")},{code},{DAY("type")},"يوم عمل"))',
         "earlyc": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("dearly")},">0"))',
         "miss": f'=IF({nb},"",COUNTIFS({DAY("code")},{code},{DAY("status")},"بصمة ناقصة"))',
         "permh": f'=IF({nb},"",SUMIFS({DAY("perm")},{DAY("code")},{code})/60)',
