@@ -456,7 +456,7 @@ for i in range(EMP_SLOTS):
         "meetc": f'=IF({nb},"",COUNTIFS({MEET("A")},{code},{MEET("O")},"معتمد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend}))',
         "meeth": f'=IF({nb},"",SUMIFS({MEET("F")},{MEET("A")},{code},{MEET("O")},"معتمد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend})/60)',
         "deals": f'=IF({nb},"",COUNTIFS({MEET("A")},{code},{MEET("O")},"معتمد",{MEET("M")},"حجز / تعاقد",{MEET("C")},">="&{mstart},{MEET("C")},"<="&{mend}))',
-        "commit": f'=IF({nb},"",IF({c["req"]}-{c["lv"]}<=0,"",COUNTIFS({DAY("code")},{code},{DAY("status")},"حاضر*")+COUNTIFS({DAY("code")},{code},{DAY("status")},"مهمة خارجية"))/({c["req"]}-{c["lv"]})))',
+        "commit": f'=IF({nb},"",IF({c["req"]}-{c["lv"]}<=0,"",(COUNTIFS({DAY("code")},{code},{DAY("status")},"حاضر*")+COUNTIFS({DAY("code")},{code},{DAY("status")},"مهمة خارجية"))/({c["req"]}-{c["lv"]})))',
         "ddays": f'=IF({nb},"",SUMIFS({DAY("dfin")},{DAY("code")},{code}))',
         "rate": f'=IF({nb},"",IF({SET["days"]}=0,0,{c["sal"]}/{SET["days"]}))',
         "damt": f'=IF({nb},"",ROUND({c["ddays"]}*{c["rate"]},2))',
