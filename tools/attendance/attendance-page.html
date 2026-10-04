@@ -111,7 +111,7 @@ const STATUSES=["معتمد","قيد المراجعة","مرفوض"];
 const MEET_KINDS=["اجتماع مع عميل خارج المكتب","معاينة موقع مع عميل","اجتماع مع عميل في المكتب","مأمورية عمل","معرض / إيفنت"];
 const RESULTS=["حجز / تعاقد","مهتم","متابعة لاحقة","غير مهتم","لم يحضر العميل"];
 const SOURCES=["فيسبوك","إنستجرام","جوجل","تيك توك","واتساب","ترشيح (ريفرال)","مكالمة واردة","زيارة مباشرة","معرض"];
-const TABS=[["dash","لوحة المتابعة"],["daily","الحضور اليومي"],["meet","اجتماعات العملاء"],["perm","الأذونات والإجازات"],["sum","الملخص والخصومات"],["emp","الموظفين"],["set","الإعدادات"]];
+const TABS=[["dash","لوحة المتابعة"],["daily","الحضور اليومي"],["meet","اجتماعات العملاء"],["perm","الأذونات والإجازات"],["sum","ملخص الحضور"],["pay","المرتبات"],["emp","الموظفين"],["set","الإعدادات"]];
 const DKEY="everest-att-draft";
 const cap=async n=>{try{return (await window.claude?.use?.(n))??null}catch(e){return null}};
 let S=null, tab="dash", dirty=false, readOnly=false, dailyEmp="", dailyFilter="", empFilter="";
@@ -232,7 +232,7 @@ function renderShell(){
   $("#save").disabled=readOnly;
   if(readOnly)$("#save").textContent="عرض فقط";
 }
-function render(){buildLedger();renderShell();const ym=S.meta.month;$("#main").innerHTML=`<section class="panel">${({dash,daily,meet,perm,sum,emp,set})[tab](ym)}</section>`;restoreBanner()}
+function render(){buildLedger();renderShell();const ym=S.meta.month;$("#main").innerHTML=`<section class="panel">${({dash,daily,meet,perm,sum,pay,emp,set})[tab](ym)}</section>`;restoreBanner()}
 
 function dash(ym){
   const sums=S.employees.map(e=>summary(e,ym));
@@ -372,16 +372,68 @@ function sum(ym){
   const sums=S.employees.map(e=>summary(e,ym));
   const T=k=>sums.reduce((a,s)=>a+s[k],0);
   return `
-  <div class="row"><p class="note" style="margin-inline-end:auto">قيمة اليوم = الراتب ÷ ${S.settings.workDays}. صافي المرتب = الراتب - قيمة الخصم - خصومات أخرى + مكافآت. الراتب بيتكتب من تبويب الموظفين.</p><button class="btn" id="exportSum">تصدير CSV</button></div>
-  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>القسم</th><th>أيام العمل</th><th>حضور</th><th>غياب</th><th>إجازات</th><th>تأخير (مرات)</th><th>تأخير (دقائق)</th><th>انصراف مبكر</th><th>بصمة ناقصة</th><th>أذونات (س)</th><th>اجتماعات</th><th>حجوزات</th><th>الالتزام</th><th>أيام الخصم</th><th>الراتب</th><th>قيمة الخصم</th><th>خصومات أخرى</th><th>مكافآت</th><th>الصافي</th></tr></thead><tbody>
+  <div class="row"><p class="note" style="margin-inline-end:auto">ملخص الحضور حسب بصمات الجهاز. أيام الخصم هنا محسوبة بقواعد الإعدادات، والمرتبات نفسها في تبويب (المرتبات).</p><button class="btn" id="exportSum">تصدير CSV</button></div>
+  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>القسم</th><th>أيام العمل</th><th>حضور</th><th>غياب</th><th>إجازات</th><th>تأخير (مرات)</th><th>تأخير (دقائق)</th><th>انصراف مبكر</th><th>بصمة ناقصة</th><th>أذونات (س)</th><th>اجتماعات</th><th>حجوزات</th><th>الالتزام</th><th>أيام الخصم المحسوبة</th></tr></thead><tbody>
   ${sums.map(s=>{const k=s.e.code+"|"+ym,p=s.commit==null?null:Math.round(s.commit*100);return`<tr class="${!s.e.name?.trim()?"missing-name":""}"><td>${esc(s.e.code)}</td><td><button class="btn" style="padding:2px 8px" data-emp="${esc(s.e.code)}">${esc(empName(s.e))}</button></td><td>${esc(s.e.dept)}</td>
     <td class="num">${s.req}</td><td class="num">${s.pres}</td><td class="num">${s.abs?`<span class="pill ${s.abs>=2?"p-bad":"p-warn"}">${s.abs}</span>`:0}</td><td class="num">${s.lv}</td><td class="num">${s.latec}</td><td class="num">${s.latem}</td><td class="num">${s.earlyc}</td><td class="num">${s.miss}</td>
     <td class="num">${s.permH?`<span class="pill ${s.permOver?"p-bad":"p-mute"}">${n2(s.permH)}</span>`:""}</td><td class="num">${s.meetC||""}</td><td class="num">${s.deals||""}</td>
-    <td class="num">${s.e.exempt?'<span class="pill p-info">معفى</span>':p==null?"-":`<span class="pill ${p>=80?"p-ok":p>=60?"p-warn":"p-bad"}">${p}%</span>`}</td><td class="num"><b>${n2(s.ddays)}</b></td><td class="num">${s.sal?money(s.sal):'<span class="note">-</span>'}</td><td class="num">${s.damt?money(s.damt):""}</td>
-    <td><input type="number" min="0" style="width:90px" id="ao-${esc(k)}" data-adj="${esc(k)}" data-f="other" value="${S.adjust[k]?.other??""}" aria-label="خصومات أخرى"></td>
-    <td><input type="number" min="0" style="width:90px" id="ab-${esc(k)}" data-adj="${esc(k)}" data-f="bonus" value="${S.adjust[k]?.bonus??""}" aria-label="مكافآت"></td>
-    <td class="num"><b>${s.sal?money(s.net):""}</b></td></tr>`}).join("")}
-  <tr><th></th><th>الإجمالي</th><th></th><th></th><th></th><th>${T("abs")}</th><th>${T("lv")}</th><th>${T("latec")}</th><th>${T("latem")}</th><th>${T("earlyc")}</th><th>${T("miss")}</th><th>${n2(T("permH"))}</th><th>${T("meetC")}</th><th>${T("deals")}</th><th></th><th>${n2(T("ddays"))}</th><th>${money(T("sal"))}</th><th>${money(T("damt"))}</th><th>${money(T("other"))}</th><th>${money(T("bonus"))}</th><th>${money(T("net"))}</th></tr>
+    <td class="num">${s.e.exempt?'<span class="pill p-info">معفى</span>':p==null?"-":`<span class="pill ${p>=80?"p-ok":p>=60?"p-warn":"p-bad"}">${p}%</span>`}</td><td class="num"><b>${n2(s.ddays)}</b></td></tr>`}).join("")}
+  <tr><th></th><th>الإجمالي</th><th></th><th></th><th></th><th>${T("abs")}</th><th>${T("lv")}</th><th>${T("latec")}</th><th>${T("latem")}</th><th>${T("earlyc")}</th><th>${T("miss")}</th><th>${n2(T("permH"))}</th><th>${T("meetC")}</th><th>${T("deals")}</th><th></th><th>${n2(T("ddays"))}</th></tr>
+  </tbody></table></div>`;
+}
+
+/* ---------- payroll: HR's approved figures per month, falling back to attendance-computed deduction days ---------- */
+let payFilter="";
+const N0=v=>Number(v)||0;
+const has=v=>v!==""&&v!=null;
+function payRow(e,ym){
+  const p=S.payroll?.[ym]?.[e.code]||{},s=summary(e,ym);
+  const sal=N0(e.salary),rate=sal/(N0(S.settings.workDays)||30);
+  const appr=has(p.approvedDays)?Number(p.approvedDays):null,days=appr??s.ddays;
+  const late=has(p.lateAmt)?Number(p.lateAmt):days*rate;
+  const earn=sal+N0(p.commission)+N0(p.ret);
+  const ded=late+N0(p.adminDed)+N0(p.daysDed)+N0(p.regDed)+N0(p.advance);
+  const net=earn-ded,rnd=Math.round(net/5)*5;
+  const method=e.pay||(e.account?"bank":"cash");
+  return{e,p,s,sal,rate,appr,days,late,earn,ded,net,rnd,method,inPay:!!S.payroll?.[ym]?.[e.code]};
+}
+function payRows(ym){return S.employees.filter(e=>N0(e.salary)>0||S.payroll?.[ym]?.[e.code]||e.notInPayroll).map(e=>payRow(e,ym))}
+function pay(ym){
+  const all=payRows(ym);
+  let rows=all;
+  if(payFilter==="bank")rows=all.filter(r=>r.method==="bank");
+  if(payFilter==="cash")rows=all.filter(r=>r.method==="cash");
+  if(payFilter==="noacc")rows=all.filter(r=>r.method==="bank"&&!r.e.account);
+  if(payFilter==="diff")rows=all.filter(r=>r.appr!=null&&Math.abs(r.appr-r.s.ddays)>0.001);
+  const T=(list,k)=>list.reduce((a,r)=>a+r[k],0);
+  const bank=all.filter(r=>r.method==="bank"),cash=all.filter(r=>r.method==="cash");
+  const pos=list=>list.reduce((a,r)=>a+Math.max(0,r.rnd),0);
+  const noAcc=bank.filter(r=>!r.e.account).length;
+  const inp=(r,f,w=80)=>`<input type="number" step="any" style="width:${w}px" id="pay-${esc(r.e.code)}-${f}" data-pay="${esc(r.e.code)}" data-f="${f}" value="${has(r.p[f])&&(r.p[f]!==0||f==="approvedDays")?r.p[f]:""}" aria-label="${f}">`;
+  return `
+  <div class="kpis">
+    <div class="kpi"><span>صافي الرواتب (بعد التقريب)</span><b>${money(pos(all))}</b></div>
+    <div class="kpi ok"><span>تحويل بنكي (${bank.length} موظف)</span><b>${money(pos(bank))}</b></div>
+    <div class="kpi"><span>نقدي (${cash.length} موظف)</span><b>${money(pos(cash))}</b></div>
+    <div class="kpi"><span>إجمالي الاستحقاقات</span><b>${money(T(all,"earn"))}</b></div>
+    <div class="kpi bad"><span>إجمالي الاستقطاعات</span><b>${money(T(all,"ded"))}</b></div>
+  </div>
+  ${noAcc?`<div class="banner">فيه ${noAcc} موظف طريقة صرفهم بنك ومالهمش رقم حساب. <button class="btn" data-payf="noacc">اعرضهم</button></div>`:""}
+  <div class="row"><label class="row" style="gap:6px">عرض <select id="payFilter">${opts([["bank","تحويل بنكي"],["cash","نقدي"],["noacc","بنك من غير رقم حساب"],["diff","أيام الخصم مختلفة عن الحضور"]],payFilter,"الكل")}</select></label>
+    <span style="margin-inline-end:auto"></span>
+    <button class="btn" id="exportPay">كشف المرتبات CSV</button><button class="btn" id="exportBank">ملف التحويل البنكي CSV</button><button class="btn" id="exportCash">كشف النقدي CSV</button></div>
+  <p class="note">سعر اليوم = الراتب ÷ ${S.settings.workDays}. أيام الخصم المعتمدة جاية من كشف المرتبات، ولو سبتها فاضية بتتحسب من الحضور (الرقم الصغير تحتها). الصافي بيتقرب لأقرب 5 جنيه. اختار طريقة الصرف لكل موظف، والإجماليات فوق بتتحدث لوحدها.</p>
+  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الوظيفة</th><th>الراتب</th><th>سعر اليوم</th><th>عمولات</th><th>مردودات</th><th>الاستحقاقات</th><th>أيام الخصم المعتمدة</th><th>خصم التأخير</th><th>خصم مبلغ ثابت</th><th>خصومات إدارية</th><th>خصومات الأيام</th><th>تطبيق اللائحة</th><th>سلف</th><th>الاستقطاعات</th><th>الصافي</th><th>طريقة الصرف</th><th>رقم الحساب</th><th>ملاحظة</th></tr></thead><tbody>
+  ${rows.map(r=>{const c=esc(r.e.code),diff=r.appr!=null&&Math.abs(r.appr-r.s.ddays)>0.001;return`<tr class="${r.e.notInPayroll||!r.inPay?"missing-name":""}"><td>${c}</td><td><button class="btn" style="padding:2px 8px" data-emp="${c}">${esc(empName(r.e))}</button>${r.e.notInPayroll?' <span class="pill p-bad">مش في الكشف</span>':""}</td><td>${esc(r.e.job)}</td>
+    <td><input type="number" style="width:90px" id="psal-${c}" data-e="${c}" data-f="salary" value="${r.sal||""}"></td><td class="num">${n2(r.rate)}</td>
+    <td>${inp(r,"commission")}</td><td>${inp(r,"ret")}</td><td class="num"><b>${money(r.earn)}</b></td>
+    <td>${inp(r,"approvedDays",70)}<div class="note">الحضور: ${n2(r.s.ddays)}${diff?' <span class="pill p-warn">مختلف</span>':""}</div></td>
+    <td class="num">${money(r.late)}</td><td>${inp(r,"lateAmt")}</td><td>${inp(r,"adminDed")}</td><td>${inp(r,"daysDed")}</td><td>${inp(r,"regDed")}</td><td>${inp(r,"advance")}</td>
+    <td class="num"><b>${money(r.ded)}</b></td><td class="num"><b>${r.rnd<0?`<span class="pill p-bad">${money(r.rnd)}</span>`:money(r.rnd)}</b></td>
+    <td><select id="pm-${c}" data-e="${c}" data-f="pay">${opts([["bank","بنك"],["cash","نقدي"]],r.method)}</select>${r.method==="bank"&&!r.e.account?'<div><span class="pill p-bad">مفيش رقم حساب</span></div>':""}</td>
+    <td><input type="text" dir="ltr" style="width:110px" id="pacc-${c}" data-e="${c}" data-f="account" value="${esc(r.e.account)}"></td>
+    <td><input type="text" class="plain" style="width:120px" id="pn-${c}" data-pay="${c}" data-f="note" value="${esc(r.p.note||"")}"></td></tr>`}).join("")}
+  <tr><th></th><th>الإجمالي (${rows.length})</th><th></th><th>${money(T(rows,"sal"))}</th><th></th><th></th><th></th><th>${money(T(rows,"earn"))}</th><th>${n2(T(rows,"days"))}</th><th>${money(T(rows,"late"))}</th><th></th><th></th><th></th><th></th><th></th><th>${money(T(rows,"ded"))}</th><th>${money(T(rows,"rnd"))}</th><th></th><th></th><th></th></tr>
   </tbody></table></div>`;
 }
 
@@ -390,7 +442,7 @@ function emp(){
   return `
   <div class="row"><label class="row" style="gap:6px">عرض <select id="empFilter">${opts([["nameless","بدون اسم بس"],["exempt","مرفوع عنهم البصمة"]],empFilter,"كل الموظفين")}</select></label>
   <p class="note">الصفوف الحمرا = موظفين متسجلين في الجهاز من غير اسم. اكتب الاسم وهيتحدث في كل الصفحات. علّم على (مرفوع عنه البصمة) للموظف اللي مبيتحسبش عليه تأخير أو غياب.</p></div>
-  <div class="tbl"><table><thead><tr><th>كود البصمة</th><th>الاسم في الجهاز</th><th>الاسم</th><th>القسم</th><th>الوظيفة</th><th>الراتب الأساسي</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة خاص</th><th>مرفوع عنه البصمة</th><th></th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>كود البصمة</th><th>الاسم في الجهاز</th><th>الاسم</th><th>القسم</th><th>الوظيفة</th><th>الراتب الأساسي</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة خاص</th><th>مرفوع عنه البصمة</th><th>الاسم بالكامل (للبنك)</th><th>رقم الحساب</th><th>طريقة الصرف</th><th></th></tr></thead><tbody>
   ${list.map(e=>`<tr class="${!e.name?.trim()?"missing-name":""}"><td>${esc(e.code)}</td><td class="note">${esc(e.device)}</td>
     <td><input type="text" id="en-${esc(e.code)}" data-e="${esc(e.code)}" data-f="name" value="${esc(e.name)}" placeholder="اكتب الاسم" style="width:170px"></td>
     <td><input type="text" id="ed-${esc(e.code)}" data-e="${esc(e.code)}" data-f="dept" value="${esc(e.dept)}" style="width:110px" list="depts"></td>
@@ -400,6 +452,9 @@ function emp(){
     <td><input type="time" id="eo-${esc(e.code)}" data-e="${esc(e.code)}" data-f="out" value="${esc(e.out)}"></td>
     <td><select id="ef-${esc(e.code)}" data-e="${esc(e.code)}" data-f="off">${opts(DAYS.map((d,i)=>[i,d]),e.off,"لا يوجد")}</select></td>
     <td class="num"><input type="checkbox" id="ex-${esc(e.code)}" data-e="${esc(e.code)}" data-f="exempt"${e.exempt?" checked":""} aria-label="مرفوع عنه البصمة"></td>
+    <td><input type="text" id="efn-${esc(e.code)}" data-e="${esc(e.code)}" data-f="fullName" value="${esc(e.fullName||"")}" style="width:200px"></td>
+    <td><input type="text" dir="ltr" id="eacc-${esc(e.code)}" data-e="${esc(e.code)}" data-f="account" value="${esc(e.account||"")}" style="width:110px"></td>
+    <td><select id="epm-${esc(e.code)}" data-e="${esc(e.code)}" data-f="pay">${opts([["bank","بنك"],["cash","نقدي"]],e.pay||(e.account?"bank":"cash"))}</select></td>
     <td><button class="btn" style="padding:2px 8px" data-emp="${esc(e.code)}">الحضور</button></td></tr>`).join("")}
   </tbody></table></div>
   <datalist id="depts">${["المبيعات","التسويق","الإدارة","خدمة العملاء","الحسابات","الموارد البشرية"].map(d=>`<option value="${d}">`).join("")}</datalist>
@@ -417,7 +472,7 @@ function set(){
   <div class="card"><h2>المواعيد والقواعد</h2><form class="add" id="setForm">
     <label>ميعاد الحضور<input type="time" id="s-in" data-s="in" value="${st.in}"></label>
     <label>ميعاد الانصراف<input type="time" id="s-out" data-s="out" value="${st.out}"></label>
-    <label>أيام العمل لحساب قيمة اليوم<input type="number" id="s-wd" data-s="workDays" value="${st.workDays}"></label>
+    <label>عدد الأيام لحساب سعر اليوم<input type="number" id="s-wd" data-s="workDays" value="${st.workDays}"></label>
     <label>خصم البصمة الناقصة (يوم)<input type="number" step="0.25" id="s-miss" data-s="missDed" value="${st.missDed}"></label>
     <label>خصم الغياب بدون إذن (يوم)<input type="number" step="0.25" id="s-abs" data-s="absDed" value="${st.absDed}"></label>
     <label>رصيد الأذونات الشهري (ساعات)<input type="number" step="0.5" id="s-allow" data-s="permAllowH" value="${st.permAllowH}"></label>
@@ -479,6 +534,11 @@ document.addEventListener("click",async ev=>{
   const t=ev.target.closest("button");if(!t)return;
   if(t.dataset.tab){tab=t.dataset.tab;render();return}
   if(t.dataset.go){tab=t.dataset.go;if(tab==="emp")empFilter="nameless";render();return}
+  if(t.dataset.payf){payFilter=t.dataset.payf;render();return}
+  if(t.id==="exportPay"){const ym=S.meta.month;saveCsv(`مرتبات-${ym}.csv`,[["الكود","الاسم","الاسم بالكامل","الوظيفة","الراتب","سعر اليوم","عمولات","مردودات","الاستحقاقات","أيام الخصم","خصم التأخير","خصومات إدارية","خصومات الأيام","تطبيق اللائحة","سلف","الاستقطاعات","الصافي","طريقة الصرف","رقم الحساب","ملاحظة"],
+    ...payRows(ym).map(r=>[r.e.code,empName(r.e),r.e.fullName||"",r.e.job,r.sal,n2(r.rate),N0(r.p.commission),N0(r.p.ret),Math.round(r.earn*100)/100,n2(r.days),Math.round(r.late*100)/100,N0(r.p.adminDed),N0(r.p.daysDed),N0(r.p.regDed),N0(r.p.advance),Math.round(r.ded*100)/100,r.rnd,r.method==="bank"?"بنك":"نقدي",r.e.account||"",r.p.note||""])]);return}
+  if(t.id==="exportBank"){const ym=S.meta.month,b=payRows(ym).filter(r=>r.method==="bank"&&r.rnd>0);saveCsv(`تحويل-بنكي-${ym}.csv`,[["م","الاسم","رقم الحساب","المبلغ"],...b.map((r,i)=>[i+1,r.e.fullName||empName(r.e),r.e.account||"",r.rnd]),["","الإجمالي","",b.reduce((a,r)=>a+r.rnd,0)]]);return}
+  if(t.id==="exportCash"){const ym=S.meta.month,c=payRows(ym).filter(r=>r.method==="cash"&&r.rnd>0);saveCsv(`صرف-نقدي-${ym}.csv`,[["م","الكود","الاسم","المبلغ","التوقيع"],...c.map((r,i)=>[i+1,r.e.code,empName(r.e),r.rnd,""]),["","","الإجمالي",c.reduce((a,r)=>a+r.rnd,0),""]]);return}
   if(t.dataset.emp){dailyEmp=t.dataset.emp;tab="daily";render();return}
   if(t.dataset.addmeet){meetPrefill={code:dailyEmp,date:t.dataset.addmeet};tab="meet";render();return}
   if(t.dataset.mdel){S.meetings=S.meetings.filter(m=>m.id!==t.dataset.mdel);touch();render();return}
@@ -488,8 +548,8 @@ document.addEventListener("click",async ev=>{
   if(t.dataset.hdel){S.settings.holidays=S.settings.holidays.filter(h=>h!==t.dataset.hdel);touch();render();return}
   if(t.id==="hAdd"){const v=$("#hNew").value;if(v&&!S.settings.holidays.includes(v)){S.settings.holidays.push(v);touch();render()}return}
   if(t.id==="save"){save();return}
-  if(t.id==="exportSum"){const ym=S.meta.month;const h=["الكود","الاسم","القسم","أيام العمل","حضور","غياب","إجازات","مرات التأخير","دقائق التأخير","انصراف مبكر","بصمة ناقصة","ساعات الأذونات","اجتماعات","حجوزات","الالتزام %","أيام الخصم","الراتب","قيمة الخصم","خصومات أخرى","مكافآت","الصافي"];
-    saveCsv(`ملخص-الحضور-${ym}.csv`,[h,...S.employees.map(e=>{const s=summary(e,ym);return[e.code,empName(e),e.dept,s.req,s.pres,s.abs,s.lv,s.latec,s.latem,s.earlyc,s.miss,n2(s.permH),s.meetC,s.deals,s.commit==null?"":Math.round(s.commit*100),n2(s.ddays),s.sal,s.damt,s.other,s.bonus,Math.round(s.net)]})]);return}
+  if(t.id==="exportSum"){const ym=S.meta.month;const h=["الكود","الاسم","القسم","أيام العمل","حضور","غياب","إجازات","مرات التأخير","دقائق التأخير","انصراف مبكر","بصمة ناقصة","ساعات الأذونات","اجتماعات","حجوزات","الالتزام %","أيام الخصم المحسوبة"];
+    saveCsv(`ملخص-الحضور-${ym}.csv`,[h,...S.employees.map(e=>{const s=summary(e,ym);return[e.code,empName(e),e.dept,s.req,s.pres,s.abs,s.lv,s.latec,s.latem,s.earlyc,s.miss,n2(s.permH),s.meetC,s.deals,s.commit==null?"":Math.round(s.commit*100),n2(s.ddays)]})]);return}
   if(t.id==="exportDaily"){const e=empBy(dailyEmp),s=summary(e,S.meta.month);
     saveCsv(`حضور-${e.code}-${S.meta.month}.csv`,[["التاريخ","اليوم","أول بصمة","آخر بصمة","ساعات","تأخير","انصراف مبكر","الحالة","الخصم","ملاحظات"],...s.rows.map(r=>[r.d,DAYS[r.w],fmtMin(r.pin),fmtMin(r.pout),r.hrs?.toFixed(1)??"",r.nlate??"",r.nearly??"",r.status,r.fin,r.ov?.note||""])]);return}
 });
@@ -500,7 +560,10 @@ document.addEventListener("change",ev=>{
   if(t.id==="dailyFilter"){dailyFilter=t.value;render();return}
   if(t.id==="empFilter"){empFilter=t.value;render();return}
   if(t.id==="imp"&&t.files[0]){doImport(t.files[0]);return}
-  if(d.e){const e=empBy(d.e);e[d.f]=d.f==="exempt"?t.checked:d.f==="salary"?Number(t.value)||0:t.value;touch();if(d.f==="name")renderShell();return}
+  if(d.e){const e=empBy(d.e);e[d.f]=d.f==="exempt"?t.checked:d.f==="salary"?Number(t.value)||0:d.f==="account"?t.value.trim():t.value;
+    if(d.f==="account"&&e.account&&!e.pay)e.pay="bank";touch();if(d.f==="name")renderShell();if(tab==="pay"&&["salary","pay","account"].includes(d.f))render();return}
+  if(d.pay){const m=(S.payroll??={})[S.meta.month]??={},o=m[d.pay]??={};o[d.f]=d.f==="note"?t.value:t.value===""?"":Number(t.value);touch();if(d.f!=="note")render();return}
+  if(t.id==="payFilter"){payFilter=t.value;render();return}
   if(d.ov!=null){const o=S.overrides[d.ov]??={};o.ded=t.value===""?"":Number(t.value);cleanOv(d.ov);touch();render();return}
   if(d.ovn!=null){const o=S.overrides[d.ovn]??={};o.note=t.value;cleanOv(d.ovn);touch();return}
   if(d.adj){const a=S.adjust[d.adj]??={};a[d.f]=t.value===""?"":Number(t.value);touch();render();return}
