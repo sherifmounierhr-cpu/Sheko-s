@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Everest HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;700&display=swap">
+<style>
+/* Layout: a sticky bar with role-based tabs, one working panel per tab, tables scroll inside their own frames */
+:root{
+  --bg:#f3f6f8; --surface:#ffffff; --sunken:#e9eef2; --line:#d5dee5;
+  --ink:#132430; --muted:#5b6d7a; --accent:#1c5d8c; --accent-ink:#ffffff; --accent-soft:#dbe9f4;
+  --ok:#1e7a4c; --ok-soft:#dcf1e5; --warn:#9a6400; --warn-soft:#fbefd4; --bad:#b3362b; --bad-soft:#f8dedb;
+  --info:#5a4fa8; --info-soft:#e6e3f7; --input:#fffbea;
+  --display:"Readex Pro","IBM Plex Sans Arabic",Tahoma,sans-serif;
+  --body:"IBM Plex Sans Arabic",Tahoma,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1820; --surface:#16222c; --sunken:#1c2a36; --line:#2a3b48;
+  --ink:#e4edf3; --muted:#93a6b4; --accent:#6aaee0; --accent-ink:#0b1620; --accent-soft:#1d3a52;
+  --ok:#6fd19c; --ok-soft:#173826; --warn:#e9b45a; --warn-soft:#3a2d12; --bad:#f08a80; --bad-soft:#40201d;
+  --info:#b0a7f0; --info-soft:#2a2650; --input:#24303a; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55}
+[hidden]{display:none!important}
+.wrap{max-width:1280px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+header.bar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1280px;margin:0 auto;padding-inline:16px;padding-block:12px 0;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.brand{display:flex;align-items:baseline;gap:10px;margin-inline-end:auto;min-width:0;flex-wrap:wrap}
+.brand h1{font-family:var(--display);font-size:20px;margin:0;font-weight:700}
+.brand span{color:var(--muted);font-size:13px}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 14px;font:500 14px var(--body);color:var(--muted);cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.badge{background:var(--bad-soft);color:var(--bad);border-radius:10px;padding:0 7px;font-size:12px;margin-inline-start:4px}
+button,select,input{font:inherit;color:inherit}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ok{color:var(--ok);border-color:var(--ok)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=text],input[type=number],input[type=time],input[type=date],input[type=tel],input[type=email],input[type=password]{background:var(--input);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
+input.plain{background:transparent;border-color:transparent}
+input.plain:hover,input.plain:focus{border-color:var(--line);background:var(--input)}
+section.panel{padding-block:20px 0;display:flex;flex-direction:column;gap:18px}
+main[aria-busy="true"]{opacity:.6;pointer-events:none}
+h2{font-family:var(--display);font-size:17px;font-weight:500;margin:0}
+.note{color:var(--muted);font-size:13px;margin:0;max-width:80ch}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.kpi b{font-family:var(--display);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:13px}
+.kpi.bad b{color:var(--bad)} .kpi.ok b{color:var(--ok)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:top}
+th{background:var(--sunken);font-weight:600;font-size:13px;color:var(--muted)}
+tbody tr:hover{background:var(--sunken)}
+td.num{text-align:center}
+tr.off td{color:var(--muted)}
+tr.missing-name td{background:var(--bad-soft)}
+.pill{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12.5px;font-weight:500}
+.p-ok{background:var(--ok-soft);color:var(--ok)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-bad{background:var(--bad-soft);color:var(--bad)} .p-info{background:var(--info-soft);color:var(--info)}
+.p-mute{background:var(--sunken);color:var(--muted)} .p-acc{background:var(--accent-soft);color:var(--accent)}
+.rank{display:flex;flex-direction:column;gap:6px}
+.rank .r{display:grid;grid-template-columns:minmax(0,9rem) 1fr 3.2rem;gap:8px;align-items:center;font-size:13px}
+.rank .r span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:10px;background:var(--sunken);border-radius:5px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--accent);border-radius:5px}
+.track i.low{background:var(--bad)} .track i.mid{background:var(--warn)}
+svg text{fill:var(--muted);font-family:var(--body);font-size:11px}
+form.add{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
+form.add label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+form.add .wide{grid-column:1/-1}
+.toast{position:fixed;inset-inline-start:16px;bottom:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:500;z-index:9;max-width:calc(100vw - 32px)}
+.toast.bad{background:var(--bad);color:#fff}
+.banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-end:4px;vertical-align:middle}
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.tiers table input{width:80px}
+.gate{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+.gate .card{width:min(420px,100%);gap:14px}
+.gate h1{font-family:var(--display);font-size:22px;margin:0}
+.gate form{display:flex;flex-direction:column;gap:12px}
+.gate label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.gate .seg{display:flex;gap:16px}
+.gate .seg label{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="gate" id="view-setup" hidden><div class="card">
+  <h1>Everest HR</h1>
+  <p class="note">الموقع لسه مش متوصل بقاعدة البيانات. اكتب رابط Neon Auth ورابط Data API في الملف <code>hr/js/config.js</code>.</p>
+</div></div>
+
+<div class="gate" id="view-login" hidden><div class="card">
+  <h1>Everest HR</h1>
+  <p class="note">الحضور والانصراف والطلبات والمرتبات.</p>
+  <form id="loginForm">
+    <div class="seg" role="radiogroup" aria-label="نوع الدخول">
+      <label><input type="radio" name="mode" value="signin" checked> عندي حساب</label>
+      <label><input type="radio" name="mode" value="signup"> حساب جديد</label>
+    </div>
+    <label id="nameRow" hidden>الاسم<input type="text" name="name" autocomplete="name"></label>
+    <label>الإيميل<input type="email" name="email" required autocomplete="email" dir="ltr"></label>
+    <label>الباسورد<input type="password" name="password" required minlength="8" autocomplete="current-password" dir="ltr"></label>
+    <button class="btn primary" id="loginBtn" type="submit">دخول</button>
+  </form>
+</div></div>
+
+<div class="gate" id="view-pending" hidden><div class="card">
+  <h1>حسابك اتسجل</h1>
+  <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف ومالوش صلاحيات. مدير النظام هيفعّله من صفحة الإعدادات.</p>
+  <div class="row"><button class="btn" id="logout2">خروج</button><button class="btn" id="claim">انا أول مدير للنظام</button></div>
+</div></div>
+
+<div id="view-app" hidden>
+  <header class="bar"><div class="bar-in">
+    <div class="row">
+      <div class="brand"><h1>Everest HR</h1><span id="roleChips"></span><span class="note" id="who" dir="ltr"></span></div>
+      <label class="row" style="gap:6px"><span class="note">الشهر</span><select id="month"></select></label>
+      <button class="btn" id="refresh">تحديث</button>
+      <button class="btn" id="logout">خروج</button>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+  </div></header>
+  <main class="wrap" id="main"></main>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

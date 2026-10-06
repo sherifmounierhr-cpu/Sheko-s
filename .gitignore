@@ -14,3 +14,6 @@ supabase/.branches/
 supabase/.temp/
 .env
 .env.*
+
+# Real HR data generated for Neon
+seed.sql
