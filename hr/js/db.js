@@ -78,6 +78,39 @@ export async function months() {
   return (check(await client.rpc("hr_punch_months")) || []).map((r) => (typeof r === "string" ? r : Object.values(r)[0]));
 }
 
+// Runs each read on its own and reports row counts or the exact error,
+// so a setup problem (schema cache, grants, RLS, auth) is visible.
+export async function diagnose(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const start = `${ym}-01`, end = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const out = [];
+  const user = await currentUser().catch((e) => ({ err: e }));
+  out.push(["المستخدم", user?.id ? `${user.email} (${user.id})` : `غير مسجل ${user?.err?.message || ""}`]);
+  const probes = [
+    ["app_users (حسابي)", () => client.from("app_users").select("user_id,roles,employee_code")],
+    ["teams", () => client.from("teams").select("id").limit(1000)],
+    ["employees", () => client.from("employees").select("code").limit(1000)],
+    ["employee_pay", () => client.from("employee_pay").select("code").limit(1000)],
+    [`punches ${ym}`, () => client.from("punches").select("code,ts").gte("ts", start).lt("ts", end).limit(1000)],
+    ["punches (أي شهر)", () => client.from("punches").select("code,ts").limit(5)],
+    ["requests", () => client.from("requests").select("id").limit(1000)],
+    ["payroll", () => client.from("payroll").select("code").eq("month", ym)],
+    ["settings", () => client.from("settings").select("data")],
+    ["rpc hr_roles", () => client.rpc("hr_roles")],
+    ["rpc hr_punch_months", () => client.rpc("hr_punch_months")],
+    ["rpc hr_last_punch_day", () => client.rpc("hr_last_punch_day")],
+  ];
+  for (const [name, q] of probes) {
+    try {
+      const { data, error } = await q();
+      if (error) out.push([name, `خطأ: ${error.message}${error.code ? ` (${error.code})` : ""}${error.hint ? ` - ${error.hint}` : ""}`]);
+      else if (Array.isArray(data)) out.push([name, `${data.length} صف ${data.length ? "- مثال: " + JSON.stringify(data[0]).slice(0, 120) : ""}`]);
+      else out.push([name, JSON.stringify(data).slice(0, 160)]);
+    } catch (e) { out.push([name, `خطأ: ${e.message || e}`]); }
+  }
+  return out;
+}
+
 export async function lastPunchDay() {
   const d = check(await client.rpc("hr_last_punch_day"));
   return d ? String(d).slice(0, 10) : "";

@@ -42,7 +42,7 @@ const opts = (list, sel, blank) => (blank != null ? `<option value="">${esc(blan
   list.map((v) => { const [val, lab] = Array.isArray(v) ? v : [v, v]; return `<option value="${esc(val)}"${String(val) === String(sel) ? " selected" : ""}>${esc(lab)}</option>`; }).join("");
 const empOpts = (sel, blank, list = S.employees) => opts(list.map((e) => [e.code, `${e.code} - ${empName(e)}`]), sel, blank);
 
-function toast(t, bad) { const el = $("#toast"); el.textContent = t; el.classList.toggle("bad", !!bad); el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 4000); }
+function toast(t, bad) { const el = $("#toast"); el.textContent = t; el.classList.toggle("bad", !!bad); el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), bad ? 12000 : 4000); }
 function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
@@ -334,6 +334,7 @@ function settings() {
     </tbody></table><div><button class="btn" data-tadd="${k}">إضافة شريحة</button></div></div>`;
   const members = (id) => S.employees.filter((e) => String(e.teamId) === String(id));
   return `
+  <div class="card"><h2>فحص الاتصال</h2><p class="note">لو الأرقام صفر أو فيه حاجة مش ظاهرة، اضغط الزرار وابعت صورة النتيجة.</p><div><button class="btn" id="diag">فحص الاتصال</button></div><div id="diagOut"></div></div>
   <div class="card"><h2>الفرق</h2>
   <p class="note">مدير الفريق بيوافق أو يرفض طلبات فريقه، وبيشوف حضورهم. لازم كمان يكون حسابه عليه دور (مدير فريق) تحت.</p>
   <div class="tbl" style="border:0"><table><thead><tr><th>الفريق</th><th>المدير</th><th>عدد الأفراد</th><th></th></tr></thead><tbody>
@@ -385,6 +386,13 @@ document.addEventListener("click", async (ev) => {
   if (d.go) { tab = d.go; render(); return; }
   if (d.emp) { dailyEmp = d.emp; tab = "daily"; render(); return; }
   if (d.payf) { payFilter = d.payf; render(); return; }
+  if (t.id === "diag") {
+    const box = $("#diagOut"); box.textContent = "جاري الفحص...";
+    const rows = await db.diagnose(S.meta.month);
+    rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
+    box.innerHTML = `<div class="tbl" style="border:0"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td style="white-space:normal" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
+    return;
+  }
   if (t.id === "refresh") { LAST = await db.lastPunchDay().catch(() => LAST); refresh(); return; }
   if (t.id === "logout" || t.id === "logout2") { await db.signOut(); location.reload(); return; }
   if (t.id === "claim") { try { const ok = await db.claimAdmin(); if (ok) location.reload(); else toast("فيه مدير نظام بالفعل. اطلب منه يفعّل حسابك.", true); } catch (e) { toast(errMsg(e), true); } return; }
