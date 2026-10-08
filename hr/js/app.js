@@ -1,5 +1,5 @@
-import * as db from "./db.js";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js";
+import * as db from "./db.js?v=202610081549";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610081549";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
