@@ -13,23 +13,27 @@ const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع 
 const checkKind = (k) => CHECK_KINDS.find(([v]) => v === k)?.[1] || k;
 
 // tab id, label, who sees it
+// tab id, label, who sees it, icon, nav group, short label for the phone bar
 const TABS = [
-  ["home", "لوحتي", (r) => !!r.code],
-  ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager],
-  ["field", "تواجدي واجتماعاتي", (r) => !!r.code],
-  ["mine", "طلباتي وحضوري", (r) => !!r.code],
-  ["live", "الفريق مباشر", (r) => r.admin || r.manager],
-  ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader],
-  ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager],
-  ["actions", "الجزاءات والمنح", (r) => r.admin || r.manager],
-  ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader],
-  ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager],
-  ["upload", "رفع البصمة", (r) => r.uploader],
-  ["sum", "ملخص الحضور", (r) => r.admin || r.manager],
-  ["pay", "المرتبات", (r) => r.admin],
-  ["emp", "الموظفين", (r) => r.admin],
-  ["set", "الإعدادات والفرق", (r) => r.admin],
+  ["home", "لوحتي", (r) => !!r.code, "home", "me", "لوحتي"],
+  ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager, "bell", "me", "الإشعارات"],
+  ["field", "تواجدي واجتماعاتي", (r) => !!r.code, "map-pin", "me", "تواجدي"],
+  ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
+  ["live", "الفريق مباشر", (r) => r.admin || r.manager, "broadcast", "team", "مباشر"],
+  ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader, "chart-bar", "team", "المتابعة"],
+  ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager, "clipboard-check", "team", "الطلبات"],
+  ["actions", "الجزاءات والمنح", (r) => r.admin || r.manager, "gavel", "team", "الجزاءات"],
+  ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader, "clock", "team", "اليومي"],
+  ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
+  ["sum", "ملخص الحضور", (r) => r.admin || r.manager, "list-details", "team", "الملخص"],
+  ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
+  ["pay", "المرتبات", (r) => r.admin, "cash", "admin", "المرتبات"],
+  ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
+  ["set", "الإعدادات والفرق", (r) => r.admin, "settings", "admin", "الإعدادات"],
 ];
+const GROUPS = [["me", "ليا"], ["team", "الفريق"], ["admin", "الإدارة"]];
+const icon = (n, cls = "") => `<svg class="ic${cls ? " " + cls : ""}" aria-hidden="true" focusable="false"><use href="icons.svg#${n}"/></svg>`;
+const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(title)}</b>${text ? `<span>${text}</span>` : ""}</div>`;
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
@@ -76,7 +80,28 @@ const opts = (list, sel, blank) => (blank != null ? `<option value="">${esc(blan
   list.map((v) => { const [val, lab] = Array.isArray(v) ? v : [v, v]; return `<option value="${esc(val)}"${String(val) === String(sel) ? " selected" : ""}>${esc(lab)}</option>`; }).join("");
 const empOpts = (sel, blank, list = S.employees) => opts(list.map((e) => [e.code, `${e.code} - ${empName(e)}`]), sel, blank);
 
-function toast(t, bad) { const el = $("#toast"); el.textContent = t; el.classList.toggle("bad", !!bad); el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), bad ? 12000 : 4000); }
+// Success toasts are polite and fade; errors are alerts and stay until closed.
+function toast(t, bad) {
+  const box = $("#toasts"), el = document.createElement("div");
+  el.className = `toast${bad ? " bad" : ""}`;
+  el.setAttribute("role", bad ? "alert" : "status");
+  el.innerHTML = `<span>${esc(t)}</span><button class="btn" type="button" aria-label="إغلاق">${icon("x")}</button>`;
+  el.querySelector("button").onclick = () => el.remove();
+  if (!bad) setTimeout(() => el.remove(), 4500);
+  box.querySelectorAll(".toast:not(.bad)").forEach((x) => x.remove());
+  box.append(el);
+  while (box.children.length > 3) box.firstElementChild.remove();
+}
+const announce = (t) => { const a = $("#announce"); a.textContent = ""; setTimeout(() => (a.textContent = t), 50); };
+
+// Accessible yes/no in a <dialog>; resolves true on تأكيد.
+function ask(title, text = "", yes = "تأكيد", danger = false) {
+  const d = $("#confirmDlg");
+  $("#confirmTitle").textContent = title; $("#confirmText").textContent = text;
+  const y = $("#confirmYes"); y.textContent = yes; y.className = `btn ${danger ? "danger" : "primary"}`;
+  d.returnValue = "";
+  return new Promise((res) => { d.addEventListener("close", () => res(d.returnValue === "yes"), { once: true }); d.showModal(); y.focus(); });
+}
 function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
@@ -145,6 +170,7 @@ function show(view) { for (const v of ["setup", "login", "pending", "app"]) $(`#
 
 async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
+  if (!S) skeleton();
   try {
     S = await db.load(month, R);
     E = createEngine(S, LAST);
@@ -157,7 +183,8 @@ async function refresh(month = S?.meta.month) {
 }
 
 async function act(fn, okMsg) {
-  try { await fn(); if (okMsg) toast(okMsg); await refresh(); }
+  // yield a task first so a Tab that triggered the save lands on the next field before we re-render
+  try { await fn(); await new Promise((r) => setTimeout(r)); if (okMsg) toast(okMsg); await refresh(); }
   catch (e) { toast(errMsg(e), true); render(); }
 }
 
@@ -173,21 +200,60 @@ async function beforeTab() {
 async function go(t) { tab = t; render(); await beforeTab(); render(); }
 
 // ---------------------------------------------------------------- render
+// Desktop: grouped sidebar. Phone: the 4 most used places plus "المزيد".
 function renderTabs() {
   if (!S) return;
-  const badges = { requests: badge(), inbox: unread() ? `<span class="badge">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
-  $("#tabs").innerHTML = visibleTabs().map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${l}${badges[k] || ""}</button>`).join("");
+  const badges = { requests: badge(), inbox: unread() ? `<span class="badge" aria-label="${unread()} جديد">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
+  const vis = visibleTabs();
+  const item = ([k, l, , ic], short) => `<button class="nav-item" data-tab="${k}"${k === tab ? ' aria-current="page"' : ""}>${icon(ic)}<span>${short || l}</span>${badges[k] || ""}</button>`;
+  const groups = GROUPS.map(([g, gl]) => { const list = vis.filter((t) => t[4] === g); return list.length ? `<div class="nav-group" role="group" aria-label="${gl}"><h2>${gl}</h2>${list.map((t) => item(t)).join("")}</div>` : ""; }).join("");
+  $("#side").innerHTML = groups;
+  $("#moreList").innerHTML = groups;
+  const top = vis.slice(0, vis.length > 5 ? 4 : 5);
+  const moreBadge = vis.slice(top.length).some(([k]) => badges[k]);
+  $("#bottom").style.gridTemplateColumns = `repeat(${top.length + (vis.length > top.length ? 1 : 0)}, 1fr)`;
+  $("#bottom").innerHTML = top.map((t) => item(t, t[5])).join("") +
+    (vis.length > top.length ? `<button class="nav-item" id="moreBtn" aria-haspopup="dialog"${vis.slice(top.length).some(([k]) => k === tab) ? ' aria-current="page"' : ""}>${icon("dots")}<span>المزيد</span>${moreBadge ? '<span class="badge" aria-label="فيه جديد">•</span>' : ""}</button>` : "");
+}
+// Re-rendering replaces the page, so remember which control had focus and put it back.
+const focusKey = () => keyOf(document.activeElement);
+function keyOf(a) {
+  if (!a || a === document.body || !$("#main").contains(a)) return null;
+  if (a.id) return `#${CSS.escape(a.id)}`;
+  const attrs = [...a.attributes].filter((x) => x.name.startsWith("data-") || x.name === "name").map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
+  const form = a.form?.id ? `#${CSS.escape(a.form.id)} ` : "";
+  return attrs ? `${form}${a.tagName.toLowerCase()}${attrs}` : null;
 }
 function render() {
+  const fk = focusKey();
   renderTabs();
+  $("#who").textContent = ME.code && empBy(ME.code) ? `${nameOf(ME.code)} · ${ME.email || ""}` : ME.email || "";
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
   const views = { home, inbox, field, live, actions, dash, mine, requests, daily, meet, upload, sum, pay, emp, set: settings };
-  const warn = !db.portalReady && R.admin ? `<div class="banner">جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
-  $("#main").innerHTML = `<section class="panel">${warn}${views[tab](S.meta.month)}</section>`;
+  const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
+  const [, label, , ic] = TABS.find(([k]) => k === tab);
+  const title = ["home", "field", "live"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
+  $("#main").innerHTML = `<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
+  document.title = `${label} | Everest HR`;
   tick();
+  labelControls();
+  if (fk) { const el = document.querySelector(fk); if (el) el.focus({ preventScroll: true }); }
 }
+// Inputs inside table cells get their name from the column header and the row's first cell.
+function labelControls() {
+  for (const el of $("#main").querySelectorAll("td input, td select")) {
+    if (el.getAttribute("aria-label") || el.labels?.length) continue;
+    const td = el.closest("td"), tr = td.parentElement, table = tr.closest("table");
+    const head = table.tHead?.rows[0]?.cells[td.cellIndex]?.textContent.trim() || "";
+    const first = tr.cells[0] === td ? "" : (tr.cells[1] && tr.cells[0].textContent.trim().length < 6 ? `${tr.cells[0].textContent.trim()} ${tr.cells[1].querySelector("input")?.value || tr.cells[1].textContent.trim()}` : tr.cells[0].querySelector("input")?.value || tr.cells[0].textContent.trim());
+    el.setAttribute("aria-label", [head, first].filter(Boolean).join(": ").slice(0, 80));
+  }
+  for (const th of $("#main").querySelectorAll("thead th:empty")) th.innerHTML = '<span class="sr-only">إجراء</span>';
+  for (const box of $("#main").querySelectorAll(".tbl")) if (!box.querySelector("input,select,button,a")) { box.tabIndex = 0; box.setAttribute("role", "region"); box.setAttribute("aria-label", box.closest(".card")?.querySelector("h2")?.textContent || "جدول"); }
+}
+function skeleton() { $("#main").innerHTML = '<section class="panel"><div class="skel" aria-hidden="true"><i class="h"></i><i></i><i class="s"></i><i></i><i class="s"></i></div><p class="sr-only">جاري التحميل</p></section>'; }
 const actBadge = () => { const n = R.admin ? S.actions.filter((a) => a.status === "pending" || (a.objection && !a.decisionNote)).length : 0; return n ? `<span class="badge">${n}</span>` : ""; };
 const canDecideMeet = (m) => R.meetings || (R.manager && m.code !== ME.code && S.employees.some((e) => e.code === m.code));
 const meetBadge = () => { const n = S.meetings.filter((m) => m.rawStatus === "pending" && canDecideMeet(m)).length; return n ? `<span class="badge">${n}</span>` : ""; };
@@ -197,16 +263,36 @@ function thread(table, id) {
   const list = CMT[`${table}|${id}`];
   if (!list) return "";
   return `<div class="thread">${list.map((c) => `<div class="cm${c.author_code && c.author_code === ME.code ? " me" : ""}"><b>${esc(c.author_code ? nameOf(c.author_code) : "الإدارة")}</b> <span class="note">${fmtTs(c.created_at)}</span><div>${esc(c.body)}</div></div>`).join("")}
-    <form class="row cform" data-ct="${table}" data-cid="${id}"><input type="text" name="body" maxlength="2000" placeholder="اكتب تعليق أو رد" required style="flex:1;min-width:160px" aria-label="تعليق"><button class="btn" type="submit">إرسال</button></form></div>`;
+    <form class="row cform" data-ct="${table}" data-cid="${id}"><input type="text" name="body" maxlength="2000" placeholder="اكتب تعليق أو رد" required class="grow" aria-label="تعليق"><button class="btn" type="submit">إرسال</button></form></div>`;
 }
 
 const kindPill = (k) => `<span class="pill ${k === "bonus" ? "p-ok" : k === "warning" ? "p-warn" : "p-bad"}">${KIND_AR[k] || k}</span>`;
 const actValue = (a, rate) => [a.days ? `${n2(a.days)} يوم` : "", a.amount ? `${money(a.amount)} جنيه` : ""].filter(Boolean).join(" + ") + (rate && a.days ? ` <span class="note">(${money(a.days * rate)} ج)</span>` : "");
 
 // ---------------------------------------------------------------- employee home
+// status -> heatmap tone
+const tone = (st) => /حاضر|مهمة|معفى/.test(st) ? "ok" : /تأخير|انصراف|ناقصة/.test(st) ? "warn" : st === "غياب" ? "bad" : st === "إجازة" ? "info" : "";
+function monthCal(e, ym) {
+  const rows = E.summary(e, ym).rows, first = rows[0].w, td = today();
+  const head = [0, 1, 2, 3, 4, 5, 6].map((i) => `<span class="dn" aria-hidden="true">${"حنثرخجس"[i]}</span>`).join("");
+  const blanks = Array.from({ length: first }, () => '<span class="d blank" aria-hidden="true"></span>').join("");
+  const cells = rows.map((r) => {
+    const t = r.type !== "يوم عمل" ? "" : r.future ? "" : tone(r.status);
+    const tip = `${DAYS[r.w]} ${fmtDate(r.d)}: ${r.status}${r.pin != null ? `، دخول ${to12(r.pin)}` : ""}${r.pout != null ? `، خروج ${to12(r.pout)}` : ""}${r.fin ? `، خصم ${n2(r.fin)} يوم` : ""}`;
+    return `<button type="button" class="d ${t}${r.d === td ? " today" : ""}" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${Number(r.d.slice(8))}</button>`;
+  }).join("");
+  return `<div class="cal" role="group" aria-label="حضور الشهر يوم بيوم">${head}${blanks}${cells}</div>
+    <p class="cal-tip note" id="calTip" aria-live="polite">اضغط على أي يوم تشوف تفاصيله.</p>
+    <div class="legend"><span><i style="background:var(--ok)"></i>في الميعاد</span><span><i style="background:var(--warn)"></i>تأخير أو ناقصة</span><span><i style="background:var(--bad)"></i>غياب</span><span><i style="background:var(--info)"></i>إجازة</span></div>`;
+}
+// Remembers which sections the user opened, so a re-render keeps them open.
+const OPEN = new Map();
+document.addEventListener("toggle", (ev) => { const k = ev.target.dataset?.fold; if (k) OPEN.set(k, ev.target.open); }, true);
+const fold = (ic, title, body, open = false, extra = "") => `<details class="fold" data-fold="${ic}"${OPEN.get(ic) ?? open ? " open" : ""}><summary>${icon(ic)}<span>${title}</span>${extra}${icon("chevron-down", "chev")}</summary><div class="body">${body}</div></details>`;
+
 function home(ym) {
   const e = empBy(ME.code);
-  if (!e) return '<p class="note">حسابك مربوط بكود موظف مش ظاهر. كلم مدير النظام.</p>';
+  if (!e) return empty("alert-triangle", "حسابك مربوط بكود موظف مش ظاهر", "كلم مدير النظام يراجع ربط حسابك.");
   const r = E.toDate(e, ym), s = r.s, st = E.st;
   const used = E.permUsed(ME.code, ym), allow = N0(st.permAllowH) * 60;
   const acts = S.actions.filter((a) => a.code === ME.code && a.status === "approved").sort((a, b) => b.day.localeCompare(a.day));
@@ -214,43 +300,47 @@ function home(ym) {
   const offDays = [...new Set([...st.weekend, ...(has(e.off) ? [Number(e.off)] : [])])].map((i) => DAYS[i]).join(" و ");
   const lastCheck = S.checkins.find((c) => c.code === ME.code);
   const grace = (st.lateTiers.find((t) => t[1] > 0)?.[0] ?? 1) - 1;
+  const pct = Math.round((r.elapsed / r.total) * 100);
   return `
-  <div class="card hero"><div class="row"><div style="margin-inline-end:auto"><h2>أهلاً ${esc(empName(e))}</h2><div class="note" data-date></div></div><b class="clock" data-clock></b></div>
-    <div class="row"><button class="btn primary" data-go="field">سجل تواجدي</button><button class="btn" data-go="mine">اطلب إذن أو إجازة</button>
+  <div class="card hero">
+    <div class="row"><div class="spacer"><h2>أهلاً ${esc(empName(e))}</h2><div class="note" data-date></div></div><b class="clock tabnum" data-clock aria-hidden="true"></b></div>
+    <div><div class="note">المستحق لحد ${r.upTo ? fmtDate(r.upTo) : "دلوقتي"} (تقديري)</div><div class="big tabnum">${money(r.netToDate)} <small>جنيه</small></div></div>
+    <div><span class="track" role="progressbar" aria-label="أيام الشهر اللي عدت" aria-valuemin="0" aria-valuemax="${r.total}" aria-valuenow="${r.elapsed}"><i style="width:${pct}%"></i></span>
+      <div class="note">${r.elapsed} من ${r.total} يوم في الشهر · صافي الشهر المتوقع ${money(r.rnd)}</div></div>
+    <div class="hero-stats">
+      <div><span>خصم الحضور</span><b class="tabnum">${money(r.late)}</b></div>
+      <div><span>جزاءات</span><b class="tabnum">${money(r.pen)}</b></div>
+      <div><span>منح وعمولات</span><b class="tabnum">${money(r.bonus + N0(r.p.commission) + N0(r.p.ret))}</b></div>
+      <div><span>رصيد الأذونات</span><b class="tabnum">${fmtMin(Math.max(0, allow - used))}</b></div>
+    </div>
+    <div class="row"><button class="btn primary" data-go="field">${icon("map-pin")}سجل تواجدي</button><button class="btn" data-go="mine">${icon("calendar-event")}اطلب إذن أو إجازة</button>
     ${lastCheck ? `<span class="note">آخر تسجيل: ${esc(checkKind(lastCheck.kind))} ${fmtTs(lastCheck.ts)}</span>` : ""}</div></div>
-  ${fresh.length ? `<div class="banner">عندك ${fresh.length} ${fresh.length === 1 ? "إجراء جديد" : "إجراءات جديدة"} من الإدارة، راجعها تحت وأكد إنك اطلعت عليها.</div>` : ""}
-  <div class="kpis">
-    <div class="kpi"><span>الراتب الأساسي</span><b>${money(r.sal)}</b></div>
-    <div class="kpi ok"><span>المستحق حتى ${r.upTo ? fmtDate(r.upTo) : "-"} (تقديري)</span><b>${money(r.netToDate)}</b></div>
-    <div class="kpi bad"><span>خصم الحضور (${n2(r.days)} يوم)</span><b>${money(r.late)}</b></div>
-    <div class="kpi bad"><span>الجزاءات</span><b>${money(r.pen)}</b></div>
-    <div class="kpi ok"><span>المنح والعمولات</span><b>${money(r.bonus + N0(r.p.commission) + N0(r.p.ret))}</b></div>
-    <div class="kpi"><span>صافي الشهر المتوقع</span><b>${money(r.rnd)}</b></div>
-  </div>
+  ${fresh.length ? `<div class="banner">${icon("bell")}عندك ${fresh.length} ${fresh.length === 1 ? "إجراء جديد" : "إجراءات جديدة"} من الإدارة. راجعها في (الجزاءات والمنح) تحت وأكد إنك اطلعت.</div>` : ""}
   <div class="grid2">
-    <div class="card"><h2>مواعيدي</h2><table><tbody>
+    <div class="card"><h2>${icon("calendar-event")}حضوري الشهر ده</h2>${monthCal(e, ym)}
+      <div class="kpis">
+        <div class="kpi"><span>حضور</span><b>${s.pres}<small class="note"> / ${s.req}</small></b></div>
+        <div class="kpi ${s.abs ? "bad" : ""}"><span>غياب</span><b>${s.abs}</b></div>
+        <div class="kpi"><span>تأخير</span><b>${s.latec}<small class="note"> مرة</small></b></div>
+        <div class="kpi"><span>الالتزام</span><b>${s.commit == null ? "-" : Math.round(s.commit * 100) + "%"}</b></div>
+      </div>
+      <div><button class="btn" data-go="mine">التفاصيل يوم بيوم</button></div></div>
+    <div class="card"><h2>${icon("clock")}مواعيدي</h2><table class="kv"><tbody>
       <tr><th>الحضور</th><td>${e.exempt ? '<span class="pill p-info">معفى من البصمة</span>' : to12(toMin(e.in || st.in))}</td></tr>
       <tr><th>الانصراف</th><td>${e.exempt ? "-" : to12(toMin(e.out || st.out))}</td></tr>
       <tr><th>الإجازة الأسبوعية</th><td>${offDays || "-"}</td></tr>
       <tr><th>رصيد الأذونات</th><td>${fmtMin(Math.max(0, allow - used))} من ${n2(st.permAllowH)} ساعة</td></tr>
       <tr><th>السماح في التأخير</th><td>${grace} دقيقة</td></tr>
       <tr><th>آخر يوم بصمة متسجل</th><td>${LAST ? fmtDate(LAST) : "-"}</td></tr></tbody></table></div>
-    <div class="card"><h2>حضوري الشهر ده</h2><table><tbody>
-      <tr><th>أيام العمل لحد دلوقتي</th><td>${s.req}</td></tr><tr><th>حضور</th><td>${s.pres}</td></tr>
-      <tr><th>غياب</th><td>${s.abs ? `<span class="pill p-bad">${s.abs}</span>` : 0}</td></tr>
-      <tr><th>تأخير</th><td>${s.latec} مرة / ${s.latem} دقيقة</td></tr><tr><th>انصراف مبكر</th><td>${s.earlyc}</td></tr>
-      <tr><th>بصمة ناقصة</th><td>${s.miss}</td></tr><tr><th>الالتزام</th><td>${s.commit == null ? "-" : Math.round(s.commit * 100) + "%"}</td></tr></tbody></table>
-      <div><button class="btn" data-go="mine">تفاصيل يوم بيوم</button></div></div>
   </div>
-  <div class="card"><h2>الجزاءات والمنح</h2>
-  ${acts.length ? acts.map((a) => `<div class="act">
+  ${fold("gavel", "الجزاءات والمنح", acts.length ? acts.map((a) => `<div class="act">
     <div class="row">${kindPill(a.kind)}<b>${actValue(a, r.rate)}</b><span class="note">${fmtDate(a.day)}</span>${a.ackAt ? '<span class="pill p-mute">اطلعت</span>' : ""}</div>
     <div>${esc(a.reason)}${a.policyId ? ` <span class="note">(${esc(S.policy.find((p) => p.id === a.policyId)?.title || "بند لائحة")}${a.occurrence ? ` - مرة ${a.occurrence}` : ""})</span>` : ""}</div>
     ${a.objection ? `<div class="note">تظلمك: ${esc(a.objection)}</div>` : ""}
-    ${a.ackAt ? "" : `<div class="row"><button class="btn ok" data-ack="${a.id}">اطلعت</button><input type="text" data-objt="${a.id}" placeholder="عندك اعتراض؟ اكتبه هنا" style="flex:1;min-width:180px" aria-label="تظلم"><button class="btn" data-obj="${a.id}">إرسال تظلم</button></div>`}
-    ${thread("actions", a.id)}</div>`).join("") : '<p class="note">مفيش جزاءات أو منح الشهر ده.</p>'}
-  ${r.penCapped ? `<p class="note">الجزاءات اتحددت بحد أقصى ${n2(st.maxPenaltyDays)} يوم في الشهر.</p>` : ""}</div>
-  <div class="card"><h2>تفاصيل الراتب (${ym.split("-").reverse().join("/")})</h2><table><tbody>
+    ${a.ackAt ? "" : `<div class="row"><button class="btn ok" data-ack="${a.id}">اطلعت</button><input type="text" data-objt="${a.id}" placeholder="عندك اعتراض؟ اكتبه هنا" class="grow" aria-label="تظلم"><button class="btn" data-obj="${a.id}">إرسال تظلم</button></div>`}
+    ${thread("actions", a.id)}</div>`).join("") + (r.penCapped ? `<p class="note">الجزاءات اتحددت بحد أقصى ${n2(st.maxPenaltyDays)} يوم في الشهر.</p>` : "")
+    : empty("check", "مفيش جزاءات أو منح الشهر ده"), fresh.length > 0, fresh.length ? `<span class="badge">${fresh.length}</span>` : "")}
+  ${fold("cash", `تفاصيل الراتب (${ym.split("-").reverse().join("/")})`, `<table class="kv"><tbody>
     <tr><th>الراتب</th><td>${money(r.sal)}</td></tr><tr><th>المستحق عن ${r.elapsed} من ${r.total} يوم</th><td>${money(r.earned)}</td></tr>
     ${N0(r.p.commission) ? `<tr><th>عمولات</th><td>${money(r.p.commission)}</td></tr>` : ""}${N0(r.p.ret) ? `<tr><th>مردودات</th><td>${money(r.p.ret)}</td></tr>` : ""}
     ${r.bonus ? `<tr><th>منح استثنائية</th><td>${money(r.bonus)}</td></tr>` : ""}
@@ -258,22 +348,26 @@ function home(ym) {
     ${r.pen ? `<tr><th>جزاءات</th><td>- ${money(r.pen)}</td></tr>` : ""}
     ${["adminDed", "daysDed", "regDed", "advance"].map((k) => (N0(r.p[k]) ? `<tr><th>${{ adminDed: "خصومات إدارية", daysDed: "خصم أيام", regDed: "تطبيق اللائحة", advance: "سلف" }[k]}</th><td>- ${money(r.p[k])}</td></tr>` : "")).join("")}
     <tr><th>طريقة الصرف</th><td>${r.method === "bank" ? `بنك <span dir="ltr">${esc(e.account)}</span>` : "نقدي"}</td></tr></tbody></table>
-    <p class="note">الأرقام تقديرية لحد ما الإدارة تعتمد كشف المرتبات.</p></div>
-  <div class="card"><h2>مقارنة الشهور</h2>${compareView()}</div>
-  ${S.policy.some((p) => p.active) ? `<details class="card"><summary><b>لائحة الشركة</b></summary><div class="tbl" style="border:0"><table><thead><tr><th>رقم</th><th>البند</th><th>التفاصيل</th><th>الجزاء بالتكرار في الشهر</th></tr></thead><tbody>
-    ${S.policy.filter((p) => p.active).map((p) => `<tr><td>${esc(p.ref)}</td><td>${esc(p.title)}${p.category ? ` <span class="note">(${esc(p.category)})</span>` : ""}</td><td style="white-space:normal">${esc(p.body)}</td><td>${p.steps.map((x, i) => `${i + 1}: ${stepText(x)}`).join(" · ")}</td></tr>`).join("")}
-  </tbody></table></div></details>` : ""}`;
+    <p class="note">الأرقام تقديرية لحد ما الإدارة تعتمد كشف المرتبات.</p>`)}
+  ${fold("chart-bar", "مقارنة الشهور", compareView(), !!COMP)}
+  ${S.policy.some((p) => p.active) ? fold("file-text", "لائحة الشركة", `<div class="tbl flat"><table><thead><tr><th>رقم</th><th>البند</th><th>التفاصيل</th><th>الجزاء بالتكرار في الشهر</th></tr></thead><tbody>
+    ${S.policy.filter((p) => p.active).map((p) => `<tr><td>${esc(p.ref)}</td><td>${esc(p.title)}${p.category ? ` <span class="note">(${esc(p.category)})</span>` : ""}</td><td class="wrap">${esc(p.body)}</td><td>${p.steps.map((x, i) => `${i + 1}: ${stepText(x)}`).join("، ")}</td></tr>`).join("")}
+  </tbody></table></div>`) : ""}`;
 }
 
+// Net pay per month as direct-labelled bars, with the same numbers in a table for screen readers and detail.
 function compareView() {
-  if (!COMP) return `<div><button class="btn" id="loadComp">اعرض مقارنة الشهور</button></div>`;
-  if (!COMP.length) return '<p class="note">مفيش شهور سابقة.</p>';
+  if (!COMP) return `<div><button class="btn" id="loadComp">${icon("chart-bar")}اعرض مقارنة الشهور</button></div>`;
+  if (!COMP.length) return empty("chart-bar", "مفيش شهور سابقة لسه");
   const max = Math.max(1, ...COMP.map((c) => Math.max(c.sal, c.rnd)));
-  return `<div class="tbl" style="border:0"><table><thead><tr><th>الشهر</th><th>غياب</th><th>تأخير (مرات / د)</th><th>أيام الخصم</th><th>جزاءات</th><th>منح</th><th>الصافي</th><th>من الراتب</th></tr></thead><tbody>
-  ${COMP.map((c) => `<tr><td>${c.ym.split("-").reverse().join("/")}</td><td class="num">${c.abs}</td><td class="num">${c.latec} / ${c.latem}</td><td class="num">${n2(c.days)}</td><td class="num">${c.pen ? money(c.pen) : ""}</td><td class="num">${c.bonus ? money(c.bonus) : ""}</td><td class="num"><b>${money(c.rnd)}</b></td>
-    <td style="min-width:120px"><span class="track"><i class="${c.days > 2 ? "low" : c.days > 0.5 ? "mid" : ""}" style="width:${Math.max(0, Math.min(100, Math.round((c.rnd / max) * 100)))}%"></i></span></td></tr>`).join("")}
+  const lab = (ym) => ym.split("-").reverse().join("/");
+  return `<div class="bars" aria-hidden="true">${COMP.map((c) => `<div class="b"><span>${lab(c.ym)}</span><span class="track"><i class="${c.days > 2 ? "low" : c.days > 0.5 ? "mid" : ""}" style="width:${Math.max(2, Math.min(100, Math.round((c.rnd / max) * 100)))}%"></i></span><b class="tabnum">${money(c.rnd)}</b></div>`).join("")}</div>
+  <div class="legend" aria-hidden="true"><span><i style="background:var(--accent)"></i>خصم أقل من نص يوم</span><span><i style="background:var(--warn)"></i>لحد يومين</span><span><i style="background:var(--bad)"></i>أكتر من يومين</span></div>
+  <div class="tbl flat"><table><caption class="sr-only">مقارنة صافي المرتب والخصومات بالشهور</caption><thead><tr><th>الشهر</th><th>غياب</th><th>تأخير (مرات / د)</th><th>أيام الخصم</th><th>جزاءات</th><th>منح</th><th>الصافي</th></tr></thead><tbody>
+  ${COMP.map((c) => `<tr><td>${lab(c.ym)}</td><td class="num">${c.abs}</td><td class="num">${c.latec} / ${c.latem}</td><td class="num">${n2(c.days)}</td><td class="num">${c.pen ? money(c.pen) : "-"}</td><td class="num">${c.bonus ? money(c.bonus) : "-"}</td><td class="num"><b>${money(c.rnd)}</b></td></tr>`).join("")}
   </tbody></table></div>`;
 }
+
 async function loadComparison() {
   const list = (MONTHS.length ? MONTHS : [S.meta.month]).slice(0, 6);
   const out = [];
@@ -290,10 +384,10 @@ async function loadComparison() {
 const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field" };
 function inbox() {
   const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; return NOTIF_GO[n.ref_table]; };
-  return `<div class="row"><p class="note" style="margin-inline-end:auto">الإشعارات بتتحدث كل دقيقة.</p></div>
+  return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
   <div class="card">${NOTIF.map((n) => { const g = goFor(n); return `<div class="notif${n.read_at ? "" : " new"}"><div class="row"><b>${esc(n.title)}</b><span class="note">${fmtTs(n.created_at)}</span>
     ${g && TABS.some(([k, , f]) => k === g && f(R)) ? `<button class="btn" data-go="${g}">افتح</button>` : ""}</div>
-    ${n.body ? `<div>${esc(n.body)}</div>` : ""}</div>`; }).join("") || '<p class="note">مفيش إشعارات.</p>'}</div>`;
+    ${n.body ? `<div>${esc(n.body)}</div>` : ""}</div>`; }).join("") || empty("bell", "مفيش إشعارات لسه", "هيوصلك إشعار هنا لما طلب يتوافق عليه أو حد يعلق على اجتماعك.")}</div>`;
 }
 
 // ---------------------------------------------------------------- field: check-in and own meetings
@@ -304,7 +398,7 @@ function field() {
   const meets = S.meetings.filter((m) => m.code === ME.code).sort((a, b) => (b.date + b.tFrom).localeCompare(a.date + a.tFrom));
   const fresh = (c) => Date.now() - Date.parse(c.ts) < 9.5 * 60000;
   return `
-  <div class="card hero"><div class="row"><h2 style="margin-inline-end:auto">سجل تواجدك</h2><span class="note" data-date></span><b class="clock" data-clock></b></div>
+  <div class="card hero"><div class="row"><h2 class="spacer">سجل تواجدك</h2><span class="note" data-date></span><b class="clock" data-clock></b></div>
   <p class="note">لما تضغط، الموقع بيتسجل مرة واحدة بس والوقت من السيرفر. مفيش تتبع في الخلفية، ومديرك بيشوف التسجيل ويقدر يعلق عليه.</p>
   <form class="add" id="checkForm">
     <label>أنا دلوقتي<select name="kind">${opts(CHECK_KINDS, "office")}</select></label>
@@ -316,16 +410,16 @@ function field() {
       <label>هيخلص حوالي<input type="time" name="tTo"></label><label>النتيجة<select name="result">${opts(RESULTS, "", "-")}</select></label></div></fieldset>
     <div><button class="btn primary" type="submit" id="checkBtn">سجل موقعي دلوقتي</button></div>
   </form></div>
-  <div class="card"><h2>تسجيلاتي الشهر ده</h2><div class="tbl" style="border:0"><table><thead><tr><th>الوقت</th><th>النوع</th><th>المكان</th><th>الموقع</th><th>ملاحظة</th><th></th></tr></thead><tbody>
+  <div class="card"><h2>تسجيلاتي الشهر ده</h2><div class="tbl flat"><table><thead><tr><th>الوقت</th><th>النوع</th><th>المكان</th><th>الموقع</th><th>ملاحظة</th><th></th></tr></thead><tbody>
   ${mine.map((c) => `<tr><td>${fmtTs(c.ts)}</td><td>${esc(checkKind(c.kind))}</td><td>${esc(c.place)}</td><td>${mapLink(c.lat, c.lng)} ${officeTag(c)}${c.accuracy ? ` <span class="note">±${c.accuracy}م</span>` : ""}</td><td>${esc(c.note)}</td>
-    <td>${fresh(c) ? `<button class="btn danger" data-chkdel="${c.id}">إلغاء</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="6" class="note">مفيش تسجيلات.</td></tr>'}
+    <td>${fresh(c) ? `<button class="btn danger" data-chkdel="${c.id}">إلغاء</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="6">${empty("map-pin", "مفيش تسجيلات الشهر ده", "اضغط (سجل موقعي دلوقتي) فوق أول ما توصل.")}</td></tr>`}
   </tbody></table></div></div>
   <div class="card"><h2>اجتماعاتي</h2>
   ${meets.map((m) => `<div class="act"><div class="row">${pill(m.status)}<b>${esc(m.kind || "اجتماع")}${m.client ? ` - ${esc(m.client)}` : ""}</b><span class="note">${fmtDate(m.date)} ${to12(toMin(m.tFrom))} - ${to12(toMin(m.tTo))}</span>${mapLink(m.lat, m.lng)}</div>
     <div class="note">${[m.project, m.place, m.result].filter(Boolean).map(esc).join(" · ")}</div>
-    ${m.rawStatus === "pending" ? `<div class="row"><label class="row" style="gap:6px">النتيجة<select data-myres="${m.id}">${opts(RESULTS, m.result, "-")}</select></label><label class="row" style="gap:6px">خلص الساعة<input type="time" data-myto="${m.id}" value="${m.tTo}"></label><button class="btn danger" data-mymdel="${m.id}">سحب</button></div>` : ""}
+    ${m.rawStatus === "pending" ? `<div class="row"><label class="row field-inline">النتيجة<select data-myres="${m.id}">${opts(RESULTS, m.result, "-")}</select></label><label class="row field-inline">خلص الساعة<input type="time" data-myto="${m.id}" value="${m.tTo}"></label><button class="btn danger" data-mymdel="${m.id}">سحب</button></div>` : ""}
     ${m.decisionNote ? `<div class="note">رد المدير: ${esc(m.decisionNote)}</div>` : ""}
-    ${thread("meetings", m.id)}</div>`).join("") || '<p class="note">مفيش اجتماعات الشهر ده.</p>'}</div>`;
+    ${thread("meetings", m.id)}</div>`).join("") || empty("briefcase", "مفيش اجتماعات الشهر ده", "لما تكون مع عميل، اختار (اجتماع مع عميل) واكتب بياناته.")}</div>`;
 }
 
 // ---------------------------------------------------------------- live team board
@@ -350,7 +444,7 @@ function live() {
   const pend = S.meetings.filter((m) => m.rawStatus === "pending" && canDecideMeet(m));
   const todayRest = lm.filter((m) => !pend.some((p) => p.id === m.id));
   return `
-  <div class="card hero"><div class="row"><h2 style="margin-inline-end:auto">الفريق النهارده</h2><span class="note" data-date></span><b class="clock" data-clock></b></div>
+  <div class="card hero"><div class="row"><h2 class="spacer">الفريق النهارده</h2><span class="note" data-date></span><b class="clock" data-clock></b></div>
   <p class="note">بيتحدث تلقائي كل 30 ثانية، آخر تحديث ${esc(LIVE_AT)}. تسجيل التواجد بيظهر على طول، والبصمة بتظهر بعد رفع ملف الجهاز.</p>
   <div class="kpis"><div class="kpi"><span>سجلوا تواجد</span><b>${rows.filter((r) => r.last).length}</b></div><div class="kpi"><span>في اجتماع دلوقتي</span><b>${rows.filter((r) => r.rank === 0).length}</b></div>
     <div class="kpi"><span>اجتماعات النهارده</span><b>${lm.length}</b></div><div class="kpi ${rows.some((r) => r.rank === 3) ? "bad" : ""}"><span>لم يسجل</span><b>${rows.filter((r) => r.rank === 3).length}</b></div></div>
@@ -359,15 +453,15 @@ function live() {
   ${rows.map((r) => `<tr><td>${esc(empName(r.e))}</td><td>${r.st}</td><td>${r.last ? to12(toMin(r.last.time)) : ""}</td>
     <td>${r.last ? `${esc(r.last.place)} ${mapLink(r.last.lat, r.last.lng)} ${officeTag(r.last)}` : ""}</td>
     <td>${r.ps.length ? `${to12(r.ps[0])}${r.ps.length > 1 ? ` - ${to12(r.ps[r.ps.length - 1])}` : ""}` : ""}</td>
-    <td>${r.ms.map((m) => `${pill(m.status)} ${to12(toMin(m.tFrom))} ${esc(m.client)}`).join("<br>")}</td></tr>`).join("") || '<tr><td colspan="6" class="note">مفيش موظفين ظاهرين ليك.</td></tr>'}
+    <td>${r.ms.map((m) => `${pill(m.status)} ${to12(toMin(m.tFrom))} ${esc(m.client)}`).join("<br>")}</td></tr>`).join("") || `<tr><td colspan="6">${empty("users", "مفيش موظفين في فريقك", "اطلب من مدير النظام يحددك كمدير لفريقك.")}</td></tr>`}
   </tbody></table></div>
-  <div class="card"><h2>اجتماعات مستنية قرارك (${pend.length})</h2>${pend.map(meetCard).join("") || '<p class="note">مفيش.</p>'}</div>
-  <div class="card"><h2>باقي اجتماعات النهارده</h2>${todayRest.map(meetCard).join("") || '<p class="note">مفيش.</p>'}</div>`;
+  <div class="card"><h2>اجتماعات مستنية قرارك (${pend.length})</h2>${pend.map(meetCard).join("") || empty("check", "مفيش اجتماعات مستنية قرارك")}</div>
+  <div class="card"><h2>باقي اجتماعات النهارده</h2>${todayRest.map(meetCard).join("") || empty("briefcase", "مفيش اجتماعات تانية النهارده")}</div>`;
 }
 function meetCard(m) {
   return `<div class="act"><div class="row">${pill(m.status)}<b>${esc(nameOf(m.code))}</b><span>${esc(m.kind)}${m.client ? ` - ${esc(m.client)}` : ""}</span><span class="note">${fmtDate(m.date)} ${to12(toMin(m.tFrom))} - ${to12(toMin(m.tTo))}</span>${mapLink(m.lat, m.lng)}</div>
     <div class="note">${[m.project, m.place, m.result].filter(Boolean).map(esc).join(" · ")}</div>
-    ${m.rawStatus === "pending" && canDecideMeet(m) ? `<div class="row"><button class="btn ok" data-mdec="${m.id}" data-s="معتمد">اعتماد</button><button class="btn danger" data-mdec="${m.id}" data-s="مرفوض">رفض</button><input type="text" data-mnote="${m.id}" placeholder="رأيك أو ملاحظتك (اختياري)" style="flex:1;min-width:160px" aria-label="ملاحظة"></div>` : ""}
+    ${m.rawStatus === "pending" && canDecideMeet(m) ? `<div class="row"><button class="btn ok" data-mdec="${m.id}" data-s="معتمد">اعتماد</button><button class="btn danger" data-mdec="${m.id}" data-s="مرفوض">رفض</button><input type="text" data-mnote="${m.id}" placeholder="رأيك أو ملاحظتك (اختياري)" class="grow" aria-label="ملاحظة"></div>` : ""}
     ${m.decisionNote ? `<div class="note">القرار: ${esc(m.decisionNote)}</div>` : ""}
     ${thread("meetings", m.id)}</div>`;
 }
@@ -397,11 +491,11 @@ function actions() {
     <div class="wide note" id="actHint"></div>
     <div><button class="btn primary" type="submit">${R.admin ? "تسجيل" : "إرسال للاعتماد"}</button></div></form></div>
   <div class="tbl"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>القيمة</th><th>السبب</th><th>البند</th><th>الحالة</th><th>الموظف</th>${R.admin ? "<th>القرار</th>" : ""}</tr></thead><tbody>
-  ${list.map((a) => `<tr><td>${fmtDate(a.day)}</td><td>${esc(nameOf(a.code))}</td><td>${kindPill(a.kind)}</td><td>${actValue(a, rate(a.code))}</td><td style="white-space:normal;min-width:180px">${esc(a.reason)}</td>
+  ${list.map((a) => `<tr><td>${fmtDate(a.day)}</td><td>${esc(nameOf(a.code))}</td><td>${kindPill(a.kind)}</td><td>${actValue(a, rate(a.code))}</td><td class="wrap">${esc(a.reason)}</td>
     <td>${a.policyId ? esc(S.policy.find((p) => p.id === a.policyId)?.title || "") + (a.occurrence ? ` (${a.occurrence})` : "") : ""}</td><td>${pill(ACT_ST[a.status])}</td>
     <td>${a.status !== "approved" ? "" : a.objection ? `<span class="pill p-warn">تظلم</span><div class="note" style="white-space:normal">${esc(a.objection)}</div>` : a.ackAt ? '<span class="pill p-ok">اطلع</span>' : '<span class="pill p-mute">لم يطلع</span>'}</td>
-    ${R.admin ? `<td><div class="row" style="gap:4px;flex-wrap:nowrap">${a.status !== "approved" ? `<button class="btn ok" data-adec="${a.id}" data-s="approved">اعتماد</button>` : ""}${a.status === "pending" ? `<button class="btn danger" data-adec="${a.id}" data-s="rejected">رفض</button>` : ""}${a.status === "approved" ? `<button class="btn danger" data-adec="${a.id}" data-s="cancelled">إلغاء</button>` : ""}</div>
-      <input type="text" class="plain" data-anote="${a.id}" placeholder="ملاحظة / رد على التظلم" value="${esc(a.decisionNote)}" style="width:200px" aria-label="ملاحظة"></td>` : ""}</tr>`).join("") || `<tr><td colspan="${R.admin ? 9 : 8}" class="note">مفيش إجراءات الشهر ده.</td></tr>`}
+    ${R.admin ? `<td><div class="row nowrap">${a.status !== "approved" ? `<button class="btn ok" data-adec="${a.id}" data-s="approved">اعتماد</button>` : ""}${a.status === "pending" ? `<button class="btn danger" data-adec="${a.id}" data-s="rejected">رفض</button>` : ""}${a.status === "approved" ? `<button class="btn danger" data-adec="${a.id}" data-s="cancelled">إلغاء</button>` : ""}</div>
+      <input type="text" class="plain" data-anote="${a.id}" placeholder="ملاحظة / رد على التظلم" value="${esc(a.decisionNote)}" style="width:200px" aria-label="ملاحظة"></td>` : ""}</tr>`).join("") || `<tr><td colspan="${R.admin ? 9 : 8}">${empty("gavel", "مفيش جزاءات أو منح الشهر ده")}</td></tr>`}
   </tbody></table></div>`;
 }
 
@@ -449,8 +543,9 @@ function dash(ym) {
   <div class="grid2">
     <div class="card"><h2>الحضور يوم بيوم</h2>
       <div class="legend"><span><i style="background:var(--ok)"></i>في الميعاد</span><span><i style="background:var(--warn)"></i>تأخير أو انصراف مبكر أو بصمة ناقصة</span><span><i style="background:var(--bad)"></i>غياب</span></div>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="الحضور اليومي" style="width:100%;height:auto">${grid}${bars}</svg></div>
-    <div class="card"><h2>الأقل التزامًا بالمواعيد</h2><div class="rank">${ranked.slice(0, 10).map(rk).join("") || '<p class="note">مفيش بيانات للشهر ده.</p>'}</div></div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="الحضور يوم بيوم: أعلى يوم فيه ${max} موظف. التفاصيل في الجدول المخفي بعده." style="width:100%;height:auto">${grid}${bars}</svg>
+      <table class="sr-only"><caption>الحضور يوم بيوم</caption><thead><tr><th>اليوم</th><th>في الميعاد</th><th>تأخير أو ناقصة</th><th>غياب</th></tr></thead><tbody>${series.filter((x) => x.w).map((x) => `<tr><td>${fmtDate(x.d)}</td><td>${x.p}</td><td>${x.l}</td><td>${x.a}</td></tr>`).join("")}</tbody></table></div>
+    <div class="card"><h2>الأقل التزامًا بالمواعيد</h2><div class="rank">${ranked.slice(0, 10).map(rk).join("") || empty("chart-bar", "مفيش بيانات للشهر ده", "ارفع ملف البصمة الأول.")}</div></div>
   </div>
   <div class="card"><h2>الأكثر التزامًا</h2><div class="rank">${ranked.slice().reverse().slice(0, 10).map(rk).join("")}</div></div>`;
 }
@@ -474,9 +569,9 @@ function dailyTable(e, ym, editable) {
 function daily(ym) {
   const list = staff();
   if (!dailyEmp || !empBy(dailyEmp)) dailyEmp = list[0]?.code || "";
-  const e = empBy(dailyEmp); if (!e) return '<p class="note">مفيش موظفين ظاهرين ليك.</p>';
-  return `<div class="row"><label class="row" style="gap:6px">الموظف <select id="dailyEmp">${empOpts(dailyEmp, null, list)}</select></label>
-    <label class="row" style="gap:6px">الحالة <select id="dailyFilter">${opts(["غياب", "تأخير", "انصراف مبكر", "بصمة ناقصة", "مهمة خارجية", "إجازة", "حاضر", "معفى"], dailyFilter, "الكل")}</select></label>
+  const e = empBy(dailyEmp); if (!e) return empty("users", "مفيش موظفين ظاهرين ليك");
+  return `<div class="row"><label class="row field-inline">الموظف <select id="dailyEmp">${empOpts(dailyEmp, null, list)}</select></label>
+    <label class="row field-inline">الحالة <select id="dailyFilter">${opts(["غياب", "تأخير", "انصراف مبكر", "بصمة ناقصة", "مهمة خارجية", "إجازة", "حاضر", "معفى"], dailyFilter, "الكل")}</select></label>
     <button class="btn" id="exportDaily">تصدير CSV</button></div>
   ${dailyTable(e, ym, R.admin)}
   ${R.admin ? '<p class="note">اكتب في (تعديل الخصم) الرقم اللي انت عايزه بالأيام، أو 0 لإلغاء الخصم.</p>' : ""}`;
@@ -500,9 +595,9 @@ function mine(ym) {
     <label class="wide">السبب / العذر<input type="text" name="note" required></label>
     <div><button class="btn primary" type="submit">إرسال الطلب</button></div>
   </form></div>
-  <div class="card"><h2>طلباتي</h2><div class="tbl" style="border:0"><table><thead><tr><th>النوع</th><th>من</th><th>إلى</th><th>الوقت</th><th>السبب</th><th>الحالة</th><th>رد المدير</th><th></th></tr></thead><tbody>
+  <div class="card"><h2>طلباتي</h2><div class="tbl flat"><table><thead><tr><th>النوع</th><th>من</th><th>إلى</th><th>الوقت</th><th>السبب</th><th>الحالة</th><th>رد المدير</th><th></th></tr></thead><tbody>
   ${my.map((p) => `<tr><td>${esc(p.type)}</td><td>${fmtDate(p.from)}</td><td>${p.to ? fmtDate(p.to) : ""}</td><td>${p.tFrom ? `${to12(toMin(p.tFrom))} - ${to12(toMin(p.tTo))}` : ""}</td><td>${esc(p.note)}</td><td>${pill(p.status)}</td><td>${esc(p.decisionNote)}</td>
-    <td>${p.rawStatus === "pending" ? `<button class="btn danger" data-rdel="${p.id}">سحب الطلب</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" class="note">مفيش طلبات في الشهر ده.</td></tr>'}
+    <td>${p.rawStatus === "pending" ? `<button class="btn danger" data-rdel="${p.id}">سحب الطلب</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8">${empty("calendar-event", "مفيش طلبات الشهر ده", "لو محتاج إذن أو إجازة، املا الفورم اللي فوق.")}</td></tr>`}
   </tbody></table></div></div>
   <h2>حضوري</h2>
   ${dailyTable(e, ym, false)}`;
@@ -512,13 +607,13 @@ function requests(ym) {
   let list = S.perms.slice().sort((a, b) => (a.rawStatus === "pending" ? 0 : 1) - (b.rawStatus === "pending" ? 0 : 1) || b.from.localeCompare(a.from));
   if (reqFilter) list = list.filter((p) => p.rawStatus === reqFilter);
   return `
-  <div class="row"><label class="row" style="gap:6px">عرض <select id="reqFilter">${opts([["pending", "مستني قرار"], ["approved", "معتمد"], ["rejected", "مرفوض"]], reqFilter, "الكل")}</select></label>
+  <div class="row"><label class="row field-inline">عرض <select id="reqFilter">${opts([["pending", "مستني قرار"], ["approved", "معتمد"], ["rejected", "مرفوض"]], reqFilter, "الكل")}</select></label>
   <p class="note">${R.admin ? "انت شايف طلبات كل الموظفين." : "انت شايف طلبات فريقك بس. طلباتك انت بيوافق عليها مدير النظام."}</p></div>
   <div class="tbl"><table><thead><tr><th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>الوقت</th><th>المدة</th><th>من الرصيد</th><th>السبب</th><th>الحالة</th><th>القرار</th></tr></thead><tbody>
   ${list.map((p) => { const L = E.ledger[p.id]; return `<tr><td>${esc(nameOf(p.code))}</td><td>${esc(p.type)}</td><td>${fmtDate(p.from)}</td><td>${p.to ? fmtDate(p.to) : ""}</td><td>${p.tFrom ? `${to12(toMin(p.tFrom))} - ${to12(toMin(p.tTo))}` : ""}</td><td class="num">${dur(p.tFrom, p.tTo) || ""}</td>
     <td class="num">${L ? `${L.charge}${L.over ? ' <span class="pill p-bad">تجاوز الرصيد</span>' : ""}` : ""}</td><td>${esc(p.note)}</td><td>${pill(p.status)}</td>
-    <td>${canDecide(p) ? `<div class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn ok" data-decide="${p.id}" data-s="معتمد">موافقة</button><button class="btn danger" data-decide="${p.id}" data-s="مرفوض">رفض</button>${p.rawStatus !== "pending" ? `<button class="btn" data-decide="${p.id}" data-s="قيد المراجعة">إرجاع</button>` : ""}</div><input type="text" class="plain" style="width:200px" data-dnote="${p.id}" placeholder="ملاحظة للموظف (اختياري)" aria-label="ملاحظة القرار">` : '<span class="note">-</span>'}
-    ${p.decisionNote ? `<div class="note">${esc(p.decisionNote)}</div>` : ""}</td></tr>`; }).join("") || '<tr><td colspan="10" class="note">مفيش طلبات هنا.</td></tr>'}
+    <td>${canDecide(p) ? `<div class="row nowrap"><button class="btn ok" data-decide="${p.id}" data-s="معتمد">موافقة</button><button class="btn danger" data-decide="${p.id}" data-s="مرفوض">رفض</button>${p.rawStatus !== "pending" ? `<button class="btn" data-decide="${p.id}" data-s="قيد المراجعة">إرجاع</button>` : ""}</div><input type="text" class="plain" style="width:200px" data-dnote="${p.id}" placeholder="ملاحظة للموظف (اختياري)" aria-label="ملاحظة القرار">` : '<span class="note">-</span>'}
+    ${p.decisionNote ? `<div class="note">${esc(p.decisionNote)}</div>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="10">${empty("clipboard-check", "مفيش طلبات هنا", "غيّر (عرض) لـ (الكل) عشان تشوف الطلبات اللي اتقرر فيها.")}</td></tr>`}
   </tbody></table></div>
   ${R.admin ? `<div class="card"><h2>تسجيل إذن أو إجازة لموظف (مدير النظام)</h2><form class="add" id="permForm">
     <label>الموظف<select name="code" required>${empOpts("", "اختار")}</select></label>
@@ -554,7 +649,7 @@ function meet(ym) {
   ${list.map((m) => `<tr><td>${fmtDate(m.date)}</td><td>${esc(nameOf(m.code))}</td><td>${to12(toMin(m.tFrom))} - ${to12(toMin(m.tTo))}</td><td>${esc(m.kind)}</td><td>${esc(m.client)}</td><td dir="ltr">${esc(m.phone)}</td><td>${esc(m.project)}</td><td>${esc(m.place)} ${mapLink(m.lat, m.lng)}</td><td>${esc(m.source)}</td>
     <td>${canWrite ? `<select data-mres="${m.id}">${opts(RESULTS, m.result, "-")}</select>` : esc(m.result)}</td><td>${m.follow ? fmtDate(m.follow) : ""}</td>
     <td>${canWrite ? `<select data-mstat="${m.id}">${opts(STATUSES, m.status)}</select>` : pill(m.status)}</td><td>${esc(m.note)}</td>
-    ${canWrite ? `<td><button class="btn danger" data-mdel="${m.id}">حذف</button></td>` : ""}</tr>`).join("") || '<tr><td colspan="14" class="note">مفيش اجتماعات في الشهر ده.</td></tr>'}
+    ${canWrite ? `<td><button class="btn danger" data-mdel="${m.id}">حذف</button></td>` : ""}</tr>`).join("") || `<tr><td colspan="14">${empty("briefcase", "مفيش اجتماعات الشهر ده")}</td></tr>`}
   </tbody></table></div>`;
 }
 
@@ -562,14 +657,14 @@ function upload() {
   const counts = Object.entries(S.punches).map(([c, l]) => [c, l.length]);
   return `<div class="card"><h2>رفع كشف البصمة</h2>
     <p class="note">ارفع ملف التصدير من جهاز البصمة (.xls زي ملف سبتمبر، أو CSV). البصمات المتكررة مش بتتضاف مرتين.${R.admin ? " الأكواد الجديدة بتتضاف للموظفين." : " لو فيه أكواد جديدة، مدير النظام هيضيفهم للموظفين."}</p>
-    <div class="row"><input type="file" id="imp" accept=".xls,.csv,.txt"><span class="note" id="impMsg"></span></div></div>
+    <div class="row"><input type="file" id="imp" accept=".xls,.csv,.txt" aria-label="ملف البصمة"><span class="note" id="impMsg"></span></div></div>
   <div class="card"><h2>بصمات الشهر ده</h2><p class="note">${counts.reduce((a, [, n]) => a + n, 0)} بصمة لـ ${counts.length} كود. آخر يوم فيه بصمات: ${LAST || "-"}.</p></div>`;
 }
 
 function sum(ym) {
   const sums = staff().map((e) => E.summary(e, ym));
   const T = (k) => sums.reduce((a, s) => a + s[k], 0);
-  return `<div class="row"><p class="note" style="margin-inline-end:auto">ملخص الحضور حسب بصمات الجهاز وقواعد الإعدادات.</p><button class="btn" id="exportSum">تصدير CSV</button></div>
+  return `<div class="row"><p class="note spacer">ملخص الحضور حسب بصمات الجهاز وقواعد الإعدادات.</p><button class="btn" id="exportSum">تصدير CSV</button></div>
   <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>أيام العمل</th><th>حضور</th><th>غياب</th><th>إجازات</th><th>تأخير (مرات)</th><th>تأخير (دقائق)</th><th>انصراف مبكر</th><th>بصمة ناقصة</th><th>أذونات (س)</th><th>اجتماعات</th><th>حجوزات</th><th>الالتزام</th><th>أيام الخصم</th></tr></thead><tbody>
   ${sums.map((s) => { const p = s.commit == null ? null : Math.round(s.commit * 100); return `<tr><td>${esc(s.e.code)}</td><td><button class="btn" style="padding:2px 8px" data-emp="${esc(s.e.code)}">${esc(empName(s.e))}</button></td><td>${esc(teamOf(s.e.teamId)?.name || "")}</td>
     <td class="num">${s.req}</td><td class="num">${s.pres}</td><td class="num">${s.abs ? `<span class="pill ${s.abs >= 2 ? "p-bad" : "p-warn"}">${s.abs}</span>` : 0}</td><td class="num">${s.lv}</td><td class="num">${s.latec}</td><td class="num">${s.latem}</td><td class="num">${s.earlyc}</td><td class="num">${s.miss}</td>
@@ -598,8 +693,8 @@ function pay(ym) {
     <div class="kpi"><span>إجمالي الاستحقاقات</span><b>${money(T(all, "earn"))}</b></div>
     <div class="kpi bad"><span>إجمالي الاستقطاعات</span><b>${money(T(all, "ded"))}</b></div></div>
   ${noAcc ? `<div class="banner">فيه ${noAcc} موظف طريقة صرفهم بنك ومالهمش رقم حساب. <button class="btn" data-payf="noacc">اعرضهم</button></div>` : ""}
-  <div class="row"><label class="row" style="gap:6px">عرض <select id="payFilter">${opts([["bank", "تحويل بنكي"], ["cash", "نقدي"], ["noacc", "بنك من غير رقم حساب"], ["diff", "أيام الخصم مختلفة عن الحضور"]], payFilter, "الكل")}</select></label>
-    <span style="margin-inline-end:auto"></span><button class="btn" id="exportPay">كشف المرتبات CSV</button><button class="btn" id="exportBank">ملف التحويل البنكي CSV</button><button class="btn" id="exportCash">كشف النقدي CSV</button></div>
+  <div class="row"><label class="row field-inline">عرض <select id="payFilter">${opts([["bank", "تحويل بنكي"], ["cash", "نقدي"], ["noacc", "بنك من غير رقم حساب"], ["diff", "أيام الخصم مختلفة عن الحضور"]], payFilter, "الكل")}</select></label>
+    <span class="spacer"></span><button class="btn" id="exportPay">كشف المرتبات CSV</button><button class="btn" id="exportBank">ملف التحويل البنكي CSV</button><button class="btn" id="exportCash">كشف النقدي CSV</button></div>
   <p class="note">سعر اليوم = الراتب ÷ ${E.st.workDays}. أيام الخصم المعتمدة من كشف المرتبات، ولو فاضية بتتحسب من الحضور. الصافي بيتقرب لأقرب 5 جنيه.</p>
   <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الوظيفة</th><th>الراتب</th><th>سعر اليوم</th><th>عمولات</th><th>مردودات</th><th>الاستحقاقات</th><th>أيام الخصم المعتمدة</th><th>خصم التأخير</th><th>خصم مبلغ ثابت</th><th>خصومات إدارية</th><th>خصومات الأيام</th><th>تطبيق اللائحة</th><th>سلف</th><th>جزاءات / منح النظام</th><th>الاستقطاعات</th><th>الصافي</th><th>طريقة الصرف</th><th>رقم الحساب</th><th>ملاحظة</th></tr></thead><tbody>
   ${rows.map((r) => { const c = esc(r.e.code), diff = r.appr != null && Math.abs(r.appr - r.s.ddays) > 0.001; return `<tr><td>${c}</td><td>${esc(empName(r.e))}</td><td>${esc(r.e.job)}</td>
@@ -621,7 +716,7 @@ function emp() {
   if (empFilter === "exempt") list = list.filter((e) => e.exempt);
   if (empFilter === "noteam") list = list.filter((e) => !has(e.teamId));
   const teamOpts = (sel) => opts(S.teams.map((t) => [t.id, t.name]), sel, "بدون فريق");
-  return `<div class="row"><label class="row" style="gap:6px">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
+  return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
   <p class="note">أي تعديل بيتحفظ على طول. الفرق ومديرينها بتتعدل من (الإعدادات والفرق).</p></div>
   <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
   ${list.map((e) => { const c = esc(e.code); return `<tr class="${!e.name?.trim() ? "missing-name" : ""}${e.active === false ? " off" : ""}"><td>${c}</td>
@@ -645,7 +740,7 @@ function emp() {
 function settings() {
   const st = E.st;
   const tierT = (k, label) => `<div class="card"><h2>${label}</h2><table><thead><tr><th>من (دقيقة)</th><th>الخصم (يوم)</th><th></th></tr></thead><tbody>
-    ${st[k].map((t, i) => `<tr><td><input type="number" min="0" data-tier="${k}" data-i="${i}" data-j="0" value="${t[0]}"></td><td><input type="number" step="0.25" min="0" data-tier="${k}" data-i="${i}" data-j="1" value="${t[1]}"></td><td>${i ? `<button class="btn danger" data-tdel="${k}" data-i="${i}">حذف</button>` : ""}</td></tr>`).join("")}
+    ${st[k].map((t, i) => `<tr><td><input type="number" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="0" value="${t[0]}" aria-label="${label}: الشريحة ${i + 1} من دقيقة"></td><td><input type="number" step="0.25" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="1" value="${t[1]}" aria-label="${label}: الشريحة ${i + 1} الخصم بالأيام"></td><td>${i ? `<button class="btn danger sm" data-tdel="${k}" data-i="${i}">حذف</button>` : ""}</td></tr>`).join("")}
     </tbody></table><div><button class="btn" data-tadd="${k}">إضافة شريحة</button></div></div>`;
   const members = (id) => S.employees.filter((e) => String(e.teamId) === String(id));
   const linked = new Set(S.users.map((u) => u.code).filter(Boolean));
@@ -662,18 +757,18 @@ function settings() {
     <textarea id="invMsg" rows="6" readonly style="width:100%">${esc(inviteText(INVITE))}</textarea>
     <div class="row"><button class="btn" id="invCopy">نسخ الرسالة</button><a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(inviteText(INVITE))}">إرسال واتساب</a></div></div>` : ""}
   <details><summary>الموظفين اللي لسه ملهمش حساب (${S.employees.filter((e) => e.active !== false && !linked.has(e.code)).length})</summary>
-    <div class="tbl" style="border:0"><table><tbody>${S.employees.filter((e) => e.active !== false && !linked.has(e.code)).map((e) => `<tr><td>${esc(e.code)}</td><td>${esc(empName(e))}</td><td>${invOf(e.code) ? `<span class="pill p-warn">اتبعتله كود ينتهي ${fmtDate(invOf(e.code).expiresAt.slice(0, 10))}</span>` : '<span class="pill p-mute">مفيش كود</span>'}</td></tr>`).join("")}</tbody></table></div></details></div>
+    <div class="tbl flat"><table><tbody>${S.employees.filter((e) => e.active !== false && !linked.has(e.code)).map((e) => `<tr><td>${esc(e.code)}</td><td>${esc(empName(e))}</td><td>${invOf(e.code) ? `<span class="pill p-warn">اتبعتله كود ينتهي ${fmtDate(invOf(e.code).expiresAt.slice(0, 10))}</span>` : '<span class="pill p-mute">مفيش كود</span>'}</td></tr>`).join("")}</tbody></table></div></details></div>
 
   <div class="card"><h2>لائحة الشركة</h2>
   <p class="note">كل بند ليه جزاء حسب عدد مرات تكراره في نفس الشهر. اكتب الجزاءات بالترتيب مفصولة بفاصلة، مثال: <b>إنذار، 0.25 يوم، 0.5 يوم، 1 يوم</b> أو <b>200 جنيه</b>. الموظف بيشوف اللائحة كاملة في صفحته.</p>
-  <div class="tbl" style="border:0"><table><thead><tr><th>رقم</th><th>التصنيف</th><th>البند</th><th>التفاصيل</th><th>الجزاء بالتكرار</th><th>مفعّل</th><th></th></tr></thead><tbody>
+  <div class="tbl flat"><table><thead><tr><th>رقم</th><th>التصنيف</th><th>البند</th><th>التفاصيل</th><th>الجزاء بالتكرار</th><th>مفعّل</th><th></th></tr></thead><tbody>
   ${S.policy.map((p) => `<tr><td><input type="text" data-pol="${p.id}" data-f="ref" value="${esc(p.ref)}" style="width:60px" aria-label="رقم"></td>
     <td><input type="text" data-pol="${p.id}" data-f="category" value="${esc(p.category)}" style="width:110px" aria-label="التصنيف"></td>
     <td><input type="text" data-pol="${p.id}" data-f="title" value="${esc(p.title)}" style="width:200px" aria-label="البند"></td>
     <td><input type="text" data-pol="${p.id}" data-f="body" value="${esc(p.body)}" style="width:260px" aria-label="التفاصيل"></td>
     <td><input type="text" data-pol="${p.id}" data-f="steps" value="${esc(p.steps.map(stepText).join("، "))}" style="width:220px" aria-label="الجزاء"></td>
     <td class="num"><input type="checkbox" data-pol="${p.id}" data-f="active"${p.active ? " checked" : ""} aria-label="مفعّل"></td>
-    <td><button class="btn danger" data-poldel="${p.id}">حذف</button></td></tr>`).join("") || '<tr><td colspan="7" class="note">مفيش بنود لسه.</td></tr>'}
+    <td><button class="btn danger" data-poldel="${p.id}">حذف</button></td></tr>`).join("") || `<tr><td colspan="7">${empty("file-text", "مفيش بنود لسه", "ضيف أول بند من الفورم اللي تحت.")}</td></tr>`}
   </tbody></table></div>
   <form class="add" id="polForm"><label>رقم البند<input type="text" name="ref"></label><label>التصنيف<input type="text" name="category" placeholder="مواعيد / سلوك / عملاء"></label>
     <label>البند<input type="text" name="title" required></label><label>الجزاء بالتكرار<input type="text" name="steps" placeholder="إنذار، 0.25 يوم، 0.5 يوم"></label>
@@ -683,7 +778,7 @@ function settings() {
   <div class="card"><h2>موقع المكتب</h2>
   <p class="note">بيُستخدم عشان تسجيل التواجد يبين (داخل المكتب) أو المسافة منه. افتح الصفحة من المكتب واضغط الزرار.</p>
   <div class="row"><span>${o.lat ? `${Number(o.lat).toFixed(5)}, ${Number(o.lng).toFixed(5)} ${mapLink(o.lat, o.lng)}` : "مش متحدد"}</span>
-    <label class="row" style="gap:6px">نطاق المكتب (متر)<input type="number" min="20" step="10" data-office="radius" value="${o.radius || 150}" style="width:90px"></label>
+    <label class="row field-inline">نطاق المكتب (متر)<input type="number" min="20" step="10" data-office="radius" value="${o.radius || 150}" style="width:90px"></label>
     <button class="btn" id="setOffice">استخدم موقعي الحالي</button></div></div>
 
   <div class="card"><h2>سجل التعديلات</h2><p class="note">كل تعديل في المرتبات والموظفين والجزاءات والصلاحيات واللائحة بيتسجل باسم اللي عمله.</p>
@@ -692,7 +787,7 @@ function settings() {
   <div class="card"><h2>فحص الاتصال</h2><p class="note">لو الأرقام صفر أو فيه حاجة مش ظاهرة، اضغط الزرار وابعت صورة النتيجة.</p><div><button class="btn" id="diag">فحص الاتصال</button></div><div id="diagOut"></div></div>
   <div class="card"><h2>الفرق</h2>
   <p class="note">مدير الفريق بيوافق أو يرفض طلبات فريقه، وبيشوف حضورهم. لازم كمان يكون حسابه عليه دور (مدير فريق) تحت.</p>
-  <div class="tbl" style="border:0"><table><thead><tr><th>الفريق</th><th>المدير</th><th>عدد الأفراد</th><th></th></tr></thead><tbody>
+  <div class="tbl flat"><table><thead><tr><th>الفريق</th><th>المدير</th><th>عدد الأفراد</th><th></th></tr></thead><tbody>
   ${S.teams.map((t) => `<tr><td><input type="text" data-team="${t.id}" data-f="name" value="${esc(t.name)}" style="width:160px"></td>
     <td><select data-team="${t.id}" data-f="manager">${empOpts(t.manager, "بدون مدير")}</select></td><td class="num">${members(t.id).length}</td>
     <td><button class="btn danger" data-teamdel="${t.id}">حذف</button></td></tr>`).join("")}
@@ -701,7 +796,7 @@ function settings() {
 
   <div class="card"><h2>المستخدمين والصلاحيات</h2>
   <p class="note">أي حد يعمل حساب من صفحة الدخول بيظهر هنا من غير صلاحيات. اربطه بكود الموظف بتاعه، وعلّم الأدوار اللي ليه. الموظف العادي مش محتاج أي دور: بيبعت طلباته ويشوف حضوره بس.</p>
-  <div class="tbl" style="border:0"><table><thead><tr><th>الإيميل</th><th>الاسم</th><th>كود الموظف</th>${ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
+  <div class="tbl flat"><table><thead><tr><th>الإيميل</th><th>الاسم</th><th>كود الموظف</th>${ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
   ${S.users.map((u) => `<tr class="${!u.code && !u.roles.length ? "missing-name" : ""}"><td dir="ltr">${esc(u.email)}</td><td>${esc(u.name)}</td>
     <td><select data-user="${esc(u.id)}" data-f="code">${empOpts(u.code, "غير مربوط")}</select></td>
     ${ROLES.map(([r]) => `<td class="num"><input type="checkbox" data-user="${esc(u.id)}" data-role="${r}"${u.roles.includes(r) ? " checked" : ""}${u.id === ME.id && r === "admin" ? " disabled" : ""} aria-label="${r}"></td>`).join("")}
@@ -718,7 +813,7 @@ function settings() {
   <div class="row"><span class="note">الإجازة الأسبوعية:</span>${DAYS.map((d, i) => `<label class="row" style="gap:4px"><input type="checkbox" data-wk="${i}"${st.weekend.includes(i) ? " checked" : ""}>${d}</label>`).join("")}</div></div>
   <div class="tiers">${tierT("lateTiers", "شرائح خصم التأخير")}${tierT("earlyTiers", "شرائح خصم الانصراف المبكر")}
   <div class="card"><h2>الإجازات الرسمية</h2>${(st.holidays || []).slice().sort().map((h) => `<div class="row"><span>${h.split("-").reverse().join("/")}</span><button class="btn danger" data-hdel="${h}">حذف</button></div>`).join("")}
-    <div class="row"><input type="date" id="hNew"><button class="btn" id="hAdd">إضافة</button></div></div></div>`;
+    <div class="row"><input type="date" id="hNew" aria-label="تاريخ الإجازة الرسمية الجديدة"><button class="btn" id="hAdd">${icon("plus")}إضافة</button></div></div></div>`;
 }
 
 const SITE = location.origin + location.pathname;
@@ -733,8 +828,8 @@ function auditView() {
     return Object.keys(a.new || {}).filter((k) => JSON.stringify(a.old?.[k]) !== JSON.stringify(a.new[k]) && k !== "token_hash")
       .map((k) => `${esc(k)}: ${esc(JSON.stringify(a.old?.[k] ?? "")).slice(0, 40)} ← ${esc(JSON.stringify(a.new[k] ?? "")).slice(0, 40)}`).join("<br>");
   };
-  return `<div class="tbl" style="border:0;max-height:420px"><table><thead><tr><th>الوقت</th><th>مين</th><th>الجدول</th><th>العملية</th><th>الكود</th><th>التغيير</th></tr></thead><tbody>
-  ${AUDIT.map((a) => `<tr><td>${fmtTs(a.at)}</td><td dir="ltr">${esc(who(a.actor))}</td><td>${TBL_AR[a.tbl] || esc(a.tbl)}</td><td>${OP_AR[a.op] || a.op}</td><td>${esc((a.new || a.old || {}).code || (a.new || a.old || {}).employee_code || "")}</td><td style="white-space:normal">${diff(a)}</td></tr>`).join("")}
+  return `<div class="tbl flat" style="max-height:420px"><table><thead><tr><th>الوقت</th><th>مين</th><th>الجدول</th><th>العملية</th><th>الكود</th><th>التغيير</th></tr></thead><tbody>
+  ${AUDIT.map((a) => `<tr><td>${fmtTs(a.at)}</td><td dir="ltr">${esc(who(a.actor))}</td><td>${TBL_AR[a.tbl] || esc(a.tbl)}</td><td>${OP_AR[a.op] || a.op}</td><td>${esc((a.new || a.old || {}).code || (a.new || a.old || {}).employee_code || "")}</td><td class="wrap">${diff(a)}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 // "إنذار، 0.25 يوم، 200 جنيه" <-> [{kind:"warning"},{kind:"days",value:0.25},{kind:"amount",value:200}]
@@ -763,8 +858,18 @@ const saveSettings = (mut) => act(async () => { const d = settingsData(); mut(d)
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button"); if (!t || busy) return;
   const d = t.dataset;
-  if (d.tab) { go(d.tab); return; }
-  if (d.go) { go(d.go); return; }
+  if (d.tab || d.go) {
+    const sheet = $("#moreSheet"); if (sheet.open) sheet.close();
+    await go(d.tab || d.go);
+    if (d.tab) $("#main").focus({ preventScroll: true });
+    window.scrollTo({ top: 0 });
+    return;
+  }
+  if (t.id === "moreBtn") { $("#moreSheet").showModal(); $("#moreSheet .nav-item")?.focus(); return; }
+  if (t.id === "menuBtn") { toggleMenu(); return; }
+  if (d.themeSet) { setTheme(d.themeSet); return; }
+  if (d.tip != null) { const box = $("#calTip"); if (box) box.textContent = d.tip; return; }
+  if (t.id === "pwToggle") { const i = $("#loginForm [name=password]"), on = i.type === "password"; i.type = on ? "text" : "password"; t.setAttribute("aria-pressed", String(on)); t.setAttribute("aria-label", on ? "إخفاء الباسورد" : "إظهار الباسورد"); t.innerHTML = icon(on ? "eye-off" : "eye"); return; }
   if (t.id === "loadComp") { t.disabled = true; t.textContent = "جاري التحميل..."; try { await loadComparison(); } catch (e) { toast(errMsg(e), true); COMP = null; } render(); return; }
   if (t.id === "liveNow") { loadLive(); return; }
   if (t.id === "loadAudit") { try { AUDIT = await db.audit(200); } catch (e) { toast(errMsg(e), true); } render(); return; }
@@ -781,17 +886,17 @@ document.addEventListener("click", async (ev) => {
   if (d.mdec) { const note = document.querySelector(`[data-mnote="${d.mdec}"]`)?.value || ""; act(async () => { await db.decideMeeting(Number(d.mdec), d.s, note); LIVE = null; }, d.s === "معتمد" ? "اتعتمد الاجتماع" : "اترفض الاجتماع"); return; }
   if (d.chkdel) { act(() => db.deleteCheckin(Number(d.chkdel)), "اتلغى التسجيل"); return; }
   if (d.mymdel) { act(() => db.deleteMeeting(Number(d.mymdel)), "اتسحب الاجتماع"); return; }
-  if (d.poldel) { if (confirm("تحذف البند ده؟")) act(() => db.deletePolicy(Number(d.poldel)), "اتحذف"); return; }
+  if (d.poldel) { if (await ask("تحذف البند ده من اللائحة؟", "الجزاءات اللي اتسجلت عليه قبل كده هتفضل موجودة.", "حذف", true)) act(() => db.deletePolicy(Number(d.poldel)), "اتحذف البند"); return; }
   if (d.emp) { dailyEmp = d.emp; tab = "daily"; render(); return; }
   if (d.payf) { payFilter = d.payf; render(); return; }
   if (t.id === "diag") {
     const box = $("#diagOut"); box.textContent = "جاري الفحص...";
     const rows = await db.diagnose(S.meta.month);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
-    box.innerHTML = `<div class="tbl" style="border:0"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td style="white-space:normal" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
+    box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
     return;
   }
-  if (t.id === "refresh") { LAST = await db.lastPunchDay().catch(() => LAST); refresh(); return; }
+  if (t.id === "refresh") { closeMenu(); LAST = await db.lastPunchDay().catch(() => LAST); await refresh(); toast("البيانات اتحدثت"); return; }
   if (t.id === "logout" || t.id === "logout2") { await db.signOut(); location.reload(); return; }
   if (t.id === "claim") { try { const ok = await db.claimAdmin(); if (ok) location.reload(); else toast("فيه مدير نظام بالفعل. اطلب منه يفعّل حسابك.", true); } catch (e) { toast(errMsg(e), true); } return; }
   if (d.decide) { const note = document.querySelector(`[data-dnote="${d.decide}"]`)?.value || ""; act(() => db.decideRequest(Number(d.decide), d.s, note), d.s === "معتمد" ? "اتوافق على الطلب" : d.s === "مرفوض" ? "اترفض الطلب" : "رجع للمراجعة"); return; }
@@ -852,8 +957,10 @@ document.addEventListener("submit", async (ev) => {
   const f = ev.target, v = Object.fromEntries(new FormData(f));
   if (f.id === "loginForm") return login(v);
   if (f.id === "inviteForm") {
-    try { const name = await db.redeemInvite(v.token); if (name) { toast(`أهلاً ${name}`); setTimeout(() => location.reload(), 800); } else toast("الكود غلط أو مستخدم أو انتهى. اطلب كود جديد من الإدارة.", true); }
-    catch (e) { toast(/too many/.test(e.message) ? "محاولات كتير غلط. استنى ساعة وجرب تاني." : /already/.test(e.message) ? "الموظف ده ليه حساب بالفعل." : errMsg(e), true); }
+    const err = $("#invErr"), btn = f.querySelector("button[type=submit]"); err.textContent = ""; btn.disabled = true;
+    try { const name = await db.redeemInvite(v.token); if (name) { toast(`أهلاً ${name}، حسابك اتفعل`); setTimeout(() => location.reload(), 800); return; } err.textContent = "الكود غلط أو اتستخدم قبل كده أو انتهى. اطلب كود جديد من الإدارة."; }
+    catch (e) { err.textContent = /too many/.test(e.message) ? "محاولات كتير غلط. استنى ساعة وجرب تاني." : /already/.test(e.message) ? "الموظف ده ليه حساب بالفعل. لو ده انت، كلم الإدارة." : errMsg(e); }
+    btn.disabled = false; f.token.focus();
     return;
   }
   if (f.classList.contains("cform")) { const body = v.body.trim(); if (!body) return; const tbl = f.dataset.ct, id = Number(f.dataset.cid); try { await db.addComment(tbl, id, body); await loadThreads(tbl, [id]); render(); } catch (e) { toast(errMsg(e), true); } return; }
@@ -897,7 +1004,7 @@ function actHint(form) {
 async function checkIn(v) {
   const btn = $("#checkBtn"); btn.disabled = true; btn.textContent = "بحدد موقعك...";
   let pos = null;
-  try { pos = await locate(); } catch (e) { if (!confirm(`${e.message}.\nتسجل من غير موقع؟`)) { btn.disabled = false; btn.textContent = "سجل موقعي دلوقتي"; return; } }
+  try { pos = await locate(); } catch (e) { if (!(await ask("مقدرتش أحدد موقعك", `${e.message}. تحب تسجل من غير موقع؟`, "سجل من غير موقع"))) { btn.disabled = false; btn.textContent = "سجل موقعي دلوقتي"; return; } }
   try {
     let meetingId = null;
     if (v.kind === "meeting" && v.client.trim()) {
@@ -912,19 +1019,45 @@ async function checkIn(v) {
 }
 
 async function login(v) {
-
-  const btn = $("#loginBtn"); btn.disabled = true;
+  const btn = $("#loginBtn"), err = $("#loginErr"), label = btn.textContent;
+  err.textContent = "";
+  if (!/^\S+@\S+\.\S+$/.test(v.email.trim())) { err.textContent = "اكتب إيميل صحيح."; $("#loginForm [name=email]").focus(); return; }
+  if (v.password.length < 8) { err.textContent = "الباسورد لازم يكون 8 حروف أو أكتر."; $("#loginForm [name=password]").focus(); return; }
+  btn.disabled = true; btn.textContent = "لحظة...";
   try {
     if (v.mode === "signup") { await db.signUp(v.email.trim(), v.password, v.name?.trim() || ""); }
     await db.signIn(v.email.trim(), v.password);
     location.reload();
   } catch (e) {
-    toast(v.mode === "signup" ? `مقدرتش أعمل الحساب: ${e.message || e}` : "الإيميل أو الباسورد غلط.", true);
-  } finally { btn.disabled = false; }
+    err.textContent = v.mode === "signup" ? `مقدرتش أعمل الحساب: ${e.message || e}` : "الإيميل أو الباسورد غلط. جرب تاني.";
+  } finally { btn.disabled = false; btn.textContent = label; }
 }
 document.addEventListener("input", (ev) => {
-  if (ev.target.name === "mode") { const signup = ev.target.value === "signup"; $("#nameRow").hidden = !signup; $("#loginBtn").textContent = signup ? "إنشاء الحساب" : "دخول"; }
+  if (ev.target.name === "mode") {
+    const signup = ev.target.value === "signup";
+    $("#nameRow").hidden = !signup; $("#pwHint").hidden = !signup;
+    $("#loginBtn").textContent = signup ? "إنشاء الحساب" : "دخول";
+    $("#loginForm [name=password]").autocomplete = signup ? "new-password" : "current-password";
+  }
 });
+
+// header menu: theme, refresh, sign out
+function toggleMenu(force) {
+  const pop = $("#menuPop"), b = $("#menuBtn"), open = force ?? pop.hidden;
+  pop.hidden = !open; b.setAttribute("aria-expanded", String(open));
+  if (open) { syncTheme(); pop.querySelector("button")?.focus(); }
+}
+const closeMenu = () => { if (!$("#menuPop").hidden) toggleMenu(false); };
+function setTheme(t) {
+  try { if (t === "auto") localStorage.removeItem("hr-theme"); else localStorage.setItem("hr-theme", t); } catch { /* storage blocked: applies for this visit only */ }
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  syncTheme();
+}
+function syncTheme() { const cur = document.documentElement.dataset.theme || "auto"; document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === cur))); }
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#menuPop").hidden) { toggleMenu(false); $("#menuBtn").focus(); } });
+document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu")) closeMenu(); });
+$("#moreSheet").addEventListener("click", (ev) => { if (ev.target === ev.currentTarget) ev.currentTarget.close(); });
+
 
 async function importFile(file) {
   const msg = $("#impMsg");
