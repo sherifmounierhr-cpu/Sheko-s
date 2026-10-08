@@ -302,7 +302,7 @@ function home(ym) {
   const grace = (st.lateTiers.find((t) => t[1] > 0)?.[0] ?? 1) - 1;
   const pct = Math.round((r.elapsed / r.total) * 100);
   return `
-  <div class="card hero">
+  <div class="card hero"><img class="wm" src="img/mark-white.png" alt="">
     <div class="row"><div class="spacer"><h2>أهلاً ${esc(empName(e))}</h2><div class="note" data-date></div></div><b class="clock tabnum" data-clock aria-hidden="true"></b></div>
     <div><div class="note">المستحق لحد ${r.upTo ? fmtDate(r.upTo) : "دلوقتي"} (تقديري)</div><div class="big tabnum">${money(r.netToDate)} <small>جنيه</small></div></div>
     <div><span class="track" role="progressbar" aria-label="أيام الشهر اللي عدت" aria-valuemin="0" aria-valuemax="${r.total}" aria-valuenow="${r.elapsed}"><i style="width:${pct}%"></i></span>

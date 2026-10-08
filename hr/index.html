@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.neon.tech; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#0f5e6e">
+<meta name="theme-color" content="#0f7e76">
+<link rel="icon" type="image/png" href="img/mark-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <title>Everest HR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,15 +18,15 @@
 <body>
 <a class="skip" href="#main">انتقل للمحتوى</a>
 
-<div class="gate" id="view-setup" hidden><div class="art"><h2>Everest HR</h2></div><div class="pane"><div class="card">
+<div class="gate" id="view-setup" hidden><div class="art"><img class="logo" src="img/logo-white.png" alt="" width="480" height="241"><h2>Everest HR</h2></div><div class="pane"><div class="card">
   <h1>Everest HR</h1>
   <p class="note">الموقع لسه مش متوصل بقاعدة البيانات. اكتب رابط Neon Auth ورابط Data API في الملف <code>hr/js/config.js</code>.</p>
 </div></div></div>
 
 <div class="gate" id="view-login" hidden>
-  <div class="art"><h2>حضورك ومرتبك وطلباتك في مكان واحد</h2><p>Everest Real Estate</p></div>
+  <div class="art"><img class="logo" src="img/logo-white.png" alt="Everest" width="480" height="241"><h2>حضورك ومرتبك وطلباتك في مكان واحد</h2><p>Everest Real Estate Marketing &amp; Brokerage</p></div>
   <div class="pane"><div class="card">
-    <div class="brand"><span class="mark" aria-hidden="true">E</span><h1>Everest HR</h1></div>
+    <div class="brand"><img class="logo on-light" src="img/logo.png" alt="Everest" width="480" height="241"><img class="logo on-dark" src="img/logo-white.png" alt="Everest" width="480" height="241"><h1 class="hr">HR</h1></div>
     <form id="loginForm" novalidate>
       <div class="seg" role="radiogroup" aria-label="نوع الدخول">
         <label><input type="radio" name="mode" value="signin" checked> عندي حساب</label>
@@ -42,7 +44,7 @@
 </div>
 
 <div class="gate" id="view-pending" hidden>
-  <div class="art"><h2>خطوة واحدة وتبدأ</h2><p>الإدارة بعتتلك كود تفعيل على واتساب. اكتبه هنا وحسابك هيتربط ببياناتك.</p></div>
+  <div class="art"><img class="logo" src="img/logo-white.png" alt="Everest" width="480" height="241"><h2>خطوة واحدة وتبدأ</h2><p>الإدارة بعتتلك كود تفعيل على واتساب. اكتبه هنا وحسابك هيتربط ببياناتك.</p></div>
   <div class="pane"><div class="card">
     <h1>فعّل حسابك</h1>
     <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف.</p>
@@ -57,7 +59,7 @@
 
 <div id="view-app" hidden>
   <header class="app-head"><div class="in">
-    <div class="brand"><span class="mark" aria-hidden="true">E</span><div><h1>Everest HR</h1><div class="who" id="who"></div></div></div>
+    <div class="brand"><img class="logo on-light" src="img/logo.png" alt="Everest" width="480" height="241"><img class="logo on-dark" src="img/logo-white.png" alt="Everest" width="480" height="241"><div><h1 class="hr">HR</h1><div class="who" id="who"></div></div></div>
     <label class="month"><span>الشهر</span><select id="month"></select></label>
     <div class="menu">
       <button class="btn icon-only" id="menuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop" aria-label="القائمة"><svg class="ic" aria-hidden="true"><use href="icons.svg#menu-2"/></svg></button>

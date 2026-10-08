@@ -3,37 +3,37 @@
    only, so the RTL layout mirrors correctly. */
 
 :root {
-  --bg: #f4f7f8; --surface: #ffffff; --sunken: #eaf0f2; --line: #d3dee2; --line-strong: #b7c7cd;
-  --ink: #10262c; --muted: #4c636c;
-  --accent: #0f5e6e; --accent-strong: #0b4a57; --accent-ink: #ffffff; --accent-soft: #dbeef1;
-  --ok: #1b6e45; --ok-soft: #dcf1e5; --warn: #8a5a00; --warn-soft: #fbefd2;
+  --bg: #f4f7f7; --surface: #ffffff; --sunken: #e9f0ef; --line: #d2dfdd; --line-strong: #b5c8c5;
+  --ink: #0f2624; --muted: #4b625f;
+  --accent: #0f7e76; --accent-strong: #0b5f58; --accent-ink: #ffffff; --accent-soft: #dcf0ed;
+  --brand-green: #54ac47; --ok: #2a6f23; --ok-soft: #e3f3df; --warn: #8a5a00; --warn-soft: #fbefd2;
   --bad: #ab2f25; --bad-soft: #f9dfdb; --info: #4b3fa0; --info-soft: #e7e4f8;
-  --input: #ffffff; --focus: #0f5e6e; --shadow: 0 1px 2px rgb(16 38 44 / .06), 0 4px 16px rgb(16 38 44 / .06);
+  --input: #ffffff; --focus: #0f7e76; --shadow: 0 1px 2px rgb(16 38 44 / .06), 0 4px 16px rgb(16 38 44 / .06);
   --display: "Readex Pro", "IBM Plex Sans Arabic", Tahoma, sans-serif;
   --body: "IBM Plex Sans Arabic", Tahoma, "Segoe UI", sans-serif;
-  --hero-a: #0f5e6e; --hero-b: #0b4250; --hero-ink: #ffffff;
+  --hero-a: #0f7e76; --hero-b: #0a4f49; --hero-ink: #ffffff;
   --r-card: 12px; --r-ctl: 8px;
   --side: 248px; --bar: 64px; --ctl-h: 38px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0d171a; --surface: #132126; --sunken: #1a2c32; --line: #29414a; --line-strong: #3a5761;
-  --ink: #e3eef1; --muted: #9db4bc;
-  --accent: #5cc3d3; --accent-strong: #86d6e2; --accent-ink: #06262c; --accent-soft: #143c44;
-  --ok: #6fd39d; --ok-soft: #15372a; --warn: #e9b75c; --warn-soft: #3a2c10;
+  --bg: #0c1716; --surface: #122221; --sunken: #182d2b; --line: #284340; --line-strong: #375a56;
+  --ink: #e2efed; --muted: #9bb6b2;
+  --accent: #4fc1b6; --accent-strong: #7fd6cc; --accent-ink: #06231f; --accent-soft: #123c38;
+  --brand-green: #54ac47; --ok: #7cd36d; --ok-soft: #173a1f; --warn: #e9b75c; --warn-soft: #3a2c10;
   --bad: #f39087; --bad-soft: #43201c; --info: #b7aef5; --info-soft: #29264f;
-  --input: #0f1c20; --focus: #86d6e2; --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
-  --hero-a: #15515c; --hero-b: #0e333b; --hero-ink: #eaf7f9;
+  --input: #0f1c20; --focus: #7fd6cc; --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
+  --hero-a: #0f4c47; --hero-b: #0a3330; --hero-ink: #eaf7f5;
   color-scheme: dark;
 } }
 :root[data-theme="dark"] {
-  --bg: #0d171a; --surface: #132126; --sunken: #1a2c32; --line: #29414a; --line-strong: #3a5761;
-  --ink: #e3eef1; --muted: #9db4bc;
-  --accent: #5cc3d3; --accent-strong: #86d6e2; --accent-ink: #06262c; --accent-soft: #143c44;
-  --ok: #6fd39d; --ok-soft: #15372a; --warn: #e9b75c; --warn-soft: #3a2c10;
+  --bg: #0c1716; --surface: #122221; --sunken: #182d2b; --line: #284340; --line-strong: #375a56;
+  --ink: #e2efed; --muted: #9bb6b2;
+  --accent: #4fc1b6; --accent-strong: #7fd6cc; --accent-ink: #06231f; --accent-soft: #123c38;
+  --brand-green: #54ac47; --ok: #7cd36d; --ok-soft: #173a1f; --warn: #e9b75c; --warn-soft: #3a2c10;
   --bad: #f39087; --bad-soft: #43201c; --info: #b7aef5; --info-soft: #29264f;
-  --input: #0f1c20; --focus: #86d6e2; --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
-  --hero-a: #15515c; --hero-b: #0e333b; --hero-ink: #eaf7f9;
+  --input: #0f1c20; --focus: #7fd6cc; --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
+  --hero-a: #0f4c47; --hero-b: #0a3330; --hero-ink: #eaf7f5;
   color-scheme: dark;
 }
 @media (pointer: coarse) { :root { --ctl-h: 44px; } }
@@ -109,7 +109,7 @@ main.wrap { max-width: 1240px; margin: 0 auto; padding: 20px 16px calc(var(--bar
   border-radius: var(--r-ctl); cursor: pointer; color: var(--muted); font-weight: 500; text-align: start; }
 .nav-item:hover { background: var(--sunken); color: var(--ink); }
 .nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
-.nav-item[aria-current="page"]::before { content: ""; position: absolute; inset-inline-start: 0; inset-block: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+.nav-item[aria-current="page"]::before { content: ""; position: absolute; inset-inline-start: 0; inset-block: 9px; width: 3px; border-radius: 3px; background: var(--brand-green); }
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
 .nav-group h2 { font-family: var(--body); font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 12px 4px; }
 .badge { margin-inline-start: auto; background: #b3261e; color: #fff; border-radius: 10px; min-width: 20px; height: 20px; padding: 0 6px;
@@ -224,7 +224,7 @@ details > summary { cursor: pointer; }
 .hero .btn { background: rgb(255 255 255 / .14); color: inherit; border-color: rgb(255 255 255 / .35); }
 .hero .btn:hover { background: rgb(255 255 255 / .24); }
 .hero .btn.primary { background: var(--hero-ink); color: var(--hero-b); border-color: var(--hero-ink); }
-.hero .track { background: rgb(255 255 255 / .2); } .hero .track i { background: currentColor; }
+.hero .track { background: rgb(255 255 255 / .2); } .hero .track i { background: var(--brand-green); }
 .hero-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
 .hero-stats div { background: rgb(255 255 255 / .1); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; }
 .hero-stats span { font-size: 12.5px; opacity: .85; } .hero-stats b { font-family: var(--display); font-size: 18px; }
@@ -305,3 +305,14 @@ details > summary { cursor: pointer; }
   .hero .big { font-size: 30px; }
 }
 @media (pointer: fine) { td input, td select { min-height: 32px; padding-block: 2px; } }
+
+/* brand logo */
+.brand .logo { height: 34px; width: auto; display: block; }
+.brand .logo.on-dark { display: none; }
+.brand .hr { font-family: var(--display); font-weight: 700; font-size: 15px; margin: 0; color: var(--accent-strong); border-inline-start: 1px solid var(--line-strong); padding-inline-start: 10px; line-height: 1.2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand .logo.on-light { display: none; } :root:not([data-theme="light"]) .brand .logo.on-dark { display: block; } }
+:root[data-theme="dark"] .brand .logo.on-light { display: none; } :root[data-theme="dark"] .brand .logo.on-dark { display: block; }
+.gate .art .logo { width: min(320px, 70%); height: auto; margin-block-end: auto; }
+.gate .card .brand .logo { height: 44px; }
+.hero { position: relative; overflow: hidden; isolation: isolate; }
+.hero .wm { position: absolute; inset-inline-end: -30px; inset-block-start: -24px; width: 200px; opacity: .08; z-index: -1; pointer-events: none; }
