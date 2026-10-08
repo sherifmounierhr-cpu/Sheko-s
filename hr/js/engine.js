@@ -5,7 +5,7 @@ export const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأ
 
 export const DEFAULT_SETTINGS = {
   in: "11:00", out: "19:00", workDays: 30, weekend: [5], missDed: 0.5, absDed: 1,
-  permAllowH: 2, permUnit: 60, holidays: [],
+  permAllowH: 2, permUnit: 60, holidays: [], maxPenaltyDays: 5,
   lateTiers: [[0, 0], [16, 0.25], [31, 0.5], [61, 1]],
   earlyTiers: [[0, 0], [1, 0.25], [61, 0.5], [121, 1]],
 };
@@ -107,18 +107,41 @@ export function createEngine(S, lastPunchDay) {
       commit: ex ? null : denom > 0 ? onTime / denom : null, ddays: rows.reduce((a, r) => a + r.fin, 0) };
   }
 
+  // approved penalties and bonuses of the month; penalties are capped at maxPenaltyDays of pay
+  const actionsOf = (code, ym) => (S.actions || []).filter((a) => a.code === code && a.status === "approved" && a.day.startsWith(ym));
+  function actionTotals(e, ym, rate) {
+    const list = actionsOf(e.code, ym);
+    const val = (a) => N0(a.days) * rate + N0(a.amount);
+    const penRaw = list.filter((a) => a.kind === "penalty").reduce((x, a) => x + val(a), 0);
+    const cap = N0(st.maxPenaltyDays) > 0 ? N0(st.maxPenaltyDays) * rate : Infinity;
+    const pen = Math.min(penRaw, cap), bonus = list.filter((a) => a.kind === "bonus").reduce((x, a) => x + val(a), 0);
+    return { list, pen, penRaw, capped: penRaw > pen, bonus };
+  }
+
   function payRow(e, ym) {
     const p = S.payroll?.[ym]?.[e.code] || {}, s = summary(e, ym);
     const sal = N0(e.salary), rate = sal / (N0(st.workDays) || 30);
     const appr = has(p.approvedDays) ? Number(p.approvedDays) : null, days = appr ?? s.ddays;
     const late = has(p.lateAmt) ? Number(p.lateAmt) : days * rate;
-    const earn = sal + N0(p.commission) + N0(p.ret);
-    const ded = late + N0(p.adminDed) + N0(p.daysDed) + N0(p.regDed) + N0(p.advance);
+    const A = actionTotals(e, ym, rate);
+    const earn = sal + N0(p.commission) + N0(p.ret) + A.bonus;
+    const ded = late + N0(p.adminDed) + N0(p.daysDed) + N0(p.regDed) + N0(p.advance) + A.pen;
     const net = earn - ded, rnd = Math.round(net / 5) * 5;
-    return { e, p, s, sal, rate, appr, days, late, earn, ded, net, rnd, method: e.pay || (e.account ? "bank" : "cash"), inPay: !!S.payroll?.[ym]?.[e.code] };
+    return { e, p, s, sal, rate, appr, days, late, pen: A.pen, penCapped: A.capped, bonus: A.bonus, actions: A.list,
+      earn, ded, net, rnd, method: e.pay || (e.account ? "bank" : "cash"), inPay: !!S.payroll?.[ym]?.[e.code] };
   }
 
-  return { st, ledger, permUsed, dayRow, summary, payRow, lastDay };
+  // Pay earned so far: salary for the days up to the last fingerprint day,
+  // less what the month's deductions come to by then.
+  function toDate(e, ym) {
+    const r = payRow(e, ym), total = daysIn(ym);
+    const elapsed = !lastDay || lastDay < `${ym}-01` ? 0 : lastDay.slice(0, 7) > ym ? total : Number(lastDay.slice(8, 10));
+    const earned = (r.sal * elapsed) / total;
+    const net = earned + N0(r.p.commission) + N0(r.p.ret) + r.bonus - r.ded;
+    return { ...r, elapsed, total, earned, upTo: elapsed ? `${ym}-${String(elapsed).padStart(2, "0")}` : "", netToDate: net };
+  }
+
+  return { st, ledger, permUsed, dayRow, summary, payRow, toDate, actionsOf, lastDay };
 }
 
 // --- device export parsing (legacy .xls BIFF2/BIFF3 labels, or CSV)

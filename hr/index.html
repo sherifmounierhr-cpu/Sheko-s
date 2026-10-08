@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.neon.tech; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>Everest HR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -97,6 +99,19 @@ form.add .wide{grid-column:1/-1}
 .gate label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 .gate .seg{display:flex;gap:16px}
 .gate .seg label{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+.hero .clock{font-family:var(--display);font-size:26px;font-variant-numeric:tabular-nums}
+.act,.notif{border-top:1px solid var(--line);padding-block:10px;display:flex;flex-direction:column;gap:6px}
+.act:first-of-type,.notif:first-child{border-top:0}
+.notif.new{border-inline-start:3px solid var(--accent);padding-inline-start:10px}
+.thread{display:flex;flex-direction:column;gap:6px;background:var(--sunken);border-radius:8px;padding:8px 10px}
+.thread .cm{background:var(--surface);border-radius:8px;padding:6px 10px;max-width:90%}
+.thread .cm.me{align-self:flex-end;background:var(--accent-soft)}
+fieldset.meetbox{border:1px dashed var(--line);border-radius:8px;padding:8px 12px}
+fieldset.meetbox legend{color:var(--muted);font-size:12.5px;padding-inline:6px}
+details summary{cursor:pointer;padding-block:4px}
+textarea{background:var(--input);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;color:inherit}
+a{color:var(--accent)}
+a.btn{text-decoration:none;color:inherit}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -124,7 +139,8 @@ form.add .wide{grid-column:1/-1}
 
 <div class="gate" id="view-pending" hidden><div class="card">
   <h1>حسابك اتسجل</h1>
-  <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف ومالوش صلاحيات. مدير النظام هيفعّله من صفحة الإعدادات.</p>
+  <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف. اكتب كود التفعيل اللي وصلك من الإدارة.</p>
+  <form id="inviteForm" class="row"><input type="text" name="token" required minlength="6" maxlength="20" autocomplete="one-time-code" dir="ltr" placeholder="كود التفعيل" aria-label="كود التفعيل" style="flex:1;text-transform:uppercase;letter-spacing:2px"><button class="btn primary" type="submit">تفعيل</button></form>
   <div class="row"><button class="btn" id="logout2">خروج</button><button class="btn" id="claim">انا أول مدير للنظام</button></div>
 </div></div>
 
