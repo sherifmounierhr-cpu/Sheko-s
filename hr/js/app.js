@@ -184,7 +184,8 @@ function render() {
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
   const views = { home, inbox, field, live, actions, dash, mine, requests, daily, meet, upload, sum, pay, emp, set: settings };
-  $("#main").innerHTML = `<section class="panel">${views[tab](S.meta.month)}</section>`;
+  const warn = !db.portalReady && R.admin ? `<div class="banner">جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
+  $("#main").innerHTML = `<section class="panel">${warn}${views[tab](S.meta.month)}</section>`;
   tick();
 }
 const actBadge = () => { const n = R.admin ? S.actions.filter((a) => a.status === "pending" || (a.objection && !a.decisionNote)).length : 0; return n ? `<span class="badge">${n}</span>` : ""; };

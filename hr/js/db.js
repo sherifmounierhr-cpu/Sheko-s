@@ -64,6 +64,9 @@ export async function claimAdmin() {
 // ---------------------------------------------------------------- reads
 
 const get = async (query) => check(await query);
+// Portal tables come from neon/002_portal.sql; until it runs the rest of the site still works.
+export let portalReady = true;
+const soft = (p) => p.catch((e) => { if (/schema cache|does not exist|PGRST20/i.test(e.message)) { portalReady = false; return []; } throw e; });
 
 async function all(query) {
   const out = [];
@@ -158,9 +161,9 @@ export async function load(ym, R = {}, only = "") {
     all(() => f(client.from("requests").select("*")).lt("date_from", end).or(`date_to.gte.${start},and(date_to.is.null,date_from.gte.${start})`).order("date_from")),
     all(() => f(client.from("meetings").select("*")).gte("date", start).lt("date", end).order("date")),
     all(() => f(client.from("overrides").select("*")).gte("day", start).lt("day", end)),
-    all(() => f(client.from("actions").select("*")).gte("day", start).lt("day", end).order("day")),
-    all(() => f(client.from("checkins").select("*")).gte("ts", shiftDay(start, -1)).lt("ts", shiftDay(end, 1)).order("ts", { ascending: false })),
-    get(client.from("policy_items").select("*").order("sort").order("id")),
+    soft(all(() => f(client.from("actions").select("*")).gte("day", start).lt("day", end).order("day"))),
+    soft(all(() => f(client.from("checkins").select("*")).gte("ts", shiftDay(start, -1)).lt("ts", shiftDay(end, 1)).order("ts", { ascending: false }))),
+    soft(get(client.from("policy_items").select("*").order("sort").order("id"))),
   ]);
 
   let pay = [], payroll = [], users = [], invites = [];
@@ -169,10 +172,10 @@ export async function load(ym, R = {}, only = "") {
       all(() => f(client.from("employee_pay").select("*"))),
       all(() => f(client.from("payroll").select("*")).eq("month", ym)),
       all(() => client.from("app_users").select("*").order("created_at")),
-      get(client.from("invites").select("employee_code,created_at,expires_at,used_at")),
+      soft(get(client.from("invites").select("employee_code,created_at,expires_at,used_at"))),
     ]);
   } else if (R.code) {
-    const mine = check(await client.rpc("hr_my_pay", { ym }));
+    const mine = await soft(client.rpc("hr_my_pay", { ym }).then(check));
     if (mine) {
       pay = [{ code: R.code, salary: mine.salary, account: mine.account_last4 ? `****${mine.account_last4}` : "", pay_method: mine.pay_method }];
       if (mine.payroll) payroll = [mine.payroll];
