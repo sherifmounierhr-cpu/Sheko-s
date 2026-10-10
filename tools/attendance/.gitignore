@@ -1,0 +1,5 @@
+# Real attendance data stays out of this public repo
+*.xls
+*.xlsx
+*.csv
+state.json

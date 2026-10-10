@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.neon.tech; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0f7e76">
+<link rel="icon" type="image/png" href="img/mark-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<title>Everest HR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css?v=202610101357">
+<script src="js/theme.js?v=202610101357"></script>
+</head>
+<body>
+<a class="skip" href="#main">انتقل للمحتوى</a>
+
+<div class="gate" id="view-setup" hidden><div class="art"><img class="logo" src="img/logo-white.png" alt="" width="480" height="241"><h2>Everest HR</h2></div><div class="pane"><div class="card">
+  <h1>Everest HR</h1>
+  <p class="note">الموقع لسه مش متوصل بقاعدة البيانات. اكتب رابط Neon Auth ورابط Data API في الملف <code>hr/js/config.js</code>.</p>
+</div></div></div>
+
+<div class="gate" id="view-login" hidden>
+  <div class="art"><img class="logo" src="img/logo-white.png" alt="Everest" width="480" height="241"><h2>حضورك ومرتبك وطلباتك في مكان واحد</h2><p>Everest Real Estate Marketing &amp; Brokerage</p></div>
+  <div class="pane"><div class="card">
+    <div class="brand"><img class="logo on-light" src="img/logo.png" alt="Everest" width="480" height="241" style="height:34px;width:auto"><img class="logo on-dark" src="img/logo-white.png" alt="Everest" width="480" height="241" style="height:34px;width:auto"><h1 class="hr">HR</h1></div>
+    <form id="loginForm" novalidate>
+      <div class="seg" role="radiogroup" aria-label="نوع الدخول">
+        <label><input type="radio" name="mode" value="signin" checked> عندي حساب</label>
+        <label><input type="radio" name="mode" value="signup"> حساب جديد</label>
+      </div>
+      <label id="nameRow" hidden>الاسم<input type="text" name="name" autocomplete="name"></label>
+      <label>الإيميل<input type="email" name="email" required autocomplete="email" dir="ltr" aria-describedby="loginErr"></label>
+      <label>الباسورد <span class="note" id="pwHint" hidden>8 حروف على الأقل</span>
+        <span class="pw"><input type="password" name="password" required minlength="8" autocomplete="current-password" dir="ltr" aria-describedby="loginErr pwHint">
+        <button class="btn" type="button" id="pwToggle" aria-label="إظهار الباسورد" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="icons.svg#eye"/></svg></button></span></label>
+      <p class="err" id="loginErr" role="alert"></p>
+      <button class="btn primary" id="loginBtn" type="submit">دخول</button>
+    </form>
+  </div></div>
+</div>
+
+<div class="gate" id="view-pending" hidden>
+  <div class="art"><img class="logo" src="img/logo-white.png" alt="Everest" width="480" height="241"><h2>خطوة واحدة وتبدأ</h2><p>الإدارة بعتتلك كود تفعيل على واتساب. اكتبه هنا وحسابك هيتربط ببياناتك.</p></div>
+  <div class="pane"><div class="card">
+    <h1>فعّل حسابك</h1>
+    <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف.</p>
+    <form id="inviteForm">
+      <label>كود التفعيل<input type="text" name="token" required minlength="6" maxlength="20" autocomplete="one-time-code" dir="ltr" class="code-input" aria-describedby="invErr"></label>
+      <p class="err" id="invErr" role="alert"></p>
+      <button class="btn primary" type="submit">تفعيل</button>
+    </form>
+    <div class="row"><button class="btn ghost" id="logout2">خروج</button><span class="spacer"></span><button class="btn ghost sm" id="claim">انا أول مدير للنظام</button></div>
+  </div></div>
+</div>
+
+<div id="view-app" hidden>
+  <header class="app-head"><div class="in">
+    <div class="brand"><img class="logo on-light" src="img/logo.png" alt="Everest" width="480" height="241" style="height:34px;width:auto"><img class="logo on-dark" src="img/logo-white.png" alt="Everest" width="480" height="241" style="height:34px;width:auto"><div><h1 class="hr">HR</h1><div class="who" id="who"></div></div></div>
+    <label class="month"><span>الشهر</span><select id="month"></select></label>
+    <div class="menu">
+      <button class="btn icon-only" id="menuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop" aria-label="القائمة"><svg class="ic" aria-hidden="true"><use href="icons.svg#menu-2"/></svg></button>
+      <div class="menu-pop" id="menuPop" hidden>
+        <div class="roles" id="roleChips"></div>
+        <div class="lab">المظهر</div>
+        <div class="seg" role="group" aria-label="المظهر">
+          <button class="btn sm" data-theme-set="auto">تلقائي</button><button class="btn sm" data-theme-set="light">فاتح</button><button class="btn sm" data-theme-set="dark">غامق</button>
+        </div>
+        <button class="btn" id="refresh"><svg class="ic" aria-hidden="true"><use href="icons.svg#refresh"/></svg>تحديث البيانات</button>
+        <button class="btn" id="logout"><svg class="ic" aria-hidden="true"><use href="icons.svg#logout"/></svg>خروج</button>
+      </div>
+    </div>
+  </div></header>
+  <div class="layout">
+    <nav class="side" id="side" aria-label="الأقسام"></nav>
+    <main class="wrap" id="main" tabindex="-1"></main>
+  </div>
+  <nav class="bottom" id="bottom" aria-label="الأقسام الرئيسية"></nav>
+  <dialog class="sheet" id="moreSheet" aria-label="كل الأقسام"><div class="in"><div class="grip" aria-hidden="true"></div><div id="moreList"></div></div></dialog>
+</div>
+
+<dialog class="confirm" id="confirmDlg" aria-labelledby="confirmTitle">
+  <form method="dialog"><h2 id="confirmTitle"></h2><p class="note" id="confirmText"></p>
+  <div class="row"><button class="btn" value="no">رجوع</button><button class="btn primary" value="yes" id="confirmYes">تأكيد</button></div></form>
+</dialog>
+
+<div class="toasts" id="toasts"></div>
+<div class="sr-only" aria-live="polite" id="announce"></div>
+<script type="module" src="js/app.js?v=202610101357"></script>
+</body>
+</html>
