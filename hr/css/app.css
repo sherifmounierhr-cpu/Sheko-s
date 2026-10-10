@@ -199,8 +199,8 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 6px; vertical-align: middle; }
 
-form.add { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; }
-form.add label, .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
+form.add, .meetbox .add { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; }
+form.add label, .meetbox .add label, .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
 form.add .wide { grid-column: 1 / -1; }
 form.add label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); align-self: center; }
 fieldset.meetbox { border: 1px dashed var(--line-strong); border-radius: var(--r-card); padding: 10px 14px 14px; margin: 0; }
@@ -316,3 +316,5 @@ details > summary { cursor: pointer; }
 .gate .card .brand .logo { height: 44px; }
 .hero { position: relative; overflow: hidden; isolation: isolate; }
 .hero .wm { position: absolute; inset-inline-end: -30px; inset-block-start: -24px; width: 200px; opacity: .08; z-index: -1; pointer-events: none; }
+.hero label, .hero legend { color: inherit; }
+.hero .note { opacity: .9; }

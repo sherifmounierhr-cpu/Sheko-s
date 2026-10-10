@@ -1,5 +1,5 @@
-import * as db from "./db.js?v=202610081549";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610081549";
+import * as db from "./db.js?v=202610101357";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610101357";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -399,13 +399,14 @@ function field() {
   const fresh = (c) => Date.now() - Date.parse(c.ts) < 9.5 * 60000;
   return `
   <div class="card hero"><div class="row"><h2 class="spacer">سجل تواجدك</h2><span class="note" data-date></span><b class="clock" data-clock></b></div>
-  <p class="note">لما تضغط، الموقع بيتسجل مرة واحدة بس والوقت من السيرفر. مفيش تتبع في الخلفية، ومديرك بيشوف التسجيل ويقدر يعلق عليه.</p>
+  <p class="note">لما تضغط، الموقع بيتسجل مرة واحدة بس والوقت من السيرفر. مفيش تتبع في الخلفية، ومديرك بيشوف التسجيل ويقدر يعلق عليه.</p></div>
+  <div class="card"><h2>${icon("map-pin")}أنا فين دلوقتي؟</h2>
   <form class="add" id="checkForm">
     <label>أنا دلوقتي<select name="kind">${opts(CHECK_KINDS, "office")}</select></label>
     <label>المكان<input type="text" name="place" placeholder="مثال: مكتب سموحة / موقع المشروع"></label>
     <label class="wide">ملاحظة<input type="text" name="note"></label>
-    <fieldset class="wide meetbox"><legend>لو اجتماع مع عميل (بيروح لمديرك يعتمده)</legend><div class="add">
-      <label>اسم العميل<input type="text" name="client"></label><label>موبايل العميل<input type="tel" name="phone" dir="ltr"></label>
+    <fieldset class="wide meetbox" id="meetBox" hidden disabled><legend>لو اجتماع مع عميل (بيروح لمديرك يعتمده)</legend><div class="add">
+      <label>اسم العميل<input type="text" name="client" id="meetClient"></label><label>موبايل العميل<input type="tel" name="phone" dir="ltr"></label>
       <label>المشروع<input type="text" name="project"></label><label>مصدر العميل<select name="source">${opts(SOURCES, "", "-")}</select></label>
       <label>هيخلص حوالي<input type="time" name="tTo"></label><label>النتيجة<select name="result">${opts(RESULTS, "", "-")}</select></label></div></fieldset>
     <div><button class="btn primary" type="submit" id="checkBtn">سجل موقعي دلوقتي</button></div>
@@ -636,7 +637,7 @@ function meet(ym) {
     <label>التاريخ<input type="date" name="date" required value="${p.date || ""}"></label>
     <label>من<input type="time" name="tFrom" required value="${E.st.in}"></label><label>إلى<input type="time" name="tTo" required></label>
     <label>نوع المهمة<select name="kind">${opts(MEET_KINDS)}</select></label>
-    <label>اسم العميل<input type="text" name="client"></label><label>موبايل العميل<input type="tel" name="phone" dir="ltr"></label>
+    <label>اسم العميل<input type="text" name="client" id="meetClient"></label><label>موبايل العميل<input type="tel" name="phone" dir="ltr"></label>
     <label>المشروع<input type="text" name="project"></label><label>مكان الاجتماع<input type="text" name="place"></label>
     <label>مصدر العميل<select name="source">${opts(SOURCES, "", "-")}</select></label>
     <label>نتيجة الاجتماع<select name="result">${opts(RESULTS, "", "-")}</select></label>
@@ -943,6 +944,13 @@ document.addEventListener("change", async (ev) => {
   }
   if (d.office) { saveSettings((s) => { s.office = { ...(s.office || {}), [d.office]: Number(t.value) }; }); return; }
   if (t.form?.id === "actForm" && ["code", "policyId", "day", "kind"].includes(t.name)) { actHint(t.form); return; }
+  if (t.form?.id === "checkForm" && t.name === "kind") {
+    const box = $("#meetBox"), on = t.value === "meeting";
+    box.hidden = !on; box.disabled = !on;
+    $("#checkBtn").textContent = on ? "سجل موقعي والاجتماع" : "سجل موقعي دلوقتي";
+    if (on) $("#meetClient").focus();
+    return;
+  }
   if (d.mstat) { act(() => db.updateMeeting(Number(d.mstat), "status", t.value), "اتحفظ"); return; }
   if (d.team) { act(() => db.updateTeam(Number(d.team), { [d.f]: t.value }), "اتحفظ"); return; }
   if (d.user && d.f === "code") { act(() => db.updateUser(d.user, { code: t.value }), "اتحفظ"); return; }
