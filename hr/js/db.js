@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610101357";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610101357";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610111530";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610111530";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -193,6 +193,7 @@ export async function load(ym, R = {}, only = "") {
         code: e.code, name: e.name || "", fullName: e.full_name || "", device: e.device_name || "",
         teamId: e.team_id ?? "", job: e.job || "", dept: e.dept || "",
         in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false,
+        hireDate: e.hire_date || "", experience: e.experience || "",
         salary: Number(p.salary) || 0, account: p.account || "", pay: p.pay_method || (p.account ? "bank" : "cash"),
       };
     }),
@@ -228,7 +229,7 @@ export async function load(ym, R = {}, only = "") {
 // ---------------------------------------------------------------- writes
 
 const EMP_COLS = { name: "name", fullName: "full_name", device: "device_name", teamId: "team_id", job: "job", dept: "dept",
-  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active" };
+  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active", hireDate: "hire_date", experience: "experience" };
 const PAY_COLS = { salary: "salary", account: "account", pay: "pay_method" };
 
 export async function updateEmployee(code, field, value) {
@@ -239,8 +240,11 @@ export async function updateEmployee(code, field, value) {
   }
 }
 
-export async function addEmployee(code, name, teamId) {
-  check(await client.from("employees").insert({ code, name, team_id: nullIfEmpty(teamId) }));
+export async function addEmployee(code, name, teamId, extra = {}) {
+  const row = { code, name, team_id: nullIfEmpty(teamId) };
+  // only send the 003 columns when filled, so adding still works before that file runs
+  for (const [k, col] of [["hireDate", "hire_date"], ["experience", "experience"], ["job", "job"]]) if (nullIfEmpty(extra[k]) != null) row[col] = extra[k];
+  check(await client.from("employees").insert(row));
 }
 
 export async function saveSettings(data) {
@@ -372,4 +376,62 @@ export async function addPunches(list, onProgress) {
     check(await client.from("punches").upsert(rows, { onConflict: "code,ts", ignoreDuplicates: true }));
     onProgress?.(Math.min(i + 500, list.length), list.length);
   }
+}
+
+// ---------------------------------------------------------------- training (neon/003_training.sql)
+
+export let trainingReady = true;
+const softT = (p) => p.catch((e) => { if (/schema cache|does not exist|PGRST20/i.test(e.message)) { trainingReady = false; return []; } throw e; });
+const mapPlan = (p) => ({
+  id: p.id, code: p.code, start: p.start_date, days: p.days, every: p.survey_every, mentor: p.mentor_code || "",
+  status: p.status, goals: p.goals || "", decisionNote: p.decision_note || "", decidedAt: p.decided_at,
+});
+
+// Everything the training pages need; RLS trims it to what the caller may see.
+export async function loadTraining(R = {}) {
+  const [plans, responses, templates, videos, attempts, views, quizzes] = await Promise.all([
+    softT(all(() => client.from("training_plans").select("*").order("start_date", { ascending: false }))),
+    softT(all(() => client.from("survey_responses").select("*"))),
+    softT(get(client.from("survey_templates").select("*").eq("active", true).order("id", { ascending: false }))),
+    softT(get(client.from("training_videos").select("*").order("period_n").order("sort").order("id"))),
+    softT(all(() => client.from("quiz_attempts").select("id,code,quiz_id,attempt_no,score,passed,at").order("at"))),
+    softT(all(() => client.from("video_views").select("*"))),
+    R.admin ? softT(get(client.from("quizzes").select("*"))) : softT(client.rpc("hr_quiz_list").then(check)),
+  ]);
+  return {
+    plans: plans.map(mapPlan),
+    responses: responses.map((r) => ({ id: r.id, plan: r.plan_id, n: r.period_n, side: r.side, answers: r.answers || {}, score: r.score == null ? null : Number(r.score), at: r.submitted_at })),
+    templates: { self: templates.find((t) => t.side === "self"), mentor: templates.find((t) => t.side === "mentor") },
+    videos: videos.map((v) => ({ id: v.id, title: v.title, drive: v.drive_url, notebook: v.notebooklm_url || "", period: v.period_n, summary: v.summary || "", active: v.active !== false, sort: v.sort })),
+    attempts: attempts.map((a) => ({ id: a.id, code: a.code, quiz: a.quiz_id, no: a.attempt_no, score: a.score, passed: a.passed, at: a.at })),
+    views: views.map((v) => ({ code: v.code, video: v.video_id, at: v.at })),
+    quizzes: (quizzes || []).map((q) => ({ id: q.id, video: q.video_id, questions: q.questions || [], count: q.count ?? (q.questions || []).length, pass: q.pass_mark, attempts: q.max_attempts, minutes: q.minutes })),
+  };
+}
+
+export async function startTraining(code, start, days, every, mentor, goals) {
+  return check(await client.rpc("hr_start_training", { p_code: code, p_start: nullIfEmpty(start), p_days: Number(days) || 30, p_every: Number(every) || 7, p_mentor: nullIfEmpty(mentor), p_goals: nullIfEmpty(goals) }));
+}
+export async function decideTraining(plan, status, note, extend = 0) {
+  check(await client.rpc("hr_decide_training", { plan, p_status: status, p_note: nullIfEmpty(note), p_extend: Number(extend) || 0 }));
+}
+export async function submitSurvey(plan, period, side, answers) {
+  return check(await client.rpc("hr_submit_survey", { plan, p_period: period, p_side: side, p_answers: answers }));
+}
+export async function quizGet(id) { return check(await client.rpc("hr_quiz_get", { p_quiz: id })); }
+export async function quizSubmit(id, answers) { return check(await client.rpc("hr_quiz_submit", { p_quiz: id, p_answers: answers })); }
+export async function markWatched(code, video) {
+  const { error } = await client.from("video_views").insert({ code, video_id: video });
+  if (error && error.code !== "23505") check({ error });
+}
+export async function addVideo(v) { return check(await client.from("training_videos").insert(v).select("id"))?.[0]?.id; }
+export async function updateVideo(id, fields) { check(await client.from("training_videos").update(fields).eq("id", id)); }
+export async function deleteVideo(id) { check(await client.from("training_videos").delete().eq("id", id)); }
+export async function saveQuiz(videoId, q) {
+  check(await client.from("quizzes").upsert({ video_id: videoId, questions: q.questions, pass_mark: q.pass, max_attempts: q.attempts, minutes: q.minutes }, { onConflict: "video_id" }));
+}
+export async function deleteQuiz(videoId) { check(await client.from("quizzes").delete().eq("video_id", videoId)); }
+export async function saveTemplate(side, questions) {
+  check(await client.from("survey_templates").update({ active: false }).eq("side", side));
+  check(await client.from("survey_templates").insert({ side, questions }));
 }

@@ -1,5 +1,5 @@
-import * as db from "./db.js?v=202610101357";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610101357";
+import * as db from "./db.js?v=202610111530";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610111530";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -19,6 +19,7 @@ const TABS = [
   ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager, "bell", "me", "الإشعارات"],
   ["field", "تواجدي واجتماعاتي", (r) => !!r.code, "map-pin", "me", "تواجدي"],
   ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
+  ["train", "تدريبي", (r) => r.trainee, "school", "me", "تدريبي"],
   ["live", "الفريق مباشر", (r) => r.admin || r.manager, "broadcast", "team", "مباشر"],
   ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader, "chart-bar", "team", "المتابعة"],
   ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager, "clipboard-check", "team", "الطلبات"],
@@ -26,9 +27,11 @@ const TABS = [
   ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader, "clock", "team", "اليومي"],
   ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
   ["sum", "ملخص الحضور", (r) => r.admin || r.manager, "list-details", "team", "الملخص"],
+  ["trainees", "المتدربين", (r) => r.admin || r.manager || r.mentor, "school", "team", "المتدربين"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
   ["pay", "المرتبات", (r) => r.admin, "cash", "admin", "المرتبات"],
   ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
+  ["content", "محتوى التدريب", (r) => r.admin, "video", "admin", "التدريب"],
   ["set", "الإعدادات والفرق", (r) => r.admin, "settings", "admin", "الإعدادات"],
 ];
 const GROUPS = [["me", "ليا"], ["team", "الفريق"], ["admin", "الإدارة"]];
@@ -37,6 +40,7 @@ const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
+let TR = null, QUIZ = null, PREVIEW = null;
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 
 const $ = (s) => document.querySelector(s);
@@ -172,8 +176,10 @@ async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
   if (!S) skeleton();
   try {
-    S = await db.load(month, R);
+    [S, TR] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null)]);
     E = createEngine(S, LAST);
+    R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
+    R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
     COMP = null;
     if (!tab || !visibleTabs().some(([k]) => k === tab)) tab = visibleTabs()[0][0];
     await beforeTab();
@@ -231,10 +237,10 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { home, inbox, field, live, actions, dash, mine, requests, daily, meet, upload, sum, pay, emp, set: settings };
+  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
-  const title = ["home", "field", "live"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
+  const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
   $("#main").innerHTML = `<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
   document.title = `${label} | Everest HR`;
   tick();
@@ -288,7 +294,7 @@ function monthCal(e, ym) {
 // Remembers which sections the user opened, so a re-render keeps them open.
 const OPEN = new Map();
 document.addEventListener("toggle", (ev) => { const k = ev.target.dataset?.fold; if (k) OPEN.set(k, ev.target.open); }, true);
-const fold = (ic, title, body, open = false, extra = "") => `<details class="fold" data-fold="${ic}"${OPEN.get(ic) ?? open ? " open" : ""}><summary>${icon(ic)}<span>${title}</span>${extra}${icon("chevron-down", "chev")}</summary><div class="body">${body}</div></details>`;
+const fold = (ik, title, body, open = false, extra = "") => { const [ic, key = ic] = ik.split("#"); return `<details class="fold" data-fold="${key}"${OPEN.get(key) ?? open ? " open" : ""}><summary>${icon(ic)}<span>${title}</span>${extra}${icon("chevron-down", "chev")}</summary><div class="body">${body}</div></details>`; };
 
 function home(ym) {
   const e = empBy(ME.code);
@@ -381,9 +387,9 @@ async function loadComparison() {
 }
 
 // ---------------------------------------------------------------- notifications
-const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field" };
+const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train" };
 function inbox() {
-  const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; return NOTIF_GO[n.ref_table]; };
+  const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; return NOTIF_GO[n.ref_table]; };
   return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
   <div class="card">${NOTIF.map((n) => { const g = goFor(n); return `<div class="notif${n.read_at ? "" : " new"}"><div class="row"><b>${esc(n.title)}</b><span class="note">${fmtTs(n.created_at)}</span>
     ${g && TABS.some(([k, , f]) => k === g && f(R)) ? `<button class="btn" data-go="${g}">افتح</button>` : ""}</div>
@@ -719,7 +725,7 @@ function emp() {
   const teamOpts = (sel) => opts(S.teams.map((t) => [t.id, t.name]), sel, "بدون فريق");
   return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
   <p class="note">أي تعديل بيتحفظ على طول. الفرق ومديرينها بتتعدل من (الإعدادات والفرق).</p></div>
-  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
   ${list.map((e) => { const c = esc(e.code); return `<tr class="${!e.name?.trim() ? "missing-name" : ""}${e.active === false ? " off" : ""}"><td>${c}</td>
     <td><input type="text" data-e="${c}" data-f="name" value="${esc(e.name)}" style="width:160px"></td>
     <td><select data-e="${c}" data-f="teamId">${teamOpts(e.teamId)}</select></td>
@@ -728,14 +734,27 @@ function emp() {
     <td><select data-e="${c}" data-f="off">${opts(DAYS.map((d, i) => [i, d]), e.off, "لا يوجد")}</select></td>
     <td class="num"><input type="checkbox" data-e="${c}" data-f="exempt"${e.exempt ? " checked" : ""} aria-label="مرفوع عنه البصمة"></td>
     <td class="num"><input type="checkbox" data-e="${c}" data-f="active"${e.active !== false ? " checked" : ""} aria-label="شغال"></td>
+    <td><input type="date" data-e="${c}" data-f="hireDate" value="${esc(e.hireDate)}"></td>
+    <td><select data-e="${c}" data-f="experience">${opts([["experienced", "خبرة"], ["fresh", "بدون خبرة"]], e.experience, "-")}</select></td>
     <td><input type="text" data-e="${c}" data-f="fullName" value="${esc(e.fullName)}" style="width:190px"></td>
     <td><input type="number" data-e="${c}" data-f="salary" value="${e.salary || ""}" style="width:90px"></td>
     <td><input type="text" dir="ltr" data-e="${c}" data-f="account" value="${esc(e.account)}" style="width:110px"></td>
     <td><select data-e="${c}" data-f="pay">${opts([["bank", "بنك"], ["cash", "نقدي"]], e.pay)}</select></td></tr>`; }).join("")}
   </tbody></table></div>
-  <div class="card"><h2>إضافة موظف</h2><form class="add" id="empForm">
+  <div class="card"><h2>${icon("plus")}إضافة موظف</h2><form class="add" id="empForm">
     <label>كود البصمة<input type="text" name="code" required></label><label>الاسم<input type="text" name="name" required></label>
-    <label>الفريق<select name="teamId">${teamOpts("")}</select></label><div><button class="btn primary" type="submit">إضافة</button></div></form></div>`;
+    <label>الفريق<select name="teamId">${teamOpts("")}</select></label><label>الوظيفة<input type="text" name="job"></label>
+    <label>تاريخ التعيين<input type="date" name="hireDate" value="${today()}"></label>
+    <fieldset class="wide choice"><legend>عنده خبرة في المبيعات العقارية؟</legend>
+      <label><input type="radio" name="experience" value="experienced" required> أيوة، خبرة</label>
+      <label><input type="radio" name="experience" value="fresh"> لأ، بدون خبرة (يدخل فترة تدريب)</label></fieldset>
+    <fieldset class="wide meetbox" id="trainBox" hidden disabled><legend>فترة التدريب</legend><div class="add">
+      <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${N0(E.st.trainDays) || 30}" required></label>
+      <label>استبيان متابعة كل (يوم)<input type="number" name="every" min="3" max="31" value="${N0(E.st.trainEvery) || 7}" required></label>
+      <label>المدرب<select name="mentor" id="trainMentor">${empOpts("", "من غير مدرب", S.employees.filter((x) => x.active !== false))}</select></label>
+      <label class="wide">هدف التدريب<input type="text" name="goals" maxlength="300" placeholder="مثال: يحفظ مشاريع الساحل ويقفل أول حجز"></label>
+      <p class="note wide" id="trainHint"></p></div></fieldset>
+    <div><button class="btn primary" type="submit">إضافة</button></div></form></div>`;
 }
 
 function settings() {
@@ -855,6 +874,265 @@ function saveCsv(name, rows) {
 function settingsData() { const { ...d } = E.st; return d; }
 const saveSettings = (mut) => act(async () => { const d = settingsData(); mut(d); await db.saveSettings(d); }, "اتحفظ");
 
+// ---------------------------------------------------------------- training: new hires without experience
+const addDays = (d, n) => new Date(Date.parse(d) + n * 864e5).toISOString().slice(0, 10);
+const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+const PLAN_ST = { active: ["جاري", "p-acc"], passed: ["اجتاز التدريب", "p-ok"], ended: ["انتهى", "p-mute"] };
+const planPill = (p) => `<span class="pill ${PLAN_ST[p.status]?.[1] || "p-mute"}">${PLAN_ST[p.status]?.[0] || p.status}</span>`;
+function periodsOf(p) {
+  const out = [], n = Math.ceil(p.days / p.every);
+  for (let i = 0; i < n; i++) out.push({ n: i + 1, from: addDays(p.start, i * p.every), to: addDays(p.start, Math.min((i + 1) * p.every, p.days) - 1) });
+  return out;
+}
+// the period today falls in; past the end it stays on the last one
+const curPeriod = (p) => { const t = today(); const ps = periodsOf(p); return t < p.start ? 0 : (ps.find((x) => x.from <= t && t <= x.to) || ps.at(-1)).n; };
+const dayOf = (p) => Math.max(0, Math.min(p.days, daysBetween(p.start, today()) + 1));
+const respOf = (p, n, side) => TR.responses.find((r) => r.plan === p.id && r.n === n && r.side === side);
+const quizOf = (videoId) => TR.quizzes.find((q) => q.video === videoId);
+const triesOf = (code, quizId) => TR.attempts.filter((a) => a.code === code && a.quiz === quizId);
+const best = (list) => (list.length ? Math.max(...list.map((a) => a.score)) : null);
+const avg = (xs) => { xs = xs.filter((x) => x != null); return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null; };
+const pctTxt = (v) => (v == null ? "-" : `${v}%`);
+function planStats(p) {
+  const ps = periodsOf(p), cur = curPeriod(p), t = today();
+  const vids = TR.videos.filter((v) => v.active && v.period <= Math.max(cur, 1) && quizOf(v.id));
+  const quiz = avg(vids.map((v) => best(triesOf(p.code, quizOf(v.id).id))));
+  const quizDone = vids.filter((v) => triesOf(p.code, quizOf(v.id).id).length).length;
+  // a survey is late two days after its period ends
+  const late = ps.filter((x) => addDays(x.to, 2) < t && p.status === "active").flatMap((x) => [!respOf(p, x.n, "self") && `استبيان المتدرب ف${x.n}`, !respOf(p, x.n, "mentor") && `تقييم المدرب ف${x.n}`]).filter(Boolean);
+  return { ps, cur, self: avg(ps.map((x) => respOf(p, x.n, "self")?.score)), mentor: avg(ps.map((x) => respOf(p, x.n, "mentor")?.score)), quiz, quizDone, quizAll: vids.length, late };
+}
+const myPlan = () => TR?.plans.find((p) => p.code === ME.code && p.status === "active") || TR?.plans.find((p) => p.code === ME.code);
+
+function surveyForm(p, n, side) {
+  const tpl = TR.templates[side]; if (!tpl) return '<p class="note">مفيش أسئلة استبيان متسجلة. كلم مدير النظام.</p>';
+  const old = respOf(p, n, side)?.answers || {};
+  const scale = ["ضعيف", "مقبول", "جيد", "جيد جدًا", "ممتاز"];
+  return `<form class="survey" id="surveyForm${p.id}" data-plan="${p.id}" data-n="${n}" data-side="${side}">
+    ${tpl.questions.map((q, i) => q.type === "scale"
+      ? `<fieldset class="scale"><legend>${i + 1}. ${esc(q.text)}</legend><div class="opts">${scale.map((l, k) => `<label><input type="radio" name="${esc(q.id)}" value="${k + 1}" required${Number(old[q.id]) === k + 1 ? " checked" : ""}><span><b>${k + 1}</b>${l}</span></label>`).join("")}</div></fieldset>`
+      : `<label class="field">${i + 1}. ${esc(q.text)}<textarea name="${esc(q.id)}" rows="2" maxlength="600">${esc(old[q.id] || "")}</textarea></label>`).join("")}
+    <div class="row"><button class="btn primary" type="submit">${respOf(p, n, side) ? "تحديث الإجابات" : "إرسال"}</button><span class="note">من 1 (ضعيف) لـ 5 (ممتاز).</span></div></form>`;
+}
+function answersView(r, side) {
+  const tpl = TR.templates[side]; if (!r || !tpl) return "";
+  return `<table class="kv"><tbody>${tpl.questions.filter((q) => r.answers[q.id] != null && r.answers[q.id] !== "").map((q) => `<tr><th>${esc(q.text)}</th><td class="wrap">${q.type === "scale" ? `<b>${esc(r.answers[q.id])}</b> / 5` : esc(r.answers[q.id])}</td></tr>`).join("")}</tbody></table>`;
+}
+function timeline(p, st) {
+  return `<ol class="steps">${st.ps.map((x) => { const s = respOf(p, x.n, "self"), m = respOf(p, x.n, "mentor"), now = x.n === st.cur && p.status === "active";
+    const done = s && m, future = x.from > today();
+    return `<li class="${done ? "done" : now ? "now" : future ? "future" : "open"}"><b>الفترة ${x.n}</b><span class="note">${fmtDate(x.from)} - ${fmtDate(x.to)}</span>
+      <span class="row">${future ? '<span class="pill p-mute">لسه</span>' : `<span class="pill ${s ? "p-ok" : "p-warn"}">${s ? `المتدرب ${pctTxt(s.score)}` : "المتدرب ناقص"}</span><span class="pill ${m ? "p-ok" : "p-warn"}">${m ? `المدرب ${pctTxt(m.score)}` : "المدرب ناقص"}</span>`}</span></li>`; }).join("")}</ol>`;
+}
+
+function videoCard(v, code, open) {
+  const q = quizOf(v.id), tries = q ? triesOf(code, q.id) : [], b = best(tries), passed = tries.some((a) => a.passed);
+  const seen = TR.views.some((x) => x.code === code && x.video === v.id);
+  const left = q ? q.attempts - tries.length : 0;
+  return `<div class="act vid${open ? "" : " locked"}"><div class="row">${icon("video")}<b class="spacer">${esc(v.title)}</b><span class="pill p-mute">الفترة ${v.period}</span>
+      ${q ? (passed ? `<span class="pill p-ok">نجحت ${b}%</span>` : tries.length ? `<span class="pill p-warn">آخر نتيجة ${b}%</span>` : '<span class="pill p-info">فيه اختبار</span>') : ""}</div>
+    ${v.summary ? `<p class="note">${esc(v.summary)}</p>` : ""}
+    ${open ? `<div class="row"><a class="btn" href="${esc(v.drive)}" target="_blank" rel="noopener noreferrer">${icon("player-play")}شاهد الفيديو</a>
+      ${v.notebook ? `<a class="btn" href="${esc(v.notebook)}" target="_blank" rel="noopener noreferrer">${icon("notebook")}اسأل عن الفيديو</a>` : ""}
+      ${seen ? `<span class="pill p-ok">${icon("check")}شفته</span>` : `<button class="btn" data-watch="${v.id}">${icon("check")}خلصت الفيديو</button>`}
+      ${q && !passed && left > 0 ? `<button class="btn primary" data-quiz="${q.id}"${seen ? "" : " disabled title=\"شوف الفيديو الأول\""}>${icon("checklist")}${tries.length ? "حاول تاني" : "ابدأ الاختبار"} (${q.count} سؤال، ${q.minutes} دقيقة)</button>` : ""}
+      ${q && !passed && left <= 0 ? '<span class="note">خلصت محاولاتك. مدربك هيراجع معاك.</span>' : ""}</div>`
+    : `<p class="note">بيفتح مع الفترة ${v.period}.</p>`}</div>`;
+}
+
+function quizPanel() {
+  const z = QUIZ.data, res = QUIZ.result;
+  const secs = Math.max(0, Math.round((QUIZ.deadline - Date.now()) / 1000));
+  return `<div class="card quiz" id="quizCard"><div class="row"><h2 class="spacer">${icon("checklist")}الاختبار</h2>
+    ${res ? "" : `<span class="pill p-info" aria-live="off">الوقت الباقي <b class="tabnum" data-quizclock>${fmtMin(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")}</b></span>`}
+    <button class="btn" data-quizclose="1">${res ? "رجوع" : "إلغاء"}</button></div>
+    ${res ? `<div class="banner ${res.passed ? "ok" : ""}" role="status">${icon(res.passed ? "check" : "alert-triangle")}<b>${res.score}%</b> (${res.correct} من ${res.total}) · ${res.passed ? "نجحت، برافو" : res.left > 0 ? `محتاج ${z.pass_mark}% عشان تنجح. باقيلك ${res.left} محاولة، راجع الفيديو وجرب تاني.` : "خلصت محاولاتك. مدربك هيراجع معاك النقط دي."}</div>` : `<p class="note">محتاج ${z.pass_mark}% عشان تنجح. المحاولة ${z.used + 1} من ${z.max_attempts}.</p>`}
+    <form id="quizForm">${z.questions.map((q, i) => { const r = res?.review?.[i];
+      return `<fieldset class="qq${r ? (r.right ? " right" : " wrong") : ""}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label class="${r && r.answer === k ? "key" : ""}"><input type="radio" name="q${i}" value="${k}"${QUIZ.answers[i] === k ? " checked" : ""}${res ? " disabled" : ""}> ${esc(o)}</label>`).join("")}
+        ${r ? `<p class="note">${r.right ? "إجابة صح" : "إجابة غلط"}${r.why ? ` · ${esc(r.why)}` : ""}</p>` : ""}</fieldset>`; }).join("")}
+      ${res ? "" : `<div class="row"><button class="btn primary" type="submit">سلّم الإجابات</button><span class="note">${Object.keys(QUIZ.answers).length} من ${z.questions.length} متجاوب</span></div>`}</form></div>`;
+}
+
+function train() {
+  if (!TR || !db.trainingReady) return empty("school", "التدريب لسه مش متفعل", "مدير النظام محتاج يشغل ملف التدريب.");
+  const p = myPlan(); if (!p) return empty("school", "مفيش خطة تدريب ليك");
+  const st = planStats(p), d = dayOf(p), pct = Math.round((d / p.days) * 100);
+  const pend = st.ps.find((x) => x.from <= today() && !respOf(p, x.n, "self") && p.status === "active");
+  const vids = TR.videos.filter((v) => v.active);
+  return `
+  <div class="card hero"><img class="wm" src="img/mark-white.png" alt="">
+    <div class="row"><div class="spacer"><h2>فترة التدريب</h2><div class="note">${planPill(p)} من ${fmtDate(p.start)} لـ ${fmtDate(addDays(p.start, p.days - 1))}${p.mentor ? ` · المدرب: ${esc(nameOf(p.mentor))}` : ""}</div></div></div>
+    <div><span class="track" role="progressbar" aria-label="أيام التدريب اللي عدت" aria-valuemin="0" aria-valuemax="${p.days}" aria-valuenow="${d}"><i style="width:${pct}%"></i></span>
+      <div class="note">اليوم ${d} من ${p.days} · الفترة ${st.cur || 1} من ${st.ps.length} · استبيان كل ${p.every} أيام</div></div>
+    <div class="hero-stats">
+      <div><span>الاختبارات</span><b class="tabnum">${pctTxt(st.quiz)}</b></div>
+      <div><span>تقييم المدرب</span><b class="tabnum">${pctTxt(st.mentor)}</b></div>
+      <div><span>تقييمي لنفسي</span><b class="tabnum">${pctTxt(st.self)}</b></div>
+      <div><span>فيديوهات اتشافت</span><b class="tabnum">${TR.views.filter((x) => x.code === p.code).length} / ${vids.length}</b></div>
+    </div>
+    ${p.goals ? `<p class="note">الهدف: ${esc(p.goals)}</p>` : ""}</div>
+  ${QUIZ && QUIZ.code === p.code ? quizPanel() : ""}
+  ${pend ? `<div class="card"><h2>${icon("clipboard-check")}استبيان الفترة ${pend.n}</h2><p class="note">إجاباتك بتساعد مدربك يركز على اللي محتاجه. مفيش إجابة صح وغلط.</p>${surveyForm(p, pend.n, "self")}</div>` : ""}
+  <div class="card"><h2>${icon("video")}فيديوهات التدريب</h2>
+    ${vids.map((v) => videoCard(v, p.code, v.period <= Math.max(st.cur, 1) || p.status !== "active")).join("") || empty("video", "لسه مفيش فيديوهات", "الإدارة هتضيف فيديوهات التدريب هنا.")}</div>
+  <div class="card"><h2>${icon("progress-check")}خطة الفترات</h2>${timeline(p, st)}</div>
+  ${fold("message-circle", "ملاحظات المدرب", st.ps.map((x) => respOf(p, x.n, "mentor")).filter(Boolean).map((r) => `<div class="act"><b>الفترة ${r.n} · ${pctTxt(r.score)}</b>${answersView(r, "mentor")}</div>`).join("") || '<p class="note">لسه المدرب مسجلش ملاحظات.</p>')}
+  ${p.decisionNote ? `<div class="banner">${icon("bell")}${esc(p.decisionNote)}</div>` : ""}`;
+}
+
+function trainees() {
+  if (!TR || !db.trainingReady) return `<div class="banner">${icon("alert-triangle")}جداول التدريب لسه مش ظاهرة. شغّل neon/003_training.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>`;
+  const running = TR.plans.filter((p) => p.status === "active" && p.code !== ME.code), done = TR.plans.filter((p) => p.status !== "active" && p.code !== ME.code);
+  const card = (p) => {
+    const st = planStats(p), e = empBy(p.code), d = dayOf(p), pct = Math.round((d / p.days) * 100);
+    const due = st.ps.filter((x) => x.from <= today() && !respOf(p, x.n, "mentor")).at(0);
+    const canMentor = p.code !== ME.code;
+    return `<div class="card trainee"><div class="row"><b class="spacer">${esc(nameOf(p.code))}</b>${planPill(p)}</div>
+      <div class="note">${esc(teamOf(e?.teamId)?.name || "")}${e?.job ? ` · ${esc(e.job)}` : ""}${p.mentor ? ` · المدرب: ${esc(nameOf(p.mentor))}` : " · من غير مدرب"}</div>
+      <div><span class="track" role="progressbar" aria-label="تقدم ${esc(nameOf(p.code))}" aria-valuemin="0" aria-valuemax="${p.days}" aria-valuenow="${d}"><i style="width:${pct}%"></i></span>
+        <div class="note">اليوم ${d} من ${p.days} · الفترة ${st.cur || 1} من ${st.ps.length}</div></div>
+      <div class="mini"><div><span>الاختبارات</span><b>${pctTxt(st.quiz)}</b><small>${st.quizDone} من ${st.quizAll}</small></div><div><span>تقييم المدرب</span><b>${pctTxt(st.mentor)}</b></div><div><span>تقييمه لنفسه</span><b>${pctTxt(st.self)}</b></div></div>
+      ${st.late.length ? `<div class="banner">${icon("alert-triangle")}متأخر: ${st.late.slice(0, 3).join("، ")}${st.late.length > 3 ? ` و${st.late.length - 3} كمان` : ""}</div>` : ""}
+      ${fold(`school#tp${p.id}`, "التفاصيل والتقييم", `${timeline(p, st)}
+        ${canMentor && due ? `<h3>تقييم الفترة ${due.n}</h3>${surveyForm(p, due.n, "mentor")}` : ""}
+        ${st.ps.map((x) => respOf(p, x.n, "self")).filter(Boolean).map((r) => `<details><summary>إجابات المتدرب، الفترة ${r.n} (${pctTxt(r.score)})</summary>${answersView(r, "self")}</details>`).join("")}
+        ${R.admin ? `<h3>القرار</h3><form class="add" id="decForm${p.id}" data-plan="${p.id}">
+          <label>القرار<select name="status" required>${opts([["passed", "اجتاز التدريب (يتثبت)"], ["extend", "مد فترة التدريب"], ["ended", "إنهاء التدريب"]], "", "اختار")}</select></label>
+          <label>المد كام يوم<input type="number" name="extend" min="1" max="90" value="15"></label>
+          <label class="wide">السبب (بيوصل للموظف)<input type="text" name="note" required maxlength="300"></label>
+          <div><button class="btn primary" type="submit">سجل القرار</button></div></form>` : ""}`)}</div>`;
+  };
+  const cand = S.employees.filter((e) => e.active !== false && !TR.plans.some((p) => p.code === e.code && p.status === "active"));
+  return `
+  ${running.length ? `<div class="cards">${running.map(card).join("")}</div>` : empty("school", "مفيش متدربين دلوقتي", R.admin ? "لما تضيف موظف (بدون خبرة) من صفحة الموظفين، بيظهر هنا." : "")}
+  ${R.admin ? fold("plus", "ابدأ تدريب لموظف موجود", `<form class="add" id="planForm">
+    <label>الموظف<select name="code" required>${empOpts("", "اختار", cand)}</select></label>
+    <label>يبدأ من<input type="date" name="start" value="${today()}" required></label>
+    <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${N0(E.st.trainDays) || 30}" required></label>
+    <label>استبيان كل (يوم)<input type="number" name="every" min="3" max="31" value="${N0(E.st.trainEvery) || 7}" required></label>
+    <label>المدرب<select name="mentor">${empOpts("", "من غير مدرب", S.employees.filter((e) => e.active !== false))}</select></label>
+    <label class="wide">هدف التدريب<input type="text" name="goals" maxlength="300" placeholder="مثال: يقفل أول حجز ويحفظ مشاريع الساحل"></label>
+    <div><button class="btn primary" type="submit">ابدأ التدريب</button></div></form>`) : ""}
+  ${done.length ? fold("list-details", `تدريبات خلصت (${done.length})`, `<div class="tbl flat"><table><thead><tr><th>الموظف</th><th>من</th><th>المدة</th><th>النتيجة</th><th>الاختبارات</th><th>المدرب</th><th>السبب</th></tr></thead><tbody>
+    ${done.map((p) => { const st = planStats(p); return `<tr><td>${esc(nameOf(p.code))}</td><td>${fmtDate(p.start)}</td><td>${p.days} يوم</td><td>${planPill(p)}</td><td>${pctTxt(st.quiz)}</td><td>${pctTxt(st.mentor)}</td><td class="wrap">${esc(p.decisionNote)}</td></tr>`; }).join("")}</tbody></table></div>`) : ""}`;
+}
+
+// The prompt HR pastes into NotebookLM next to a training video.
+const NB_PROMPT = `انت مدرب مبيعات عقارية في شركة Everest Real Estate.
+من الفيديو ده بس، اكتب 10 أسئلة اختيار من متعدد بالعامية المصرية لموظف مبيعات جديد، تقيس فهمه للمعلومات المهمة (المشروع، الأسعار، المساحات، أنظمة السداد، طريقة الكلام مع العميل).
+القواعد:
+- كل سؤال ليه 4 اختيارات، واحد بس صح، والاختيارات الغلط تكون منطقية.
+- متكتبش أي سؤال إجابته مش موجودة في الفيديو.
+- اكتب بالشكل ده بالظبط ومن غير أي كلام زيادة:
+
+س1: نص السؤال
+أ) اختيار
+ب) اختيار
+ج) اختيار
+د) اختيار
+الإجابة: ب
+السبب: جملة قصيرة من الفيديو بتوضح ليه
+
+وبعد الأسئلة اكتب سطر يبدأ بـ "ملخص:" فيه ملخص الفيديو في 3 جمل.`;
+const LETTERS = { "أ": 0, "ا": 0, "إ": 0, "ب": 1, "ج": 2, "د": 3, "ه": 4, "هـ": 4, a: 0, b: 1, c: 2, d: 3, e: 4 };
+// Reads NotebookLM's answer in the format above. Returns {questions, summary, errors}.
+function parseQuiz(text) {
+  const lines = String(text).replace(/\r/g, "").split("\n").map((l) => l.replace(/^[\s*#>-]+|[*]+/g, "").trim()).filter(Boolean);
+  const qs = [], errors = []; let cur = null, summary = "";
+  const qRe = /^(?:س|سؤال|q)\s*\d+\s*[:.)\-–]\s*(.+)$/i, oRe = /^([أاإبجدهـa-e])\s*[)\-.:]\s*(.+)$/i, aRe = /^(?:الإجابة|الاجابة|الإجابة الصحيحة|answer)\s*[:：]\s*\(?([أاإبجدهـa-e])/i, wRe = /^(?:السبب|التوضيح|why)\s*[:：]\s*(.+)$/i;
+  for (const l of lines) {
+    let m;
+    if ((m = l.match(/^ملخص\s*[:：]\s*(.*)$/))) { summary = m[1]; cur = null; continue; }
+    if ((m = l.match(qRe))) { cur = { q: m[1], options: [], answer: -1, why: "" }; qs.push(cur); continue; }
+    if (!cur) { if (summary) summary += " " + l; continue; }
+    if ((m = l.match(aRe))) { cur.answer = LETTERS[m[1].toLowerCase()] ?? -1; continue; }
+    if ((m = l.match(wRe))) { cur.why = m[1]; continue; }
+    if ((m = l.match(oRe)) && cur.answer < 0) { cur.options.push(m[2]); continue; }
+    if (cur.why) cur.why += " " + l;
+  }
+  qs.forEach((q, i) => {
+    if (q.options.length < 2) errors.push(`السؤال ${i + 1}: الاختيارات ناقصة`);
+    if (q.answer < 0 || q.answer >= q.options.length) errors.push(`السؤال ${i + 1}: الإجابة الصح مش واضحة`);
+  });
+  if (!qs.length) errors.push("مالقيتش أسئلة. اتأكد إن كل سؤال بيبدأ بـ (س1:)");
+  return { questions: qs, summary: summary.trim(), errors };
+}
+
+function content() {
+  if (!TR || !db.trainingReady) return `<div class="banner">${icon("alert-triangle")}جداول التدريب لسه مش ظاهرة. شغّل neon/003_training.sql في Neon SQL Editor.</div>`;
+  const tplText = (side) => (TR.templates[side]?.questions || []).map((q) => (q.type === "text" ? "نص: " : "") + q.text).join("\n");
+  return `
+  <div class="card"><h2>${icon("notebook")}إزاي تعمل اختبار من فيديو بـ NotebookLM</h2>
+    <ol class="how"><li>افتح <a href="https://notebooklm.google.com/" target="_blank" rel="noopener noreferrer">NotebookLM</a> واعمل Notebook جديد، وضيف الفيديو من Google Drive كمصدر (Source).</li>
+      <li>انسخ البرومبت اللي تحت والصقه في الشات بتاع NotebookLM.</li>
+      <li>راجع الأسئلة، وانسخ الرد كله والصقه في خانة (الاختبار) تحت الفيديو هنا، واضغط (معاينة).</li>
+      <li>لو عايز المتدرب يسأل NotebookLM عن الفيديو، شارك الـ Notebook معاه (Share) وحط اللينك في خانة لينك NotebookLM.</li></ol>
+    <textarea id="nbPrompt" rows="6" readonly aria-label="برومبت NotebookLM">${esc(NB_PROMPT)}</textarea>
+    <div><button class="btn" id="nbCopy">نسخ البرومبت</button></div></div>
+  <div class="card"><h2>${icon("plus")}إضافة فيديو تدريب</h2><form class="add" id="vidForm">
+    <label>اسم الفيديو<input type="text" name="title" required maxlength="150"></label>
+    <label>لينك الفيديو على Drive<input type="url" name="drive" required dir="ltr" placeholder="https://drive.google.com/..."></label>
+    <label>لينك NotebookLM (اختياري)<input type="url" name="notebook" dir="ltr" placeholder="https://notebooklm.google.com/..."></label>
+    <label>يفتح في الفترة<input type="number" name="period" min="1" max="30" value="1" required></label>
+    <div><button class="btn primary" type="submit">إضافة</button></div></form>
+    <p class="note">متنساش تخلي الفيديو على Drive متاح لأي حد معاه اللينك (Anyone with the link)، أو لإيميلات الموظفين.</p></div>
+  ${TR.videos.map((v) => { const q = quizOf(v.id), pv = PREVIEW?.video === v.id ? PREVIEW : null;
+    return fold(`video#v${v.id}`, `${esc(v.title)} <span class="pill p-mute">الفترة ${v.period}</span>${q ? ` <span class="pill p-ok">${q.questions.length} سؤال</span>` : ' <span class="pill p-warn">من غير اختبار</span>'}${v.active ? "" : ' <span class="pill p-mute">متوقف</span>'}`, `
+      <div class="add-grid">
+        <label class="field">الاسم<input type="text" data-vid="${v.id}" data-f="title" value="${esc(v.title)}"></label>
+        <label class="field">لينك Drive<input type="url" dir="ltr" data-vid="${v.id}" data-f="drive_url" value="${esc(v.drive)}"></label>
+        <label class="field">لينك NotebookLM<input type="url" dir="ltr" data-vid="${v.id}" data-f="notebooklm_url" value="${esc(v.notebook)}"></label>
+        <label class="field">الفترة<input type="number" min="1" data-vid="${v.id}" data-f="period_n" value="${v.period}"></label>
+        <label class="field wide">ملخص يظهر للمتدرب<textarea rows="2" data-vid="${v.id}" data-f="summary">${esc(v.summary)}</textarea></label>
+        <label class="check"><input type="checkbox" data-vid="${v.id}" data-f="active"${v.active ? " checked" : ""}> ظاهر للمتدربين</label></div>
+      <h3>الاختبار</h3>
+      ${q ? `<div class="row"><label class="row field-inline">النجاح من<input type="number" class="w-sm" min="1" max="100" data-qz="${v.id}" data-f="pass" value="${q.pass}">%</label>
+        <label class="row field-inline">المحاولات<input type="number" class="w-sm" min="1" max="10" data-qz="${v.id}" data-f="attempts" value="${q.attempts}"></label>
+        <label class="row field-inline">الوقت (دقيقة)<input type="number" class="w-sm" min="1" max="120" data-qz="${v.id}" data-f="minutes" value="${q.minutes}"></label>
+        <button class="btn danger" data-qzdel="${v.id}">حذف الاختبار</button></div>
+        <details><summary>عرض الأسئلة والإجابات</summary><ol class="qlist">${q.questions.map((x) => `<li>${esc(x.q)}<ul>${x.options.map((o, k) => `<li class="${k === x.answer ? "key" : ""}">${esc(o)}${k === x.answer ? " (الصح)" : ""}</li>`).join("")}</ul></li>`).join("")}</ol></details>` : ""}
+      <label class="field">${q ? "استبدل الأسئلة: الصق رد NotebookLM" : "الصق رد NotebookLM هنا"}<textarea rows="6" id="qzText${v.id}">${esc(pv?.text || "")}</textarea></label>
+      <div class="row"><button class="btn" data-qzprev="${v.id}">معاينة</button>${pv && !pv.errors.length ? `<button class="btn primary" data-qzsave="${v.id}">احفظ ${pv.questions.length} سؤال</button>` : ""}<button class="btn danger" data-viddel="${v.id}">حذف الفيديو</button></div>
+      ${pv ? (pv.errors.length ? `<div class="banner">${icon("alert-triangle")}${pv.errors.map(esc).join(" · ")}</div>` : `<ol class="qlist">${pv.questions.map((x) => `<li>${esc(x.q)}<ul>${x.options.map((o, k) => `<li class="${k === x.answer ? "key" : ""}">${esc(o)}</li>`).join("")}</ul>${x.why ? `<span class="note">${esc(x.why)}</span>` : ""}</li>`).join("")}</ol>${pv.summary ? `<p class="note">الملخص هيتحفظ كمان: ${esc(pv.summary)}</p>` : ""}`) : ""}`); }).join("") || empty("video", "لسه مفيش فيديوهات تدريب")}
+  <div class="card"><h2>${icon("clipboard-check")}أسئلة الاستبيانات</h2>
+    <p class="note">كل سطر سؤال تقييم من 1 لـ 5. لو عايز السؤال إجابته كتابة، ابدأ السطر بـ (نص:). متحطش أي أسئلة عن الصحة أو الحالة النفسية.</p>
+    <div class="grid2 even"><label class="field">استبيان المتدرب<textarea rows="8" id="tplSelf">${esc(tplText("self"))}</textarea></label>
+      <label class="field">تقييم المدرب<textarea rows="8" id="tplMentor">${esc(tplText("mentor"))}</textarea></label></div>
+    <div class="row"><button class="btn primary" id="tplSave">احفظ الأسئلة</button><span class="note">التعديل بيسري على الاستبيانات الجاية بس.</span></div></div>
+  <div class="card"><h2>${icon("settings")}الافتراضي للمتدرب الجديد</h2><div class="row">
+    <label class="row field-inline">مدة التدريب<input type="number" class="w-sm" min="7" max="180" data-s="trainDays" value="${N0(E.st.trainDays) || 30}"> يوم</label>
+    <label class="row field-inline">استبيان كل<input type="number" class="w-sm" min="3" max="31" data-s="trainEvery" value="${N0(E.st.trainEvery) || 7}"> يوم</label></div></div>`;
+}
+
+let quizTimer = null;
+async function startQuiz(id) {
+  try {
+    const data = await db.quizGet(id);
+    QUIZ = { id, code: ME.code, data, answers: {}, result: null, deadline: Date.now() + data.minutes * 60000 };
+    clearInterval(quizTimer);
+    quizTimer = setInterval(() => {
+      if (!QUIZ || QUIZ.result) { clearInterval(quizTimer); return; }
+      const secs = Math.max(0, Math.round((QUIZ.deadline - Date.now()) / 1000));
+      const el = document.querySelector("[data-quizclock]"); if (el) el.textContent = `${fmtMin(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")}`;
+      if (!secs) submitQuiz(true);
+    }, 1000);
+    render(); $("#quizCard")?.scrollIntoView({ block: "start" }); $("#quizForm input")?.focus();
+  } catch (e) { toast(/no attempts/.test(e.message) ? "خلصت محاولاتك" : errMsg(e), true); }
+}
+async function submitQuiz(timeUp) {
+  if (!QUIZ || QUIZ.result || QUIZ.sending) return;
+  const n = QUIZ.data.questions.length;
+  if (!timeUp && Object.keys(QUIZ.answers).length < n && !(await ask("فيه أسئلة مجاوبتش عليها", "الأسئلة الفاضية بتتحسب غلط. تسلّم كده؟", "سلّم"))) return;
+  QUIZ.sending = true;
+  try {
+    QUIZ.result = await db.quizSubmit(QUIZ.id, Array.from({ length: n }, (_, i) => QUIZ.answers[i] ?? null));
+    clearInterval(quizTimer);
+    TR = await db.loadTraining(R);
+    render(); $("#quizCard [role=status]")?.focus(); announce(`نتيجتك ${QUIZ.result.score}%`);
+    if (timeUp) toast("الوقت خلص واتسلمت الإجابات");
+  } catch (e) { toast(errMsg(e), true); } finally { if (QUIZ) QUIZ.sending = false; }
+}
+
 // ---------------------------------------------------------------- events
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button"); if (!t || busy) return;
@@ -879,6 +1157,25 @@ document.addEventListener("click", async (ev) => {
     t.disabled = true;
     try { const p = await locate(); saveSettings((s) => { s.office = { ...(s.office || {}), lat: p.lat, lng: p.lng, radius: s.office?.radius || 150 }; }); }
     catch (e) { toast(e.message, true); t.disabled = false; }
+    return;
+  }
+  if (t.id === "nbCopy") { navigator.clipboard?.writeText(NB_PROMPT).then(() => toast("اتنسخ البرومبت")); return; }
+  if (d.watch) { act(() => db.markWatched(ME.code, Number(d.watch)), "اتسجل إنك شفت الفيديو"); return; }
+  if (d.quiz) { startQuiz(Number(d.quiz)); return; }
+  if (d.quizclose) { if (!QUIZ.result && !(await ask("تلغي الاختبار؟", "المحاولة مش هتتحسب طالما ماسلمتش.", "إلغاء الاختبار", true))) return; clearInterval(quizTimer); QUIZ = null; render(); return; }
+  if (d.qzprev) { const text = $(`#qzText${d.qzprev}`).value; PREVIEW = { video: Number(d.qzprev), text, ...parseQuiz(text) }; render(); return; }
+  if (d.qzsave) {
+    const pv = PREVIEW, q = quizOf(pv.video), v = TR.videos.find((x) => x.id === pv.video);
+    act(async () => { await db.saveQuiz(pv.video, { questions: pv.questions, pass: q?.pass || 70, attempts: q?.attempts || 2, minutes: q?.minutes || Math.max(5, pv.questions.length * 1.5 | 0) }); if (pv.summary && !v.summary) await db.updateVideo(pv.video, { summary: pv.summary }); PREVIEW = null; }, "اتحفظ الاختبار");
+    return;
+  }
+  if (d.qzdel) { if (await ask("تحذف الاختبار ده؟", "نتايج المحاولات القديمة هتتمسح معاه.", "حذف", true)) act(() => db.deleteQuiz(Number(d.qzdel)), "اتحذف الاختبار"); return; }
+  if (d.viddel) { if (await ask("تحذف الفيديو ده؟", "الاختبار ونتايجه هيتمسحوا معاه. لو عايز تخفيه بس، شيل علامة (ظاهر للمتدربين).", "حذف", true)) act(() => db.deleteVideo(Number(d.viddel)), "اتحذف الفيديو"); return; }
+  if (t.id === "tplSave") {
+    const parse = (txt, pre) => txt.split("\n").map((l) => l.trim()).filter(Boolean).map((l, i) => { const text = l.replace(/^نص\s*[:：]\s*/, ""); return { id: `${pre}${i + 1}`, text, type: text === l ? "scale" : "text" }; });
+    const self = parse($("#tplSelf").value, "s"), mentor = parse($("#tplMentor").value, "m");
+    if (!self.some((q) => q.type === "scale") || !mentor.some((q) => q.type === "scale")) { toast("كل استبيان محتاج سؤال تقييم واحد على الأقل", true); return; }
+    act(async () => { await db.saveTemplate("self", self); await db.saveTemplate("mentor", mentor); }, "اتحفظت الأسئلة");
     return;
   }
   if (d.ack) { act(() => db.ackAction(Number(d.ack)), "تمام، اتسجل إنك اطلعت"); return; }
@@ -951,6 +1248,15 @@ document.addEventListener("change", async (ev) => {
     if (on) $("#meetClient").focus();
     return;
   }
+  if (t.form?.id === "empForm" && t.name === "experience") {
+    const box = $("#trainBox"), on = t.value === "fresh";
+    box.hidden = !on; box.disabled = !on;
+    if (on) $("#empForm [name=days]").focus();
+    return;
+  }
+  if (t.form?.id === "quizForm" && QUIZ && !QUIZ.result) { QUIZ.answers[Number(t.name.slice(1))] = Number(t.value); const n = t.form.querySelector(".row .note"); if (n) n.textContent = `${Object.keys(QUIZ.answers).length} من ${QUIZ.data.questions.length} متجاوب`; return; }
+  if (d.vid) { const v = t.type === "checkbox" ? t.checked : d.f === "period_n" ? Math.max(1, Number(t.value) || 1) : t.value.trim() || null; if (d.f === "title" && !v) { toast("الفيديو لازم يكون ليه اسم", true); render(); return; } act(() => db.updateVideo(Number(d.vid), { [d.f]: v }), "اتحفظ"); return; }
+  if (d.qz) { const q = quizOf(Number(d.qz)); act(() => db.saveQuiz(q.video, { ...q, [d.f]: Number(t.value) }), "اتحفظ"); return; }
   if (d.mstat) { act(() => db.updateMeeting(Number(d.mstat), "status", t.value), "اتحفظ"); return; }
   if (d.team) { act(() => db.updateTeam(Number(d.team), { [d.f]: t.value }), "اتحفظ"); return; }
   if (d.user && d.f === "code") { act(() => db.updateUser(d.user, { code: t.value }), "اتحفظ"); return; }
@@ -961,6 +1267,7 @@ document.addEventListener("change", async (ev) => {
 });
 
 document.addEventListener("submit", async (ev) => {
+  if (ev.target.method === "dialog") return; // the confirm dialog closes itself with the button's value
   ev.preventDefault(); if (busy) return;
   const f = ev.target, v = Object.fromEntries(new FormData(f));
   if (f.id === "loginForm") return login(v);
@@ -992,7 +1299,29 @@ document.addEventListener("submit", async (ev) => {
     act(() => db.addRequest(v), "اتسجل"); return;
   }
   if (f.id === "meetForm") { if (dur(v.tFrom, v.tTo) <= 0) { toast("ميعاد النهاية لازم يكون بعد البداية", true); return; } act(() => db.addMeeting(v), "اتسجل الاجتماع"); return; }
-  if (f.id === "empForm") { act(() => db.addEmployee(v.code.trim(), v.name.trim(), v.teamId), "اتضاف الموظف"); return; }
+  if (f.id === "empForm") {
+    const code = v.code.trim(), fresh = v.experience === "fresh";
+    if (S.employees.some((e) => e.code === code)) { toast("الكود ده موجود لموظف تاني", true); f.code.focus(); return; }
+    if (fresh && !db.trainingReady) { toast("شغّل neon/003_training.sql الأول عشان التدريب يشتغل", true); return; }
+    act(async () => {
+      await db.addEmployee(code, v.name.trim(), v.teamId, { hireDate: v.hireDate, experience: v.experience, job: v.job?.trim() });
+      if (fresh) await db.startTraining(code, v.hireDate, v.days, v.every, v.mentor, v.goals);
+    }, fresh ? "اتضاف الموظف وبدأت فترة تدريبه" : "اتضاف الموظف");
+    return;
+  }
+  if (f.id === "planForm") { act(() => db.startTraining(v.code, v.start, v.days, v.every, v.mentor, v.goals), "بدأت فترة التدريب"); return; }
+  if (f.id.startsWith("surveyForm")) {
+    const { plan, n, side } = f.dataset;
+    act(() => db.submitSurvey(Number(plan), Number(n), side, v), side === "self" ? "اتبعت الاستبيان، شكرًا" : "اتسجل التقييم ووصل للمتدرب");
+    return;
+  }
+  if (f.id.startsWith("decForm")) {
+    const label = { passed: "تثبيت الموظف بعد التدريب", extend: `مد التدريب ${v.extend} يوم`, ended: "إنهاء التدريب" }[v.status];
+    if (await ask(`${label}؟`, `${nameOf(TR.plans.find((p) => p.id === Number(f.dataset.plan))?.code)} هيوصله إشعار بالقرار والسبب.`, "تأكيد", v.status === "ended")) act(() => db.decideTraining(Number(f.dataset.plan), v.status, v.note, v.extend), "اتسجل القرار");
+    return;
+  }
+  if (f.id === "vidForm") { act(() => db.addVideo({ title: v.title.trim(), drive_url: v.drive.trim(), notebooklm_url: v.notebook.trim() || null, period_n: Number(v.period) || 1, sort: TR.videos.length + 1 }), "اتضاف الفيديو"); return; }
+  if (f.id === "quizForm") { submitQuiz(false); return; }
   if (f.id === "teamForm") { act(() => db.addTeam(v.name.trim()), "اتضاف الفريق"); return; }
 });
 
