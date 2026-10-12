@@ -1,8 +1,0 @@
-{
-  "name": "everest-hr-sync",
-  "private": true,
-  "type": "module",
-  "description": "Daily read-only copy of Recruitment and Sales Hub views into the HR portal",
-  "scripts": { "sync": "node sync.mjs" },
-  "dependencies": { "pg": "8.13.1" }
-}

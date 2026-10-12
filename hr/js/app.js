@@ -40,7 +40,7 @@ const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
-let TR = null, QUIZ = null, PREVIEW = null, BR = null, HIRE = null;
+let TR = null, QUIZ = null, PREVIEW = null, HIRE = null;
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 
 const $ = (s) => document.querySelector(s);
@@ -176,7 +176,7 @@ async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
   if (!S) skeleton();
   try {
-    [S, TR, BR] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null), R.admin ? db.loadBridge().catch(() => null) : null]);
+    [S, TR] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null)]);
     E = createEngine(S, LAST);
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
     R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
@@ -209,7 +209,7 @@ async function go(t) { tab = t; render(); await beforeTab(); render(); }
 // Desktop: grouped sidebar. Phone: the 4 most used places plus "المزيد".
 function renderTabs() {
   if (!S) return;
-  const badges = { emp: BR?.candidates.length ? `<span class="badge" aria-label="${BR.candidates.length} مرشح للتعيين">${BR.candidates.length}</span>` : "", requests: badge(), inbox: unread() ? `<span class="badge" aria-label="${unread()} جديد">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
+  const badges = { requests: badge(), inbox: unread() ? `<span class="badge" aria-label="${unread()} جديد">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
   const vis = visibleTabs();
   const item = ([k, l, , ic], short) => `<button class="nav-item" data-tab="${k}"${k === tab ? ' aria-current="page"' : ""}>${icon(ic)}<span>${short || l}</span>${badges[k] || ""}</button>`;
   const groups = GROUPS.map(([g, gl]) => { const list = vis.filter((t) => t[4] === g); return list.length ? `<div class="nav-group" role="group" aria-label="${gl}"><h2>${gl}</h2>${list.map((t) => item(t)).join("")}</div>` : ""; }).join("");
@@ -717,28 +717,13 @@ function pay(ym) {
   </tbody></table></div>`;
 }
 
-// Hired candidates copied from the recruitment system every morning.
-function candidatesCard() {
-  if (!BR || !db.bridgeReady) return "";
-  const run = BR.lastOk, list = BR.candidates;
-  const status = BR.failed ? `<div class="banner">${icon("alert-triangle")}آخر مزامنة مع التوظيف فشلت ${fmtTs(BR.failed.at)}: ${esc(BR.failed.error || "")}</div>`
-    : `<p class="note">آخر مزامنة مع طلبات التوظيف: ${run ? fmtTs(run.at) : "لسه محصلتش"}. بتتحدث كل يوم الصبح.</p>`;
-  if (!list.length && !BR.failed) return `<div class="card"><h2>${icon("user-check")}مرشحين للتعيين</h2>${status}${empty("user-check", "مفيش مرشحين مستنيين", "اللي هيتقرر تعيينه في طلبات التوظيف هيظهر هنا.")}</div>`;
-  return `<div class="card"><h2>${icon("user-check")}مرشحين للتعيين (${list.length})</h2>${status}
-    <div class="tbl flat"><table><thead><tr><th>الاسم</th><th>الوظيفة</th><th>القرار</th><th>الدرجة المبدئية</th><th>المقابلة</th><th>الموبايل</th><th></th></tr></thead><tbody>
-    ${list.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.position)}</td><td><span class="pill ${/قوي/.test(c.decision) ? "p-ok" : "p-acc"}">${esc(c.decision)}</span>${c.decidedOn ? ` <span class="note">${fmtDate(c.decidedOn)}</span>` : ""}</td>
-      <td class="num">${c.auto ?? "-"}/100</td><td class="num">${c.interview ?? "-"}/90</td><td dir="ltr">${esc(c.mobile)}</td>
-      <td><div class="row nowrap"><button class="btn primary sm" data-hire="${esc(c.id)}">تعيين</button><button class="btn sm" data-candno="${esc(c.id)}">مش هينضم</button></div></td></tr>`).join("")}
-    </tbody></table></div></div>`;
-}
-
 function emp() {
   let list = S.employees;
   if (empFilter === "nameless") list = list.filter((e) => !e.name?.trim());
   if (empFilter === "exempt") list = list.filter((e) => e.exempt);
   if (empFilter === "noteam") list = list.filter((e) => !has(e.teamId));
   const teamOpts = (sel) => opts(S.teams.map((t) => [t.id, t.name]), sel, "بدون فريق");
-  return `${candidatesCard()}<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
+  return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
   <p class="note">أي تعديل بيتحفظ على طول. الفرق ومديرينها بتتعدل من (الإعدادات والفرق).</p></div>
   <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
   ${list.map((e) => { const c = esc(e.code); return `<tr class="${!e.name?.trim() ? "missing-name" : ""}${e.active === false ? " off" : ""}"><td>${c}</td>
@@ -1176,9 +1161,7 @@ document.addEventListener("click", async (ev) => {
     catch (e) { toast(e.message, true); t.disabled = false; }
     return;
   }
-  if (d.hire) { HIRE = BR.candidates.find((c) => c.id === d.hire); render(); $("#empCard").scrollIntoView({ block: "start" }); $("#empForm [name=code]").focus(); return; }
   if (d.hirecancel) { HIRE = null; render(); return; }
-  if (d.candno) { const c = BR.candidates.find((x) => x.id === d.candno); if (await ask(`${c.name} مش هينضم؟`, "هيختفي من القايمة هنا بس. ملفه في طلبات التوظيف مش هيتغير.", "تأكيد")) act(() => db.dismissCandidate(c.id), "اتشال من القايمة"); return; }
   if (t.id === "nbCopy") { navigator.clipboard?.writeText(NB_PROMPT).then(() => toast("اتنسخ البرومبت")); return; }
   if (d.watch) { act(() => db.markWatched(ME.code, Number(d.watch)), "اتسجل إنك شفت الفيديو"); return; }
   if (d.quiz) { startQuiz(Number(d.quiz)); return; }
@@ -1326,7 +1309,7 @@ document.addEventListener("submit", async (ev) => {
     act(async () => {
       await db.addEmployee(code, v.name.trim(), v.teamId, { hireDate: v.hireDate, experience: v.experience, job: v.job?.trim() });
       if (fresh) await db.startTraining(code, v.hireDate, v.days, v.every, v.mentor, v.goals);
-      if (v.app) { await db.linkCandidate(v.app, code); HIRE = null; }
+      if (v.app) { await db.hireApplication(v.app, code); HIRE = null; }
     }, fresh ? "اتضاف الموظف وبدأت فترة تدريبه" : "اتضاف الموظف");
     return;
   }
