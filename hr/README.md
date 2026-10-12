@@ -73,6 +73,20 @@ plan. Employees see their own last four weeks (the admin can turn that off).
 The page also flags two low weeks in a row, sharp drops, strong/weak gaps,
 low attitude with attendance problems, and people with nothing last week.
 
+## Initial evaluation and reports
+
+Each trainee card shows a 0-100 initial evaluation built from the quizzes,
+mentor surveys, attendance, weekly sales ratings and self surveys (weights in
+محتوى التدريب; a missing part gives its weight to the rest), with the
+recruitment scores as the baseline and a suggested next step. التقارير has a
+printable report for senior management, HR, team managers and each employee.
+
+Every Thursday the "HR weekly email" Action (`tools/report/weekly.mjs`) logs in
+as `hr_report`, which may only call `hr_weekly_report()`
+(`neon/006_weekly_report.sql`), and emails the company summary to admins and
+each manager their team's figures through Resend. Secrets: `NEON_REPORT_URL`,
+`RESEND_API_KEY`, `MAIL_FROM`. Scheduled Actions run from the default branch.
+
 ## Set up
 
 1. In the Neon Console create a project, then enable **Neon Auth** and the
@@ -116,6 +130,8 @@ neon/002_portal.sql  employee portal: invites, rules, penalties/bonuses,
 neon/003_training.sql new-hire training: plans, surveys, videos, quizzes
 neon/004_recruitment.sql job applications, interview scores, hiring
 neon/005_sales_eval.sql  weekly 1-5 ratings per column, evaluators, team plans
+neon/006_weekly_report.sql  figures for the Thursday email, hr_report login
+tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)
 hr/js/applyForm.js   the application's sections and fields
 ```
