@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121900";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121900";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610122100";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610122100";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -465,3 +465,38 @@ export async function appStatus(id, status) { check(await client.rpc("hr_app_sta
 export async function hireApplication(id, code) { check(await client.rpc("hr_app_hire", { p_app: id, p_code: code })); }
 export async function addPosition(title, sort) { check(await client.from("job_positions").insert({ title, sort })); }
 export async function updatePosition(id, fields) { check(await client.from("job_positions").update(fields).eq("id", id)); }
+
+// ---------------------------------------------------------------- weekly sales evaluation (neon/005_sales_eval.sql)
+
+export let evalReady = true;
+const softE = (p) => p.catch((e) => { if (/schema cache|does not exist|PGRST20|hr_eval_week/i.test(e.message)) { evalReady = false; return null; } throw e; });
+// The selected week plus the 5 before it (for trends and alerts).
+export async function loadEval(day) {
+  const wid = await softE(client.rpc("hr_eval_week", { p_day: day || null }).then(check));
+  if (wid == null) return null;
+  const weeks = await get(client.from("eval_weeks").select("*").lte("id", wid).order("starts_on", { ascending: false }).limit(6));
+  const ids = weeks.map((w) => w.id);
+  const [entries, assignments, plans] = await Promise.all([
+    all(() => client.from("eval_entries").select("*").in("week_id", ids)),
+    get(client.from("eval_assignments").select("*")),
+    get(client.from("team_month_plans").select("*")),
+  ]);
+  return {
+    week: weeks.find((w) => w.id === wid),
+    weeks: weeks.map((w) => ({ id: w.id, start: w.starts_on, end: w.ends_on, reopened: w.reopened_until })),
+    entries: entries.map((x) => ({ code: x.code, week: x.week_id, cat: x.category, rating: x.rating, note: x.note || "", at: x.updated_at })),
+    assignments: assignments.map((a) => ({ user: a.user_id, team: a.team_id, cat: a.category })),
+    plans: plans.map((p) => ({ team: p.team_id, month: p.month, tasks: p.tasks || "", vision: p.vision || "" })),
+  };
+}
+export async function evalOpen(week) { return check(await client.rpc("hr_eval_open", { p_week: week })); }
+export async function evalSave(code, week, cat, rating, note) {
+  check(await client.rpc("hr_eval_save", { p_code: code, p_week: week, p_category: cat, p_rating: rating, p_note: note || null }));
+}
+export async function evalReopen(week) { check(await client.rpc("hr_eval_reopen", { p_week: week, p_hours: 48 })); }
+export async function evalRemind(week) { return check(await client.rpc("hr_eval_remind", { p_week: week })); }
+export async function teamPlanSave(team, month, tasks, vision) { check(await client.rpc("hr_team_plan_save", { p_team: team, p_month: month, p_tasks: tasks, p_vision: vision })); }
+export async function setAssignment(user, team, cat, on) {
+  if (on) check(await client.from("eval_assignments").insert({ user_id: user, team_id: team, category: cat }));
+  else check(await client.from("eval_assignments").delete().eq("user_id", user).eq("team_id", team).eq("category", cat));
+}

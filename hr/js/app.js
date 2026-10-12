@@ -1,13 +1,13 @@
-import * as db from "./db.js?v=202610121900";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610121900";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610121900";
+import * as db from "./db.js?v=202610122100";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610122100";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610122100";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير فريق"], ["recruiter", "التوظيف"]];
+const ROLES = [["admin", "مدير النظام"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير فريق"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -28,6 +28,7 @@ const TABS = [
   ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader, "clock", "team", "اليومي"],
   ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
   ["sum", "ملخص الحضور", (r) => r.admin || r.manager, "list-details", "team", "الملخص"],
+  ["weekly", "التقييم الأسبوعي", (r) => r.admin || r.manager || r.evaluator, "star", "team", "التقييم"],
   ["trainees", "المتدربين", (r) => r.admin || r.manager || r.mentor, "school", "team", "المتدربين"],
   ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
@@ -42,6 +43,7 @@ const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
+let EV = null, EVOPEN = false, EWDAY = "";
 let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null, RF = { status: "", position: "", sort: "date", q: "" };
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 
@@ -113,7 +115,7 @@ function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permiss
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610121900";
+const BUILD = "202610122100";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -214,6 +216,7 @@ const visibleTabs = () => TABS.filter(([, , f]) => f(R));
 async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
+  if (tab === "weekly" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread()) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
 }
@@ -252,7 +255,7 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, recruit, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
@@ -339,6 +342,7 @@ function home(ym) {
     <div class="row"><button class="btn primary" data-go="field">${icon("map-pin")}سجل تواجدي</button><button class="btn" data-go="mine">${icon("calendar-event")}اطلب إذن أو إجازة</button>
     ${lastCheck ? `<span class="note">آخر تسجيل: ${esc(checkKind(lastCheck.kind))} ${fmtTs(lastCheck.ts)}</span>` : ""}</div></div>
   ${fresh.length ? `<div class="banner">${icon("bell")}عندك ${fresh.length} ${fresh.length === 1 ? "إجراء جديد" : "إجراءات جديدة"} من الإدارة. راجعها في (الجزاءات والمنح) تحت وأكد إنك اطلعت.</div>` : ""}
+  ${myEvalCard()}
   <div class="grid2">
     <div class="card"><h2>${icon("calendar-event")}حضوري الشهر ده</h2>${monthCal(e, ym)}
       <div class="kpis">
@@ -404,7 +408,7 @@ async function loadComparison() {
 }
 
 // ---------------------------------------------------------------- notifications
-const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
+const NOTIF_GO = { eval_weeks: "weekly", requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
 function inbox() {
   const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; return NOTIF_GO[n.ref_table]; };
   return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
@@ -1227,6 +1231,117 @@ function appDetail(a) {
   <div class="card answers"><h2>${icon("file-text")}بيانات المتقدم</h2>${SECTIONS.map(sec).join("")}</div>`;
 }
 
+// ---------------------------------------------------------------- weekly sales evaluation
+const CATS = [["media", "الميديا"], ["leads", "الليدز"], ["attitude", "الالتزام"], ["development", "التطوير"]];
+const catName = (c) => CATS.find(([k]) => k === c)?.[1] || c;
+const RATE_TXT = ["", "ضعيف", "مقبول", "جيد", "جيد جدًا", "ممتاز"];
+const ratePill = (n) => (n ? `<span class="pill ${n >= 4 ? "p-ok" : n === 3 ? "p-acc" : "p-bad"}" title="${RATE_TXT[n]}">${n}</span>` : '<span class="note">-</span>');
+const weekLabel = (w) => `${fmtDate(w.start)} - ${fmtDate(w.end)}`;
+const entryOf = (code, week, cat) => EV?.entries.find((x) => x.code === code && x.week === week && x.cat === cat);
+const thisFriday = () => { const t = today(); const dow = new Date(t + "T12:00:00Z").getUTCDay(); return addDays(t, -((dow - 5 + 7) % 7)); };
+
+// which teams and columns the signed-in user rates (edit) or only follows (view)
+function evalScope() {
+  if (R.admin) return S.teams.map((t) => ({ team: t, cats: CATS.map(([k]) => k), edit: true }));
+  const mine = EV.assignments.filter((a) => a.user === ME.id), out = [];
+  for (const t of S.teams) {
+    const cats = mine.filter((a) => a.team === t.id).map((a) => a.cat);
+    if (cats.length) out.push({ team: t, cats: CATS.map(([k]) => k).filter((k) => cats.includes(k)), edit: true });
+    else if (R.manager && t.manager === ME.code) out.push({ team: t, cats: CATS.map(([k]) => k), edit: false });
+  }
+  return out;
+}
+const membersOf = (teamId) => S.employees.filter((e) => e.active !== false && String(e.teamId) === String(teamId) && e.code !== ME.code && e.code !== S.teams.find((t) => t.id === teamId)?.manager);
+
+function evalAlerts(codes) {
+  const st = E.st, low = N0(st.evalLow) || 2, drop = N0(st.evalDrop) || 2, [w0, w1] = EV.weeks, out = [];
+  for (const code of codes) {
+    const r = (w, c) => (w ? entryOf(code, w.id, c)?.rating : undefined);
+    for (const [c, l] of CATS) {
+      const a = r(w0, c), b = r(w1, c);
+      if (a && b && a <= low && b <= low) out.push([code, "bad", `${l}: ${b} ثم ${a}، أسبوعين ورا بعض تحت المستوى`]);
+      else if (a && b && b - a >= drop) out.push([code, "warn", `${l}: نزل من ${b} لـ ${a}`]);
+    }
+    const now = CATS.map(([c]) => r(w0, c)).filter(Boolean);
+    if (now.length > 1 && Math.max(...now) >= 4 && Math.min(...now) <= 2) {
+      const hi = CATS.filter(([c]) => r(w0, c) >= 4).map(([, l]) => l).join(" و"), lo = CATS.filter(([c]) => r(w0, c) && r(w0, c) <= 2).map(([, l]) => l).join(" و");
+      out.push([code, "info", `قوي في ${hi} وضعيف في ${lo}: ركّز معاه على ${lo}`]);
+    }
+    const att = r(w0, "attitude"), e = empBy(code);
+    if (att && att <= low && e) { const s = E.summary(e, S.meta.month); if (s.abs >= 2 || s.latec >= 4) out.push([code, "bad", `الالتزام ${att} ومعاه ${[s.abs ? `${s.abs} غياب` : "", s.latec ? `${s.latec} مرة تأخير` : ""].filter(Boolean).join(" و")} في البصمة الشهر ده`]); }
+  }
+  // one line for everyone with nothing last week, instead of a line each
+  const none = w1 ? codes.filter((code) => !CATS.some(([c]) => entryOf(code, w1.id, c))) : [];
+  if (none.length) out.push([null, "warn", `مفيش أي تقييم الأسبوع اللي فات لـ ${none.length} ${none.length > 10 ? "موظف" : "موظفين"}: ${none.slice(0, 8).map(nameOf).join("، ")}${none.length > 8 ? ` و${none.length - 8} كمان` : ""}`]);
+  const order = { bad: 0, warn: 1, info: 2 };
+  return out.sort((a, b) => order[a[1]] - order[b[1]]);
+}
+
+function weekly() {
+  if (!EV || !db.evalReady) return `<div class="banner">${icon("alert-triangle")}جداول التقييم الأسبوعي لسه مش ظاهرة. شغّل neon/005_sales_eval.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
+  const w = EV.week, wk = { start: w.starts_on, end: w.ends_on }, scope = evalScope(), cur = w.starts_on === thisFriday();
+  const editable = scope.filter((s) => s.edit);
+  let total = 0, done = 0;
+  for (const s of editable) for (const m of membersOf(s.team.id)) for (const c of s.cats) { total++; if (entryOf(m.code, w.id, c)) done++; }
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const thu = new Date(today() + "T12:00:00Z").getUTCDay() === 4;
+  const status = EVOPEN ? (cur ? `<span class="pill p-ok">مفتوح لحد الخميس 11:59 بالليل</span>` : `<span class="pill p-warn">اتفتح تاني مؤقتًا</span>`) : `<span class="pill p-mute">مقفول</span>`;
+  const codes = [...new Set(scope.flatMap((s) => membersOf(s.team.id).map((m) => m.code)))];
+  const alerts = evalAlerts(codes);
+  const month = w.starts_on.slice(0, 7);
+  const planTeams = scope.map((s) => s.team);
+  return `
+  <div class="card"><div class="row"><button class="btn sm" data-ewk="-7" aria-label="الأسبوع اللي قبله">${icon("chevron-down", "rot90")}</button>
+    <div class="spacer wk-title"><h2>الأسبوع ${weekLabel(wk)}</h2><div class="row">${status}${!cur ? '<button class="btn sm" data-ewk="now">الأسبوع الحالي</button>' : ""}${!EVOPEN && R.admin ? `<button class="btn sm" data-ereopen="${w.id}">افتحه 48 ساعة</button>` : ""}</div></div>
+    ${!cur ? `<button class="btn sm" data-ewk="7" aria-label="الأسبوع اللي بعده">${icon("chevron-down", "rotm90")}</button>` : ""}</div>
+    ${editable.length ? `<div><span class="track" role="progressbar" aria-label="نسبة التقييمات اللي اتسجلت" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i class="${pct < 50 ? "low" : pct < 100 ? "mid" : ""}" style="width:${pct}%"></i></span>
+      <div class="note">خلّصت ${done} من ${total} تقييم${thu && EVOPEN && done < total ? ` · <b>النهارده آخر يوم، باقي ${total - done}</b>` : ""}</div></div>` : ""}</div>
+  ${scope.length ? "" : empty("star", "مفيش فرق متعينة ليك", "مدير النظام بيحدد كل مقيّم بيقيّم أنهي فريق وأنهي عمود.")}
+  ${scope.map((s) => { const ms = membersOf(s.team.id), can = s.edit && EVOPEN;
+    return `<div class="card"><div class="row"><h2 class="spacer">${icon("users")}${esc(s.team.name)}</h2>${!s.edit ? '<span class="pill p-mute">متابعة بس</span>' : ""}</div>
+    ${ms.length ? `<div class="tbl flat"><table class="eval"><thead><tr><th>الموظف</th>${s.cats.map((c) => `<th>${catName(c)}</th>`).join("")}</tr></thead><tbody>
+      ${ms.map((m) => `<tr><th scope="row">${esc(empName(m))}</th>${s.cats.map((c) => { const x = entryOf(m.code, w.id, c);
+        return `<td>${can ? `<div class="rate" role="radiogroup" aria-label="${esc(empName(m))}: ${catName(c)}">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="${x?.rating === n}" data-rate="${esc(m.code)}|${c}|${n}" title="${RATE_TXT[n]}">${n}</button>`).join("")}</div>
+          <input type="text" class="enote" maxlength="500" placeholder="ملاحظة" value="${esc(x?.note || "")}" data-enote="${esc(m.code)}|${c}" aria-label="ملاحظة ${esc(empName(m))}: ${catName(c)}"${x ? "" : " disabled"}>`
+          : `${ratePill(x?.rating)}${x?.note ? `<div class="note wrap">${esc(x.note)}</div>` : ""}`}</td>`; }).join("")}</tr>`).join("")}
+    </tbody></table></div>` : '<p class="note">مفيش موظفين في الفريق ده.</p>'}</div>`; }).join("")}
+  ${R.admin || R.manager ? `<div class="card"><div class="row"><h2 class="spacer">${icon("clipboard-check")}مين خلّص</h2>${EVOPEN ? `<button class="btn" data-eremind="${w.id}">${icon("bell")}فكّر المتأخرين</button>` : ""}</div>
+    <div class="tbl flat"><table><thead><tr><th>الفريق</th>${CATS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
+    ${scope.map((s) => { const ms = membersOf(s.team.id); return `<tr><th scope="row">${esc(s.team.name)}</th>${CATS.map(([c]) => { const d = ms.filter((m) => entryOf(m.code, w.id, c)).length, who = EV.assignments.filter((a) => a.team === s.team.id && a.cat === c).map((a) => S.users.find((u) => u.id === a.user)?.name || nameOf(S.users.find((u) => u.id === a.user)?.code) || "").filter(Boolean).join("، ");
+      return `<td><span class="pill ${!ms.length ? "p-mute" : d === ms.length ? "p-ok" : d ? "p-warn" : "p-bad"}">${d}/${ms.length}</span>${R.admin ? `<div class="note">${esc(who) || "مفيش مقيّم"}</div>` : ""}</td>`; }).join("")}</tr>`; }).join("")}
+    </tbody></table></div></div>` : ""}
+  ${alerts.length ? `<div class="card"><h2>${icon("alert-triangle")}تنبيهات واقتراحات</h2>${alerts.slice(0, 15).map(([code, lv, txt]) => `<div class="act"><div class="row"><span class="pill ${lv === "bad" ? "p-bad" : lv === "warn" ? "p-warn" : "p-info"}">${lv === "bad" ? "مهم" : lv === "warn" ? "تابع" : "اقتراح"}</span>${code ? `<b>${esc(nameOf(code))}</b>` : ""}</div><div class="note">${esc(txt)}</div></div>`).join("")}</div>` : ""}
+  ${planTeams.length ? fold("list-details#plans", `خطة الشهر للفرق (${month.split("-").reverse().join("/")})`, planTeams.map((t) => { const p = EV.plans.find((x) => x.team === t.id && x.month === month) || {}; const canP = R.admin || (R.manager && t.manager === ME.code);
+    return canP ? `<form class="add-grid plan" data-team="${t.id}" data-month="${month}"><h3 class="wide">${esc(t.name)}</h3><label class="field wide">المهام المطلوبة<textarea name="tasks" rows="3" maxlength="3000">${esc(p.tasks || "")}</textarea></label><label class="field wide">الهدف / الرؤية<textarea name="vision" rows="2" maxlength="2000">${esc(p.vision || "")}</textarea></label><div><button class="btn" type="submit">احفظ خطة ${esc(t.name)}</button></div></form>`
+      : `<div><h3>${esc(t.name)}</h3><p class="wrap">${esc(p.tasks || "مفيش خطة متسجلة")}</p>${p.vision ? `<p class="note">${esc(p.vision)}</p>` : ""}</div>`; }).join("<hr>")) : ""}
+  ${R.admin ? fold("settings#evalAssign", "مين يقيّم إيه", evalAssignEditor()) : ""}`;
+}
+
+function evalAssignEditor() {
+  const evs = S.users.filter((u) => u.roles.includes("evaluator") || u.roles.includes("admin") === false && EV.assignments.some((a) => a.user === u.id));
+  const hidden = E.st.evalToEmployee === false;
+  return `<p class="note">ادّي الشخص دور (التقييم الأسبوعي) من جدول المستخدمين في الإعدادات، أو من كود التفعيل، وبعدين علّم هنا هو بيقيّم أنهي فريق وأنهي عمود.</p>
+    <label class="row field-inline"><input type="checkbox" id="evalVisible"${hidden ? "" : " checked"}> الموظف يشوف تقييماته وملاحظاتها في صفحته</label>
+    ${evs.length ? evs.map((u) => `<details class="fold"><summary>${icon("user-check")}<span>${esc(u.name || nameOf(u.code) || u.email)}</span>${icon("chevron-down", "chev")}</summary><div class="body"><div class="tbl flat"><table><thead><tr><th>الفريق</th>${CATS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
+      ${S.teams.map((t) => `<tr><th scope="row">${esc(t.name)}</th>${CATS.map(([c, l]) => `<td class="num"><input type="checkbox" data-asg="${esc(u.id)}|${t.id}|${c}"${EV.assignments.some((a) => a.user === u.id && a.team === t.id && a.cat === c) ? " checked" : ""} aria-label="${esc(t.name)}: ${l}"></td>`).join("")}</tr>`).join("")}
+      </tbody></table></div></div></details>`).join("") : empty("users", "مفيش حد بدور التقييم الأسبوعي لسه")}`;
+}
+
+// the employee's own last 4 weeks, on their home page
+function myEvalCard() {
+  if (!EV || !db.evalReady || !ME.code) return "";
+  const ws = EV.weeks.slice(0, 4).reverse(), mine = EV.entries.filter((x) => x.code === ME.code);
+  if (!mine.length) return "";
+  const notes = mine.filter((x) => x.note).sort((a, b) => b.week - a.week).slice(0, 6);
+  return `<div class="card"><h2>${icon("star")}تقييمي الأسبوعي</h2><div class="tbl flat"><table><thead><tr><th>العمود</th>${ws.map((w) => `<th>${fmtDate(w.start)}</th>`).join("")}</tr></thead><tbody>
+    ${CATS.map(([c, l]) => `<tr><th scope="row">${l}</th>${ws.map((w) => `<td class="num">${ratePill(entryOf(ME.code, w.id, c)?.rating)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    ${notes.length ? `<div>${notes.map((x) => `<p class="note"><b>${catName(x.cat)}:</b> ${esc(x.note)}</p>`).join("")}</div>` : ""}</div>`;
+}
+
+async function evalLoad() {
+  try { EV = await db.loadEval(EWDAY); EVOPEN = EV ? await db.evalOpen(EV.week.id) : false; } catch (e) { EV = null; if (db.evalReady) toast(errMsg(e), true); }
+}
+
 // ---------------------------------------------------------------- events
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button"); if (!t || busy) return;
@@ -1254,6 +1369,18 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.hirecancel) { HIRE = null; render(); return; }
+  if (d.ewk) { EWDAY = d.ewk === "now" ? "" : addDays(EV.week.starts_on, Number(d.ewk)); if (EWDAY && EWDAY >= thisFriday()) EWDAY = ""; await evalLoad(); render(); return; }
+  if (d.ereopen) { if (await ask("تفتح الأسبوع ده 48 ساعة؟", "المقيمين هيقدروا يعدلوا تقييماته لحد ما المدة تخلص.", "افتحه")) { try { await db.evalReopen(Number(d.ereopen)); await evalLoad(); render(); toast("الأسبوع اتفتح 48 ساعة"); } catch (e) { toast(errMsg(e), true); } } return; }
+  if (d.eremind) { try { const n = await db.evalRemind(Number(d.eremind)); toast(n ? `اتبعت تذكير لـ ${n}` : "كله مخلّص، مفيش حد يتفكّر"); } catch (e) { toast(errMsg(e), true); } return; }
+  if (d.rate) {
+    const [code, cat, n] = d.rate.split("|"), w = EV.week.id, old = entryOf(code, w, cat), rating = Number(n);
+    const note = old?.note || "", next = old?.rating === rating ? null : rating;
+    EV.entries = EV.entries.filter((x) => !(x.code === code && x.week === w && x.cat === cat));
+    if (next) EV.entries.push({ code, week: w, cat, rating: next, note, at: new Date().toISOString() });
+    render();
+    try { await db.evalSave(code, w, cat, next, note); } catch (e) { toast(/locked/.test(e.message) ? "الأسبوع اتقفل" : errMsg(e), true); await evalLoad(); render(); }
+    return;
+  }
   if (d.app) { APP = d.app; render(); window.scrollTo({ top: 0 }); $("#main h2")?.focus?.(); return; }
   if (d.appback) { APP = null; render(); return; }
   if (d.rst) { RF.status = RF.status === d.rst ? "" : d.rst; APP = null; render(); return; }
@@ -1326,6 +1453,14 @@ document.addEventListener("change", async (ev) => {
   if (t.id === "dailyEmp") { dailyEmp = t.value; render(); return; }
   if (t.id === "dailyFilter") { dailyFilter = t.value; render(); return; }
   if (t.id === "empFilter") { empFilter = t.value; render(); return; }
+  if (d.enote) {
+    const [code, cat] = d.enote.split("|"), w = EV.week.id, x = entryOf(code, w, cat); if (!x) return;
+    x.note = t.value.trim();
+    try { await db.evalSave(code, w, cat, x.rating, x.note); toast("اتحفظت الملاحظة"); } catch (e) { toast(errMsg(e), true); }
+    return;
+  }
+  if (d.asg) { const [u, team, cat] = d.asg.split("|"); try { await db.setAssignment(u, Number(team), cat, t.checked); await evalLoad(); render(); toast("اتحفظ"); } catch (e) { toast(errMsg(e), true); render(); } return; }
+  if (t.id === "evalVisible") { saveSettings((s) => { s.evalToEmployee = t.checked; }); return; }
   if (t.id === "rfStatus") { RF.status = t.value; render(); return; }
   if (t.id === "rfPos") { RF.position = t.value; render(); return; }
   if (t.id === "rfSort") { RF.sort = t.value; render(); return; }
@@ -1422,6 +1557,7 @@ document.addEventListener("submit", async (ev) => {
     }, fresh ? "اتضاف الموظف وبدأت فترة تدريبه" : "اتضاف الموظف");
     return;
   }
+  if (f.classList.contains("plan")) { try { await db.teamPlanSave(Number(f.dataset.team), f.dataset.month, v.tasks, v.vision); await evalLoad(); render(); toast("اتحفظت الخطة"); } catch (e) { toast(errMsg(e), true); } return; }
   if (f.id === "intForm") {
     const scores = {}; CRITERIA.forEach((_, i) => { const n = Number(v[`s${i}`]); if (n) scores[i] = n; });
     if (!Object.keys(scores).length) { toast("اختار درجة لمعيار واحد على الأقل", true); return; }

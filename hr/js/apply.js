@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121900";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121900";
-import { SECTIONS } from "./applyForm.js?v=202610121900";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610122100";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610122100";
+import { SECTIONS } from "./applyForm.js?v=202610122100";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,7 +132,7 @@ $("#applyForm").addEventListener("submit", (ev) => {
   submit();
 });
 
-const BUILD = "202610121900";
+const BUILD = "202610122100";
 async function boot() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
