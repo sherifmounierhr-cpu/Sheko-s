@@ -81,6 +81,13 @@ after 12 months with `hr_purge_applications()`.
    email, types the code, and is linked to their employee record. A code
    works once, for 14 days; five wrong tries lock it for an hour.
 
+## Releasing a change
+
+Bump the same build stamp in `hr/version.json`, `BUILD` in `hr/js/app.js` and
+`hr/js/apply.js`, and every `?v=` in the HTML and module imports. Open pages
+compare `version.json` (fetched without cache) to their `BUILD` and reload
+once when a newer build is out, so nobody needs Ctrl+Shift+R.
+
 ## Files
 
 ```

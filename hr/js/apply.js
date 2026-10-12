@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121800";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121800";
-import { SECTIONS } from "./applyForm.js?v=202610121800";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121900";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121900";
+import { SECTIONS } from "./applyForm.js?v=202610121900";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,7 +132,12 @@ $("#applyForm").addEventListener("submit", (ev) => {
   submit();
 });
 
+const BUILD = "202610121900";
 async function boot() {
+  try {
+    const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
+    if (v && v !== BUILD && sessionStorage.getItem("apply-build") !== v) { sessionStorage.setItem("apply-build", v); location.reload(); return; }
+  } catch { /* carry on */ }
   if (!client) { $("#formBody").innerHTML = '<p class="note">الفورم مش متاح دلوقتي.</p>'; return; }
   try {
     const { data: rows, error } = await client.from("job_positions").select("title").eq("active", true).order("sort").order("title");

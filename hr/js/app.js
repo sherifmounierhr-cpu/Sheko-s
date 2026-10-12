@@ -1,6 +1,6 @@
-import * as db from "./db.js?v=202610121800";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610121800";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610121800";
+import * as db from "./db.js?v=202610121900";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610121900";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610121900";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -111,7 +111,19 @@ function ask(title, text = "", yes = "تأكيد", danger = false) {
 function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
+// GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
+// build is out, reload once so nobody has to press Ctrl+Shift+R.
+const BUILD = "202610121900";
+async function fresh() {
+  try {
+    const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
+    if (v && v !== BUILD && sessionStorage.getItem("hr-build") !== v) { sessionStorage.setItem("hr-build", v); location.reload(); return false; }
+  } catch { /* offline or blocked storage: carry on with this build */ }
+  return true;
+}
+
 async function boot() {
+  if (!(await fresh())) return;
   if (!db.configured) { show("setup"); return; }
   const user = await db.currentUser().catch(() => null);
   if (!user) { show("login"); return; }
@@ -301,7 +313,9 @@ const fold = (ik, title, body, open = false, extra = "") => { const [ic, key = i
 
 function home(ym) {
   const e = empBy(ME.code);
-  if (!e) return empty("alert-triangle", "حسابك مربوط بكود موظف مش ظاهر", "كلم مدير النظام يراجع ربط حسابك.");
+  if (!e) return R.admin
+    ? `${empty("alert-triangle", `حسابك مربوط بالكود ${esc(ME.code)} ومفيش موظف بالكود ده`, "اختار الكود الصح لحسابك من (الإعدادات والفرق) في جدول المستخدمين.")}<div class="row" style="justify-content:center"><button class="btn primary" data-go="set">افتح الإعدادات</button></div>`
+    : empty("alert-triangle", "حسابك مربوط بكود موظف مش ظاهر", "كلم مدير النظام يراجع ربط حسابك.");
   const r = E.toDate(e, ym), s = r.s, st = E.st;
   const used = E.permUsed(ME.code, ym), allow = N0(st.permAllowH) * 60;
   const acts = S.actions.filter((a) => a.code === ME.code && a.status === "approved").sort((a, b) => b.day.localeCompare(a.day));
