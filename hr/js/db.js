@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121300";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121300";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121800";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121800";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -435,3 +435,33 @@ export async function saveTemplate(side, questions) {
   check(await client.from("survey_templates").update({ active: false }).eq("side", side));
   check(await client.from("survey_templates").insert({ side, questions }));
 }
+
+// ---------------------------------------------------------------- recruitment (neon/004_recruitment.sql)
+
+export let recruitReady = true;
+export async function loadRecruit() {
+  const [apps, reviews, positions] = await Promise.all([
+    all(() => client.from("applications").select("*").order("created_at", { ascending: false })),
+    all(() => client.from("application_reviews").select("*")),
+    get(client.from("job_positions").select("*").order("sort").order("title")),
+  ]).catch((e) => { if (/schema cache|does not exist|PGRST20/i.test(e.message)) { recruitReady = false; return [[], [], []]; } throw e; });
+  const rev = Object.fromEntries(reviews.map((r) => [r.application_id, r]));
+  return {
+    apps: apps.map((a) => {
+      const r = rev[a.id] || {};
+      return { id: a.id, ref: a.ref, at: a.created_at, position: a.position, name: a.full_name, mobile: a.mobile, email: a.email || "", source: a.source || "",
+        answers: a.answers || {}, auto: a.auto_score, status: a.status, statusAt: a.status_at, hired: a.hired_code || "",
+        scores: r.scores || {}, interview: r.interview_total ?? null, intDate: r.interview_date || "", interviewer: r.interviewer || "", notes: r.hr_notes || "",
+        decision: r.decision || "", decisionNote: r.decision_note || "", decidedAt: r.decided_at };
+    }),
+    positions: positions.map((p) => ({ id: p.id, title: p.title, active: p.active, sort: p.sort })),
+  };
+}
+export async function appReview(id, scores, date, interviewer, notes) {
+  return check(await client.rpc("hr_app_review", { p_app: id, p_scores: scores, p_date: nullIfEmpty(date), p_interviewer: interviewer || null, p_notes: notes || null }));
+}
+export async function appDecide(id, decision, note) { check(await client.rpc("hr_app_decide", { p_app: id, p_decision: decision, p_note: note || null })); }
+export async function appStatus(id, status) { check(await client.rpc("hr_app_status", { p_app: id, p_status: status })); }
+export async function hireApplication(id, code) { check(await client.rpc("hr_app_hire", { p_app: id, p_code: code })); }
+export async function addPosition(title, sort) { check(await client.from("job_positions").insert({ title, sort })); }
+export async function updatePosition(id, fields) { check(await client.from("job_positions").update(fields).eq("id", id)); }

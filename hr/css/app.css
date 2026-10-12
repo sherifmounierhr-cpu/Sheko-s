@@ -366,3 +366,63 @@ ol.qlist { margin: 0; padding-inline-start: 22px; display: flex; flex-direction:
 ol.qlist ul { margin: 4px 0 0; padding-inline-start: 18px; color: var(--muted); }
 ol.qlist li.key { color: var(--ok); font-weight: 600; }
 #nbPrompt { width: 100%; font-size: 13px; }
+
+/* ------------------------------------------------------------ public application page */
+.apply-page { background: var(--bg); }
+.apply-head { background: linear-gradient(160deg, var(--hero-a) 0%, var(--hero-b) 100%); color: var(--hero-ink); }
+.apply-hero { max-width: 760px; margin: 0 auto; padding: 22px 16px 26px; display: flex; flex-direction: column; gap: 8px; }
+.apply-hero .logo { height: 38px; width: auto; align-self: flex-start; }
+.apply-hero h1 { font-family: var(--display); font-size: 24px; margin: 6px 0 0; }
+.apply-hero p { margin: 0; opacity: .92; max-width: 60ch; }
+.apply-main { max-width: 760px; margin: 0 auto; padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+.apply-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.apply-steps li { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.apply-steps li span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--sunken); font-weight: 600; }
+.apply-steps li b { font-weight: 500; }
+.apply-steps li.done span { background: var(--ok-soft); color: var(--ok); }
+.apply-steps li.now { border-color: var(--accent); color: var(--ink); }
+.apply-steps li.now span { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 640px) { .apply-steps li:not(.now) b { display: none; } }
+#applyForm h2 { font-size: 19px; }
+#applyForm h2:focus { outline: none; }
+#applyForm .add { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
+#applyForm .add label { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--muted); font-weight: 500; }
+#applyForm .add .wide { grid-column: 1 / -1; }
+#applyForm label.check { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--ink); font-size: 14px; }
+#applyForm label.check input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
+#applyForm .req { color: var(--bad); }
+#applyForm [hidden] { display: none !important; }
+#applyForm [aria-invalid="true"] { border-color: var(--bad); }
+#applyForm .grid-q { border: 0; padding: 0; margin: 0; }
+#applyForm .grid-q legend { color: var(--ink); font-weight: 600; padding-bottom: 6px; }
+#applyForm .grid-q th[scope="row"] { font-weight: 500; color: var(--ink); background: transparent; position: static; }
+#applyForm .grid-q td input { width: 20px; height: 20px; }
+.nav-row { margin-top: 6px; }
+.nav-row .btn { min-width: 120px; justify-content: center; }
+.card.done { text-align: center; align-items: center; padding: 28px 16px; }
+.card.done h2 { font-size: 22px; color: var(--ok); }
+.card.done b { font-size: 22px; letter-spacing: 1px; }
+.apply-foot { text-align: center; margin-inline: auto; }
+#applyForm .grid-q table { table-layout: fixed; }
+#applyForm .grid-q th, #applyForm .grid-q td { padding: 8px 2px; white-space: normal; text-align: center; font-size: 12.5px; }
+#applyForm .grid-q th[scope="row"] { text-align: start; width: 34%; font-size: 13.5px; padding-inline-start: 6px; }
+#applyForm .grid-q .tbl { overflow: visible; }
+
+/* ------------------------------------------------------------ recruitment */
+.kpi-btn { font: inherit; text-align: start; cursor: pointer; color: inherit; }
+.kpi-btn:hover { border-color: var(--line-strong); }
+.kpi-btn.on { border-color: var(--accent); background: var(--accent-soft); }
+.mini b.sm { font-size: 15px; }
+.ic.rot90 { transform: rotate(90deg); }
+.answers { gap: 16px; }
+.answers .ans h3 { color: var(--accent-strong); margin-bottom: 4px; }
+.answers table.kv th { width: 40%; white-space: normal; }
+form.int select { min-width: 72px; }
+@media print {
+  header.app-head, .side, .bottom, .no-print, .skip, #toasts, .page-title, form.int button, #decAppForm button { display: none !important; }
+
+  body, .card { background: #fff !important; color: #000 !important; border-color: #ccc !important; }
+  .layout, main { display: block !important; padding: 0 !important; }
+}
+.mini small.pill { align-self: flex-start; margin-top: 2px; }
+form.int { display: flex; flex-direction: column; gap: 12px; }

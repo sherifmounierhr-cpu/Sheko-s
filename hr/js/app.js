@@ -1,12 +1,13 @@
-import * as db from "./db.js?v=202610121300";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610121300";
+import * as db from "./db.js?v=202610121800";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610121800";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610121800";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير فريق"]];
+const ROLES = [["admin", "مدير النظام"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير فريق"], ["recruiter", "التوظيف"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -28,6 +29,7 @@ const TABS = [
   ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
   ["sum", "ملخص الحضور", (r) => r.admin || r.manager, "list-details", "team", "الملخص"],
   ["trainees", "المتدربين", (r) => r.admin || r.manager || r.mentor, "school", "team", "المتدربين"],
+  ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
   ["pay", "المرتبات", (r) => r.admin, "cash", "admin", "المرتبات"],
   ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
@@ -40,7 +42,7 @@ const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
-let TR = null, QUIZ = null, PREVIEW = null, HIRE = null;
+let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null, RF = { status: "", position: "", sort: "date", q: "" };
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 
 const $ = (s) => document.querySelector(s);
@@ -176,7 +178,7 @@ async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
   if (!S) skeleton();
   try {
-    [S, TR] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null)]);
+    [S, TR, REC] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null), R.admin || R.recruiter ? db.loadRecruit().catch(() => null) : null]);
     E = createEngine(S, LAST);
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
     R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
@@ -209,7 +211,8 @@ async function go(t) { tab = t; render(); await beforeTab(); render(); }
 // Desktop: grouped sidebar. Phone: the 4 most used places plus "المزيد".
 function renderTabs() {
   if (!S) return;
-  const badges = { requests: badge(), inbox: unread() ? `<span class="badge" aria-label="${unread()} جديد">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
+  const newApps = REC?.apps.filter((a) => a.status === "new").length || 0;
+  const badges = { recruit: newApps ? `<span class="badge" aria-label="${newApps} طلب جديد">${newApps}</span>` : "", requests: badge(), inbox: unread() ? `<span class="badge" aria-label="${unread()} جديد">${unread()}</span>` : "", actions: actBadge(), live: meetBadge() };
   const vis = visibleTabs();
   const item = ([k, l, , ic], short) => `<button class="nav-item" data-tab="${k}"${k === tab ? ' aria-current="page"' : ""}>${icon(ic)}<span>${short || l}</span>${badges[k] || ""}</button>`;
   const groups = GROUPS.map(([g, gl]) => { const list = vis.filter((t) => t[4] === g); return list.length ? `<div class="nav-group" role="group" aria-label="${gl}"><h2>${gl}</h2>${list.map((t) => item(t)).join("")}</div>` : ""; }).join("");
@@ -237,7 +240,7 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
@@ -387,7 +390,7 @@ async function loadComparison() {
 }
 
 // ---------------------------------------------------------------- notifications
-const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train" };
+const NOTIF_GO = { requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
 function inbox() {
   const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; return NOTIF_GO[n.ref_table]; };
   return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
@@ -1135,6 +1138,81 @@ async function submitQuiz(timeUp) {
   } catch (e) { toast(errMsg(e), true); } finally { if (QUIZ) QUIZ.sending = false; }
 }
 
+// ---------------------------------------------------------------- recruitment
+const APP_ST = { new: ["جديد", "p-info"], screening: ["فرز", "p-mute"], interview: ["مقابلة", "p-acc"], offer: ["عرض / للتعيين", "p-ok"],
+  hired: ["اتعين", "p-ok"], rejected: ["مرفوض", "p-bad"], withdrawn: ["انسحب", "p-mute"] };
+const DECISIONS = ["قوي تعيين", "تعيين", "مقابلة ثانية", "قيد الانتظار", "رفض"];
+const appPill = (s) => `<span class="pill ${APP_ST[s]?.[1] || "p-mute"}">${APP_ST[s]?.[0] || s}</span>`;
+const band = (n) => (n >= 80 ? ["قوي", "p-ok"] : n >= 60 ? ["جيد", "p-acc"] : n >= 40 ? ["متوسط", "p-warn"] : ["ضعيف", "p-bad"]);
+const scorePill = (n) => { const [l, c] = band(n); return `<span class="pill ${c}">${n} · ${l}</span>`; };
+const APPLY_URL = new URL("apply.html", location.href).href;
+const applyShare = () => `Everest Real Estate بتعين دلوقتي.\nقدّم من هنا في 7 دقايق:\n${APPLY_URL}`;
+const waLink = (m) => `https://wa.me/${String(m).replace(/^0/, "20").replace(/\D/g, "")}`;
+
+function recruit() {
+  if (!REC || !db.recruitReady) return `<div class="banner">${icon("alert-triangle")}جداول التوظيف لسه مش ظاهرة. شغّل neon/004_recruitment.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
+  if (APP) { const a = REC.apps.find((x) => x.id === APP); if (a) return appDetail(a); APP = null; }
+  const f = RF, q = f.q.trim();
+  let list = REC.apps;
+  if (f.status) list = list.filter((a) => a.status === f.status);
+  else list = list.filter((a) => !["rejected", "withdrawn", "hired"].includes(a.status));
+  if (f.position) list = list.filter((a) => a.position === f.position);
+  if (q) list = list.filter((a) => a.name.includes(q) || a.mobile.includes(q) || a.ref.includes(q.toUpperCase()));
+  if (f.sort === "score") list = [...list].sort((a, b) => b.auto - a.auto);
+  const count = (s) => REC.apps.filter((a) => a.status === s).length;
+  const week = REC.apps.filter((a) => Date.now() - Date.parse(a.at) < 7 * 864e5).length;
+  return `
+  <div class="kpis">
+    ${["new", "interview", "offer", "hired"].map((s) => `<button class="kpi kpi-btn${f.status === s ? " on" : ""}" data-rst="${s}" aria-pressed="${f.status === s}"><span>${APP_ST[s][0]}</span><b>${count(s)}</b></button>`).join("")}
+    <div class="kpi"><span>طلبات آخر 7 أيام</span><b>${week}</b></div>
+  </div>
+  <div class="card"><h2>${icon("user-check")}لينك التقديم</h2>
+    <p class="note">ابعته في الإعلانات وجروبات الواتساب. المتقدم مش محتاج يعمل حساب، وأي طلب جديد بيوصلك إشعار.</p>
+    <div class="row"><input type="text" readonly dir="ltr" value="${esc(APPLY_URL)}" aria-label="لينك التقديم" class="w-xl spacer" id="applyUrl">
+      <button class="btn" id="applyCopy">نسخ اللينك</button><a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/?text=${encodeURIComponent(applyShare())}">مشاركة واتساب</a>
+      <a class="btn" target="_blank" rel="noopener" href="${esc(APPLY_URL)}">افتح الفورم</a></div></div>
+  <div class="row">
+    <label class="row field-inline">الحالة<select id="rfStatus">${opts(Object.entries(APP_ST).map(([k, [l]]) => [k, l]), f.status, "الجارية")}</select></label>
+    <label class="row field-inline">الوظيفة<select id="rfPos">${opts([...new Set(REC.apps.map((a) => a.position))].map((p) => [p, p]), f.position, "الكل")}</select></label>
+    <label class="row field-inline">ترتيب<select id="rfSort">${opts([["date", "الأحدث"], ["score", "الأعلى درجة"]], f.sort)}</select></label>
+    <label class="row field-inline">بحث<input type="search" id="rfQ" value="${esc(f.q)}" placeholder="اسم أو موبايل أو رقم طلب"></label></div>
+  <div class="tbl"><table><thead><tr><th>رقم الطلب</th><th>الاسم</th><th>الوظيفة</th><th>التاريخ</th><th>الدرجة المبدئية</th><th>المقابلة</th><th>القرار</th><th>الحالة</th><th></th></tr></thead><tbody>
+    ${list.map((a) => `<tr><td dir="ltr">${esc(a.ref)}</td><td>${esc(a.name)}</td><td>${esc(a.position)}</td><td>${fmtDate(db.cairoDay(a.at))}</td><td>${scorePill(a.auto)}</td>
+      <td class="num">${a.interview != null ? `${a.interview}/90` : "-"}</td><td>${esc(a.decision) || "-"}</td><td>${appPill(a.status)}</td>
+      <td><button class="btn sm" data-app="${a.id}">افتح</button></td></tr>`).join("") || `<tr><td colspan="9">${empty("user-check", "مفيش طلبات هنا", f.status || f.position || q ? "غيّر الفلتر." : "انشر لينك التقديم وأول ما حد يقدّم هيظهر هنا.")}</td></tr>`}
+  </tbody></table></div>
+  ${R.admin ? fold("settings#positions", "الوظايف المتاحة في الفورم", `<div class="tbl flat"><table><thead><tr><th>الوظيفة</th><th>ظاهرة</th></tr></thead><tbody>
+    ${REC.positions.map((p) => `<tr><td><input type="text" data-pos="${p.id}" data-f="title" value="${esc(p.title)}" class="w-lg"></td><td class="num"><input type="checkbox" data-pos="${p.id}" data-f="active"${p.active ? " checked" : ""} aria-label="${esc(p.title)} ظاهرة"></td></tr>`).join("")}
+    </tbody></table></div><form class="add" id="posForm"><label>وظيفة جديدة<input type="text" name="title" required maxlength="80"></label><div><button class="btn" type="submit">${icon("plus")}إضافة</button></div></form>`) : ""}`;
+}
+
+function appDetail(a) {
+  const ans = a.answers, [bl, bc] = band(a.auto);
+  const sec = (s) => { const rows = s.fields.flatMap((x) => x.type === "grid" ? x.rows.map((r, i) => [r, ans[`${x.name}_${i}`]]) : [[x.label, ans[x.name]]]).filter(([, v]) => v);
+    return rows.length ? `<div class="ans"><h3>${esc(s.title)}</h3><table class="kv"><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap">${esc(v)}</td></tr>`).join("")}</tbody></table></div>` : ""; };
+  return `
+  <div class="row no-print"><button class="btn" data-appback="1">${icon("chevron-down", "rot90")}رجوع للقايمة</button><span class="spacer"></span><button class="btn" id="appPrint">طباعة</button></div>
+  <div class="card app-sum"><div class="row"><div class="spacer"><h2>${esc(a.name)}</h2><div class="note"><span dir="ltr">${esc(a.ref)}</span> · ${esc(a.position)} · قدّم ${fmtDate(db.cairoDay(a.at))}</div></div>${appPill(a.status)}</div>
+    <div class="mini"><div><span>الدرجة المبدئية</span><b>${a.auto}</b><small class="pill ${bc}">${bl}</small></div><div><span>المقابلة</span><b>${a.interview ?? "-"}</b><small>من 90</small></div><div><span>القرار</span><b class="sm">${esc(a.decision) || "-"}</b></div></div>
+    <div class="row no-print"><a class="btn" href="tel:${esc(a.mobile)}">${esc(a.mobile)}</a><a class="btn" target="_blank" rel="noopener noreferrer" href="${waLink(a.mobile)}">واتساب</a>${a.email ? `<a class="btn" href="mailto:${esc(a.email)}">إيميل</a>` : ""}
+      <span class="spacer"></span>${a.status !== "hired" ? `<label class="row field-inline">نقل إلى<select id="appSt" data-id="${a.id}">${opts(Object.entries(APP_ST).filter(([k]) => k !== "hired").map(([k, [l]]) => [k, l]), a.status)}</select></label>` : `<span class="note">اتعين بكود ${esc(a.hired)} · ${esc(nameOf(a.hired))}</span>`}
+      ${R.admin && a.status !== "hired" ? `<button class="btn primary" data-apphire="${a.id}">${icon("user-check")}تعيين</button>` : ""}</div></div>
+  <div class="grid2 even">
+    <div class="card"><h2>${icon("clipboard-check")}تقييم المقابلة</h2>
+      <form id="intForm" data-id="${a.id}" class="int"><div class="tbl flat"><table><thead><tr><th>المعيار</th><th>الدرجة من 10</th></tr></thead><tbody>
+        ${CRITERIA.map((c, i) => `<tr><td>${esc(c)}</td><td><select name="s${i}" aria-label="${esc(c)}">${opts(Array.from({ length: 10 }, (_, k) => [k + 1, k + 1]), a.scores[i] ?? "", "-")}</select></td></tr>`).join("")}
+        <tr class="total"><th>الإجمالي</th><th><output id="intTotal">${a.interview ?? 0}</output> / 90</th></tr></tbody></table></div>
+        <div class="add-grid"><label class="field">تاريخ المقابلة<input type="date" name="date" value="${esc(a.intDate)}"></label><label class="field">مين عمل المقابلة<input type="text" name="by" value="${esc(a.interviewer)}"></label>
+        <label class="field wide">ملاحظات<textarea name="notes" rows="3" maxlength="3000">${esc(a.notes)}</textarea></label></div>
+        <div><button class="btn primary" type="submit">احفظ التقييم</button></div></form></div>
+    <div class="card"><h2>${icon("gavel")}القرار</h2>
+      <form class="add" id="decAppForm" data-id="${a.id}"><label>القرار<select name="decision" required>${opts(DECISIONS.map((d) => [d, d]), a.decision, "اختار")}</select></label>
+        <label class="wide">السبب / ملاحظة<input type="text" name="note" value="${esc(a.decisionNote)}" maxlength="1000"></label>
+        <div><button class="btn primary" type="submit">سجّل القرار</button></div></form>
+      <p class="note">"تعيين" أو "قوي تعيين" بينقل الطلب لـ (عرض / للتعيين). "رفض" بيقفله. بعد ما توصل للاتفاق، دوس "تعيين" فوق عشان تضيفه للموظفين.</p></div></div>
+  <div class="card answers"><h2>${icon("file-text")}بيانات المتقدم</h2>${SECTIONS.map(sec).join("")}</div>`;
+}
+
 // ---------------------------------------------------------------- events
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button"); if (!t || busy) return;
@@ -1162,6 +1240,17 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.hirecancel) { HIRE = null; render(); return; }
+  if (d.app) { APP = d.app; render(); window.scrollTo({ top: 0 }); $("#main h2")?.focus?.(); return; }
+  if (d.appback) { APP = null; render(); return; }
+  if (d.rst) { RF.status = RF.status === d.rst ? "" : d.rst; APP = null; render(); return; }
+  if (t.id === "applyCopy") { navigator.clipboard?.writeText(APPLY_URL).then(() => toast("اتنسخ اللينك")); return; }
+  if (t.id === "appPrint") { window.print(); return; }
+  if (d.apphire) {
+    const a = REC.apps.find((x) => x.id === d.apphire);
+    HIRE = { id: a.id, name: a.name, position: a.position.replace(/^أخرى: /, ""), auto: a.auto, interview: a.interview, decision: a.decision || "-" };
+    APP = null; await go("emp"); $("#empCard")?.scrollIntoView({ block: "start" }); $("#empForm [name=code]")?.focus();
+    return;
+  }
   if (t.id === "nbCopy") { navigator.clipboard?.writeText(NB_PROMPT).then(() => toast("اتنسخ البرومبت")); return; }
   if (d.watch) { act(() => db.markWatched(ME.code, Number(d.watch)), "اتسجل إنك شفت الفيديو"); return; }
   if (d.quiz) { startQuiz(Number(d.quiz)); return; }
@@ -1223,6 +1312,12 @@ document.addEventListener("change", async (ev) => {
   if (t.id === "dailyEmp") { dailyEmp = t.value; render(); return; }
   if (t.id === "dailyFilter") { dailyFilter = t.value; render(); return; }
   if (t.id === "empFilter") { empFilter = t.value; render(); return; }
+  if (t.id === "rfStatus") { RF.status = t.value; render(); return; }
+  if (t.id === "rfPos") { RF.position = t.value; render(); return; }
+  if (t.id === "rfSort") { RF.sort = t.value; render(); return; }
+  if (t.id === "appSt") { act(() => db.appStatus(t.dataset.id, t.value), "اتنقل الطلب"); return; }
+  if (t.form?.id === "intForm") { const tot = CRITERIA.reduce((s, _, i) => s + (Number(t.form[`s${i}`].value) || 0), 0); $("#intTotal").textContent = tot; return; }
+  if (d.pos) { const v = t.type === "checkbox" ? t.checked : t.value.trim(); if (d.f === "title" && v.length < 2) { toast("اسم الوظيفة قصير", true); render(); return; } act(() => db.updatePosition(Number(d.pos), { [d.f]: v }), "اتحفظ"); return; }
   if (t.id === "payFilter") { payFilter = t.value; render(); return; }
   if (t.id === "reqFilter") { reqFilter = t.value; render(); return; }
   if (t.id === "imp" && t.files[0]) { importFile(t.files[0]); return; }
@@ -1313,6 +1408,16 @@ document.addEventListener("submit", async (ev) => {
     }, fresh ? "اتضاف الموظف وبدأت فترة تدريبه" : "اتضاف الموظف");
     return;
   }
+  if (f.id === "intForm") {
+    const scores = {}; CRITERIA.forEach((_, i) => { const n = Number(v[`s${i}`]); if (n) scores[i] = n; });
+    if (!Object.keys(scores).length) { toast("اختار درجة لمعيار واحد على الأقل", true); return; }
+    act(() => db.appReview(f.dataset.id, scores, v.date, v.by, v.notes), "اتحفظ تقييم المقابلة"); return;
+  }
+  if (f.id === "decAppForm") {
+    if (v.decision === "رفض" && !(await ask("ترفض الطلب ده؟", "الطلب هيتقفل. تقدر ترجعه بعدين من (نقل إلى).", "رفض", true))) return;
+    act(() => db.appDecide(f.dataset.id, v.decision, v.note), "اتسجل القرار"); return;
+  }
+  if (f.id === "posForm") { act(() => db.addPosition(v.title.trim(), REC.positions.length + 1), "اتضافت الوظيفة"); return; }
   if (f.id === "planForm") { act(() => db.startTraining(v.code, v.start, v.days, v.every, v.mentor, v.goals), "بدأت فترة التدريب"); return; }
   if (f.id.startsWith("surveyForm")) {
     const { plan, n, side } = f.dataset;
@@ -1374,6 +1479,7 @@ async function login(v) {
   } finally { btn.disabled = false; btn.textContent = label; }
 }
 document.addEventListener("input", (ev) => {
+  if (ev.target.id === "rfQ") { RF.q = ev.target.value; const pos = ev.target.selectionStart; render(); const el = $("#rfQ"); el.focus(); el.setSelectionRange(pos, pos); return; }
   if (ev.target.name === "mode") {
     const signup = ev.target.value === "signup";
     $("#nameRow").hidden = !signup; $("#pwHint").hidden = !signup;
