@@ -1,6 +1,6 @@
-import * as db from "./db.js?v=202610122100";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610122100";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610122100";
+import * as db from "./db.js?v=202610122300";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610122300";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610122300";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -31,6 +31,7 @@ const TABS = [
   ["weekly", "التقييم الأسبوعي", (r) => r.admin || r.manager || r.evaluator, "star", "team", "التقييم"],
   ["trainees", "المتدربين", (r) => r.admin || r.manager || r.mentor, "school", "team", "المتدربين"],
   ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
+  ["reports", "التقارير", (r) => r.admin || r.manager || r.recruiter || !!r.code, "file-text", "team", "التقارير"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
   ["pay", "المرتبات", (r) => r.admin, "cash", "admin", "المرتبات"],
   ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
@@ -43,7 +44,7 @@ const empty = (ic, title, text = "") => `<div class="empty">${icon(ic)}<b>${esc(
 
 let ME = null, R = {}, S = null, E = null, MONTHS = [], LAST = "";
 let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", reqFilter = "pending", meetPrefill = null, busy = false;
-let EV = null, EVOPEN = false, EWDAY = "";
+let EV = null, EVOPEN = false, EWDAY = "", RLEVEL = "", RTEAM = "";
 let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null, RF = { status: "", position: "", sort: "date", q: "" };
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 
@@ -115,7 +116,7 @@ function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permiss
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610122100";
+const BUILD = "202610122300";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -216,7 +217,7 @@ const visibleTabs = () => TABS.filter(([, , f]) => f(R));
 async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
-  if (tab === "weekly" || (tab === "home" && ME.code)) await evalLoad();
+  if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread()) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
 }
@@ -255,7 +256,7 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
@@ -1016,6 +1017,7 @@ function trainees() {
         <div class="note">اليوم ${d} من ${p.days} · الفترة ${st.cur || 1} من ${st.ps.length}</div></div>
       <div class="mini"><div><span>الاختبارات</span><b>${pctTxt(st.quiz)}</b><small>${st.quizDone} من ${st.quizAll}</small></div><div><span>تقييم المدرب</span><b>${pctTxt(st.mentor)}</b></div><div><span>تقييمه لنفسه</span><b>${pctTxt(st.self)}</b></div></div>
       ${st.late.length ? `<div class="banner">${icon("alert-triangle")}متأخر: ${st.late.slice(0, 3).join("، ")}${st.late.length > 3 ? ` و${st.late.length - 3} كمان` : ""}</div>` : ""}
+      ${evalBlock(p)}
       ${fold(`school#tp${p.id}`, "التفاصيل والتقييم", `${timeline(p, st)}
         ${canMentor && due ? `<h3>تقييم الفترة ${due.n}</h3>${surveyForm(p, due.n, "mentor")}` : ""}
         ${st.ps.map((x) => respOf(p, x.n, "self")).filter(Boolean).map((r) => `<details><summary>إجابات المتدرب، الفترة ${r.n} (${pctTxt(r.score)})</summary>${answersView(r, "self")}</details>`).join("")}
@@ -1124,7 +1126,11 @@ function content() {
     <div class="row"><button class="btn primary" id="tplSave">احفظ الأسئلة</button><span class="note">التعديل بيسري على الاستبيانات الجاية بس.</span></div></div>
   <div class="card"><h2>${icon("settings")}الافتراضي للمتدرب الجديد</h2><div class="row">
     <label class="row field-inline">مدة التدريب<input type="number" class="w-sm" min="7" max="180" data-s="trainDays" value="${N0(E.st.trainDays) || 30}"> يوم</label>
-    <label class="row field-inline">استبيان كل<input type="number" class="w-sm" min="3" max="31" data-s="trainEvery" value="${N0(E.st.trainEvery) || 7}"> يوم</label></div></div>`;
+    <label class="row field-inline">استبيان كل<input type="number" class="w-sm" min="3" max="31" data-s="trainEvery" value="${N0(E.st.trainEvery) || 7}"> يوم</label></div></div>
+  <div class="card"><h2>${icon("chart-bar")}أوزان التقييم المبدئي للمتدرب</h2>
+    <p class="note">الدرجة من 100. لو جزء مفيهوش بيانات لسه، وزنه بيتوزع على الباقي. الدرجة توصية بس، والقرار ليك.</p>
+    <div class="row">${W_KEYS.map(([k, l, d]) => `<label class="row field-inline">${l}<input type="number" class="w-sm" min="0" max="100" data-s="${k}" value="${weightOf(k, d)}">%</label>`).join("")}</div>
+    <p class="note">المجموع الحالي: ${W_KEYS.reduce((a, [k, , d]) => a + weightOf(k, d), 0)}%</p></div>`;
 }
 
 let quizTimer = null;
@@ -1342,6 +1348,133 @@ async function evalLoad() {
   try { EV = await db.loadEval(EWDAY); EVOPEN = EV ? await db.evalOpen(EV.week.id) : false; } catch (e) { EV = null; if (db.evalReady) toast(errMsg(e), true); }
 }
 
+// ---------------------------------------------------------------- initial evaluation (trainees)
+const W_KEYS = [["wQuiz", "الاختبارات", 30], ["wMentor", "تقييم المدرب", 25], ["wAtt", "الالتزام بالحضور", 20], ["wWeekly", "التقييم الأسبوعي", 15], ["wSelf", "التقييم الذاتي", 10]];
+const weightOf = (k, d) => (E.st[k] == null || E.st[k] === "" ? d : N0(E.st[k]));
+const BANDS = [[85, "ممتاز", "p-ok"], [70, "جيد", "p-acc"], [55, "يحتاج متابعة", "p-warn"], [0, "ضعيف", "p-bad"]];
+const bandOf = (n) => BANDS.find(([m]) => n >= m);
+const weeklyAvg = (code) => { const xs = (EV?.entries || []).filter((x) => x.code === code).map((x) => ((x.rating - 1) / 4) * 100); return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null; };
+const attScore = (code) => { const e = empBy(code); if (!e || e.exempt) return null; const s = E.summary(e, S.meta.month); return s.commit == null ? null : Math.round(s.commit * 100); };
+
+// Weighted 0-100 from whatever parts exist; missing parts give their weight to the rest.
+function evaluate(p) {
+  const st = planStats(p);
+  const parts = [["wQuiz", st.quiz], ["wMentor", st.mentor], ["wAtt", attScore(p.code)], ["wWeekly", weeklyAvg(p.code)], ["wSelf", st.self]]
+    .map(([k, v]) => { const [, label, d] = W_KEYS.find(([x]) => x === k); return { k, label, value: v, w: weightOf(k, d) }; });
+  const have = parts.filter((x) => x.value != null && x.w > 0), wsum = have.reduce((a, x) => a + x.w, 0);
+  const score = wsum ? Math.round(have.reduce((a, x) => a + x.value * x.w, 0) / wsum) : null;
+  const app = REC?.apps.find((a) => a.hired === p.code) || null;
+  const [, band, cls] = score == null ? [0, "لسه بدري", "p-mute"] : bandOf(score);
+  const doneShare = dayOf(p) / p.days;
+  const advice = score == null ? "مفيش بيانات كفاية لسه."
+    : score >= 70 ? (doneShare >= 0.8 ? "مقترح: التثبيت بعد انتهاء الفترة." : "ماشي كويس، كمّل بنفس الخطة.")
+    : score >= 55 ? "مقترح: ركّز على أضعف جزء، ولو الفترة قربت تخلص مدّها 15 يوم."
+    : "مقترح: جلسة مراجعة مع المدرب، وقرار المد أو الإنهاء في آخر الفترة.";
+  return { score, band, cls, parts, coverage: parts.filter((x) => x.value != null).length, app, advice };
+}
+
+function evalBlock(p) {
+  const r = evaluate(p), weakest = r.parts.filter((x) => x.value != null).sort((a, b) => a.value - b.value)[0];
+  return `<div class="evalbox"><div class="row"><b class="spacer">التقييم المبدئي</b>${r.score == null ? "" : `<b class="big-n">${r.score}</b>`}<span class="pill ${r.cls}">${r.band}</span></div>
+    <div class="rank">${r.parts.map((x) => `<div class="r"><span>${x.label} <small class="note">(${x.w}%)</small></span><span class="track">${x.value == null ? "" : `<i class="${x.value < 55 ? "low" : x.value < 70 ? "mid" : ""}" style="width:${x.value}%"></i>`}</span><span class="num">${x.value == null ? "-" : x.value}</span></div>`).join("")}</div>
+    ${r.app ? `<p class="note">وقت التوظيف: الدرجة المبدئية ${r.app.auto}/100${r.app.interview != null ? ` · المقابلة ${r.app.interview}/90` : ""}</p>` : ""}
+    <p class="note">${esc(r.advice)}${weakest && r.score != null && weakest.value < 70 ? ` أضعف جزء: ${weakest.label}.` : ""}</p></div>`;
+}
+
+// ---------------------------------------------------------------- reports
+const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+const kpi = (label, value, cls = "") => `<div class="kpi ${cls}"><span>${label}</span><b>${value}</b></div>`;
+const bar = (label, value, max, suffix = "") => `<div class="r"><span title="${esc(label)}">${esc(label)}</span><span class="track"><i style="width:${max ? Math.round((value / max) * 100) : 0}%"></i></span><span class="num">${value}${suffix}</span></div>`;
+const LEVELS = [["exec", "الإدارة العليا", (r) => r.admin], ["hr", "الموارد البشرية", (r) => r.admin || r.recruiter], ["team", "مدير الفريق", (r) => r.admin || r.manager], ["me", "تقريري", (r) => !!r.code]];
+
+function reports() {
+  const lv = LEVELS.filter(([, , f]) => f(R));
+  if (!lv.some(([k]) => k === RLEVEL)) RLEVEL = lv[0][0];
+  const ym = S.meta.month, title = lv.find(([k]) => k === RLEVEL)[1];
+  const body = { exec: repExec, hr: repHR, team: repTeam, me: repMe }[RLEVEL](ym);
+  return `<div class="row no-print"><div class="seg" role="tablist" aria-label="مستوى التقرير">${lv.map(([k, l]) => `<button class="btn${k === RLEVEL ? " primary" : ""}" role="tab" aria-selected="${k === RLEVEL}" data-rlevel="${k}">${l}</button>`).join("")}</div><span class="spacer"></span><button class="btn" id="repPrint">طباعة / PDF</button></div>
+  <div class="print-head"><img src="img/logo.png" alt="Everest" style="height:36px;width:auto"><div><b>تقرير ${title}</b><div class="note">شهر ${ym.split("-").reverse().join("/")} · اتطبع ${fmtDate(today())}</div></div></div>
+  ${body}`;
+}
+
+function attendanceRows(list, ym) {
+  return list.map((e) => ({ e, s: E.summary(e, ym) })).filter((x) => !x.e.exempt);
+}
+
+function repExec(ym) {
+  const emps = staff(), rows = attendanceRows(emps, ym), cm = rows.filter((x) => x.s.commit != null);
+  const commit = cm.length ? Math.round((cm.reduce((a, x) => a + x.s.commit, 0) / cm.length) * 100) : 0;
+  const abs = rows.reduce((a, x) => a + x.s.abs, 0), late = rows.reduce((a, x) => a + x.s.latec, 0);
+  const pay = payRows(ym), payTot = pay.reduce((a, r) => a + r.rnd, 0);
+  const acts = S.actions.filter((a) => a.status === "approved"), pen = acts.filter((a) => a.kind === "penalty").length, bon = acts.filter((a) => a.kind === "bonus").length;
+  const hires = emps.filter((e) => e.hireDate && e.hireDate.startsWith(ym)).length;
+  const plans = TR?.plans || [], act = plans.filter((p) => p.status === "active").length, passed = plans.filter((p) => p.status === "passed").length, ended = plans.filter((p) => p.status === "ended").length;
+  const apps = (REC?.apps || []).filter((a) => db.cairoDay(a.at).startsWith(ym));
+  const funnel = [["طلبات", apps.length], ["مقابلات", apps.filter((a) => a.interview != null).length], ["عروض", apps.filter((a) => ["offer", "hired"].includes(a.status)).length], ["اتعينوا", apps.filter((a) => a.status === "hired").length]];
+  const teamAvg = S.teams.map((t) => { const codes = emps.filter((e) => String(e.teamId) === String(t.id)).map((e) => e.code); const xs = (EV?.entries || []).filter((x) => codes.includes(x.code) && x.week === EV.week.id).map((x) => x.rating); return [t.name, xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null]; }).filter(([, v]) => v != null);
+  const risks = [
+    ...rows.filter((x) => x.s.abs >= 3).sort((a, b) => b.s.abs - a.s.abs).slice(0, 5).map((x) => [`${empName(x.e)}: ${x.s.abs} أيام غياب`, "bad"]),
+    ...(EV ? evalAlerts(emps.map((e) => e.code)).filter(([, l]) => l === "bad").slice(0, 5).map(([c, , t]) => [`${c ? nameOf(c) + ": " : ""}${t}`, "bad"]) : []),
+    ...plans.filter((p) => p.status === "active").map((p) => [p, evaluate(p)]).filter(([, r]) => r.score != null && r.score < 55).map(([p, r]) => [`متدرب ${nameOf(p.code)}: التقييم المبدئي ${r.score}`, "warn"]),
+  ].slice(0, 10);
+  return `
+  <div class="kpis">${kpi("الموظفين", emps.length)}${kpi("تعيينات الشهر", hires)}${kpi("متدربين حاليًا", act)}${kpi("الالتزام بالمواعيد", commit + "%", commit >= 80 ? "ok" : commit < 60 ? "bad" : "")}${kpi("أيام غياب", abs, abs ? "bad" : "")}${kpi("مرات تأخير", late)}</div>
+  <div class="grid2 even">
+    <div class="card"><h2>${icon("cash")}المرتبات والإجراءات</h2><table class="kv"><tbody>
+      <tr><th>صافي المرتبات (تقديري)</th><td><b>${money(payTot)}</b> جنيه</td></tr><tr><th>عدد اللي هيقبضوا</th><td>${pay.filter((r) => r.rnd > 0).length}</td></tr>
+      <tr><th>جزاءات معتمدة</th><td>${pen}</td></tr><tr><th>منح استثنائية</th><td>${bon}</td></tr></tbody></table></div>
+    <div class="card"><h2>${icon("user-check")}التوظيف والتدريب</h2><div class="rank">${funnel.map(([l, v]) => bar(l, v, Math.max(1, funnel[0][1]))).join("")}</div>
+      <p class="note">التدريب: ${act} جاري · ${passed} اجتاز · ${ended} انتهى${act + passed + ended ? ` · نسبة الاجتياز ${pct(passed, passed + ended)}%` : ""}</p></div></div>
+  ${teamAvg.length ? `<div class="card"><h2>${icon("star")}متوسط التقييم الأسبوعي للفرق (${weekLabel({ start: EV.week.starts_on, end: EV.week.ends_on })})</h2><div class="rank">${teamAvg.map(([n, v]) => bar(n, v, 5, " / 5")).join("")}</div></div>` : ""}
+  <div class="card"><h2>${icon("alert-triangle")}أهم المخاطر</h2>${risks.length ? risks.map(([t, l]) => `<div class="act"><div class="row"><span class="pill ${l === "bad" ? "p-bad" : "p-warn"}">${l === "bad" ? "مهم" : "تابع"}</span><span>${esc(t)}</span></div></div>`).join("") : '<p class="note">مفيش مخاطر واضحة الشهر ده.</p>'}</div>`;
+}
+
+function repHR(ym) {
+  const apps = REC?.apps || [], open = apps.filter((a) => !["hired", "rejected", "withdrawn"].includes(a.status));
+  const byPos = Object.entries(apps.reduce((m, a) => ((m[a.position] = (m[a.position] || 0) + 1), m), {})).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const stale = open.filter((a) => Date.now() - Date.parse(a.statusAt || a.at) > 7 * 864e5);
+  const plans = (TR?.plans || []).filter((p) => p.status === "active"), late = plans.flatMap((p) => planStats(p).late.map((l) => `${nameOf(p.code)}: ${l}`));
+  const pendReq = S.perms.filter((p) => p.rawStatus === "pending").length, pendAct = S.actions.filter((a) => a.status === "pending").length;
+  let evalTot = 0, evalDone = 0;
+  if (EV) for (const a of EV.assignments) for (const m of membersOf(a.team)) { evalTot++; if (entryOf(m.code, EV.week.id, a.cat)) evalDone++; }
+  return `
+  <div class="kpis">${kpi("طلبات توظيف مفتوحة", open.length)}${kpi("مستنية أكتر من أسبوع", stale.length, stale.length ? "bad" : "")}${kpi("متدربين", plans.length)}${kpi("استبيانات متأخرة", late.length, late.length ? "bad" : "")}${kpi("أذونات مستنية", pendReq)}${kpi("جزاءات مستنية اعتماد", pendAct)}</div>
+  <div class="grid2 even">
+    <div class="card"><h2>${icon("user-check")}مراحل التوظيف</h2><div class="rank">${Object.entries(APP_ST).map(([k, [l]]) => bar(l, apps.filter((a) => a.status === k).length, Math.max(1, apps.length))).join("")}</div></div>
+    <div class="card"><h2>${icon("briefcase")}الطلبات حسب الوظيفة</h2>${byPos.length ? `<div class="rank">${byPos.map(([p, n]) => bar(p, n, byPos[0][1])).join("")}</div>` : '<p class="note">مفيش طلبات لسه.</p>'}</div></div>
+  ${stale.length ? `<div class="card"><h2>${icon("clock")}طلبات مستنية قرار من أكتر من أسبوع</h2>${stale.slice(0, 12).map((a) => `<div class="act"><div class="row">${appPill(a.status)}<b>${esc(a.name)}</b><span class="note">${esc(a.position)} · ${fmtDate(db.cairoDay(a.at))}</span></div></div>`).join("")}</div>` : ""}
+  ${late.length ? `<div class="card"><h2>${icon("school")}استبيانات تدريب متأخرة</h2>${late.slice(0, 15).map((t) => `<p class="note">${esc(t)}</p>`).join("")}</div>` : ""}
+  ${EV ? `<div class="card"><h2>${icon("star")}التقييم الأسبوعي</h2><p>اتسجل ${evalDone} من ${evalTot} تقييم مطلوب الأسبوع ده (${pct(evalDone, evalTot)}%).</p></div>` : ""}`;
+}
+
+function repTeam(ym) {
+  const teams = R.admin ? S.teams : S.teams.filter((t) => t.manager === ME.code);
+  if (!RTEAM || !teams.some((t) => String(t.id) === String(RTEAM))) RTEAM = teams[0]?.id ?? "";
+  const t = teams.find((x) => String(x.id) === String(RTEAM));
+  if (!t) return empty("users", "مفيش فريق تحت إدارتك");
+  const ms = staff().filter((e) => String(e.teamId) === String(t.id)), rows = attendanceRows(ms, ym);
+  const wAvg = (code) => { const xs = (EV?.entries || []).filter((x) => x.code === code && x.week === EV.week.id).map((x) => x.rating); return xs.length ? (Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10) : "-"; };
+  const trainees = (TR?.plans || []).filter((p) => p.status === "active" && ms.some((e) => e.code === p.code));
+  const plan = EV?.plans.find((x) => x.team === t.id && x.month === ym);
+  return `${teams.length > 1 ? `<label class="row field-inline no-print">الفريق<select id="repTeam">${opts(teams.map((x) => [x.id, x.name]), t.id)}</select></label>` : ""}
+  <div class="kpis">${kpi("أعضاء الفريق", ms.length)}${kpi("أيام غياب", rows.reduce((a, x) => a + x.s.abs, 0))}${kpi("مرات تأخير", rows.reduce((a, x) => a + x.s.latec, 0))}${kpi("متدربين", trainees.length)}${kpi("أذونات مستنية", S.perms.filter((p) => p.rawStatus === "pending" && ms.some((e) => e.code === p.code)).length)}</div>
+  <div class="tbl"><table><thead><tr><th>الموظف</th><th>حضور</th><th>غياب</th><th>تأخير</th><th>الالتزام</th><th>التقييم الأسبوعي</th><th>جزاءات / منح</th></tr></thead><tbody>
+  ${ms.map((e) => { const s = E.summary(e, ym), a = S.actions.filter((x) => x.code === e.code && x.status === "approved");
+    return `<tr><td>${esc(empName(e))}</td><td class="num">${e.exempt ? "معفى" : `${s.pres}/${s.req}`}</td><td class="num">${s.abs || "-"}</td><td class="num">${s.latec || "-"}</td><td class="num">${s.commit == null ? "-" : Math.round(s.commit * 100) + "%"}</td><td class="num">${wAvg(e.code)}</td><td class="num">${a.filter((x) => x.kind !== "bonus").length} / ${a.filter((x) => x.kind === "bonus").length}</td></tr>`; }).join("")}
+  </tbody></table></div>
+  ${trainees.length ? `<div class="card"><h2>${icon("school")}المتدربين</h2>${trainees.map((p) => { const r = evaluate(p); return `<div class="act"><div class="row"><b>${esc(nameOf(p.code))}</b><span class="note">اليوم ${dayOf(p)} من ${p.days}</span><span class="pill ${r.cls}">${r.score ?? "-"} · ${r.band}</span></div></div>`; }).join("")}</div>` : ""}
+  ${plan ? `<div class="card"><h2>${icon("list-details")}خطة الشهر</h2><p class="wrap">${esc(plan.tasks)}</p>${plan.vision ? `<p class="note">${esc(plan.vision)}</p>` : ""}</div>` : ""}`;
+}
+
+function repMe(ym) {
+  const e = empBy(ME.code); if (!e) return empty("alert-triangle", "حسابك مش مربوط بموظف");
+  const s = E.summary(e, ym), r = E.toDate(e, ym), mine = (EV?.entries || []).filter((x) => x.code === e.code);
+  const p = myPlan();
+  return `<div class="kpis">${kpi("حضور", `${s.pres}/${s.req}`)}${kpi("غياب", s.abs, s.abs ? "bad" : "")}${kpi("تأخير", s.latec)}${kpi("الالتزام", s.commit == null ? "-" : Math.round(s.commit * 100) + "%")}${kpi("المستحق لحد دلوقتي", money(r.netToDate))}</div>
+  ${mine.length ? myEvalCard() : ""}
+  ${p ? `<div class="card"><h2>${icon("school")}التدريب</h2><p>${planPill(p)} اليوم ${dayOf(p)} من ${p.days} · الاختبارات ${pctTxt(planStats(p).quiz)} · تقييم المدرب ${pctTxt(planStats(p).mentor)}</p></div>` : ""}`;
+}
+
 // ---------------------------------------------------------------- events
 document.addEventListener("click", async (ev) => {
   const t = ev.target.closest("button"); if (!t || busy) return;
@@ -1369,6 +1502,8 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.hirecancel) { HIRE = null; render(); return; }
+  if (d.rlevel) { RLEVEL = d.rlevel; render(); return; }
+  if (t.id === "repPrint") { window.print(); return; }
   if (d.ewk) { EWDAY = d.ewk === "now" ? "" : addDays(EV.week.starts_on, Number(d.ewk)); if (EWDAY && EWDAY >= thisFriday()) EWDAY = ""; await evalLoad(); render(); return; }
   if (d.ereopen) { if (await ask("تفتح الأسبوع ده 48 ساعة؟", "المقيمين هيقدروا يعدلوا تقييماته لحد ما المدة تخلص.", "افتحه")) { try { await db.evalReopen(Number(d.ereopen)); await evalLoad(); render(); toast("الأسبوع اتفتح 48 ساعة"); } catch (e) { toast(errMsg(e), true); } } return; }
   if (d.eremind) { try { const n = await db.evalRemind(Number(d.eremind)); toast(n ? `اتبعت تذكير لـ ${n}` : "كله مخلّص، مفيش حد يتفكّر"); } catch (e) { toast(errMsg(e), true); } return; }
@@ -1461,6 +1596,7 @@ document.addEventListener("change", async (ev) => {
   }
   if (d.asg) { const [u, team, cat] = d.asg.split("|"); try { await db.setAssignment(u, Number(team), cat, t.checked); await evalLoad(); render(); toast("اتحفظ"); } catch (e) { toast(errMsg(e), true); render(); } return; }
   if (t.id === "evalVisible") { saveSettings((s) => { s.evalToEmployee = t.checked; }); return; }
+  if (t.id === "repTeam") { RTEAM = t.value; render(); return; }
   if (t.id === "rfStatus") { RF.status = t.value; render(); return; }
   if (t.id === "rfPos") { RF.position = t.value; render(); return; }
   if (t.id === "rfSort") { RF.sort = t.value; render(); return; }

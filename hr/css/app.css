@@ -442,3 +442,17 @@ table.eval td { vertical-align: top; min-width: 190px; }
 .enote:disabled { opacity: .55; }
 @media (pointer: coarse) { .rate button { width: 40px; min-height: 44px; } }
 form.plan h3 { margin-top: 4px; }
+
+/* ------------------------------------------------------------ evaluation and reports */
+.evalbox { background: var(--sunken); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.evalbox .big-n { font-family: var(--display); font-size: 22px; }
+.evalbox .rank .r { grid-template-columns: minmax(0, 10rem) 1fr 2.4rem; }
+.evalbox .track { background: var(--surface); }
+.seg[role="tablist"] { display: flex; flex-wrap: wrap; gap: 6px; }
+.print-head { display: none; }
+@media print {
+  .print-head { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #0f7e76; padding-bottom: 8px; margin-bottom: 12px; }
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .card, .kpi, .tbl { break-inside: avoid; }
+  .tbl { max-height: none !important; overflow: visible !important; }
+}
