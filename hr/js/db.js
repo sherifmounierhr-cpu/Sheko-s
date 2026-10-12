@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610111530";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610111530";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610121300";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610121300";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -435,3 +435,23 @@ export async function saveTemplate(side, questions) {
   check(await client.from("survey_templates").update({ active: false }).eq("side", side));
   check(await client.from("survey_templates").insert({ side, questions }));
 }
+
+// ---------------------------------------------------------------- bridge (neon/004_bridges.sql)
+
+export let bridgeReady = true;
+// Hired candidates waiting to be added, and the latest sync per source. Admin only.
+export async function loadBridge() {
+  const [cands, runs] = await Promise.all([
+    get(client.from("ext_candidates").select("*").is("linked_code", null).eq("dismissed", false).order("decided_on", { ascending: false })),
+    get(client.from("sync_runs").select("*").order("at", { ascending: false }).limit(20)),
+  ]).catch((e) => { if (/schema cache|does not exist|PGRST20/i.test(e.message)) { bridgeReady = false; return [[], []]; } throw e; });
+  return {
+    candidates: cands.map((c) => ({ id: c.app_id, name: c.full_name || "", mobile: c.mobile || "", position: c.position || "", auto: c.auto_score, interview: c.interview_total,
+      decision: c.decision || "", decidedOn: c.decided_on || "", submittedAt: c.submitted_at })),
+    lastRun: runs[0] || null,
+    lastOk: runs.find((r) => r.ok) || null,
+    failed: runs.length && !runs[0].ok ? runs[0] : null,
+  };
+}
+export async function linkCandidate(app, code) { check(await client.rpc("hr_link_candidate", { p_app: app, p_code: code })); }
+export async function dismissCandidate(app) { check(await client.rpc("hr_dismiss_candidate", { p_app: app, p_on: true })); }

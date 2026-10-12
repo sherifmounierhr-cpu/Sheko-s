@@ -1,0 +1,36 @@
+name: HR sync
+
+# Copies hired candidates (Recruitment) and Sales Hub weeks into the HR portal.
+# Read-only on the Supabase side; writes only the ext_* tables on Neon.
+on:
+  schedule:
+    - cron: "0 3 * * *"   # every day, 5-6am Cairo
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hr-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/sync
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: tools/sync
+        run: npm install --no-audit --no-fund
+      - name: Sync
+        working-directory: tools/sync
+        env:
+          SUPABASE_RO_URL: ${{ secrets.SUPABASE_RO_URL }}
+          NEON_SYNC_URL: ${{ secrets.NEON_SYNC_URL }}
+        run: node sync.mjs
