@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.neon.tech; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0f7e76">
+<meta name="description" content="قدّم على وظيفة في Everest Real Estate">
+<link rel="icon" type="image/png" href="img/mark-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<title>قدّم على وظيفة | Everest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css?v=202610122300">
+<script src="js/theme.js?v=202610122300"></script>
+</head>
+<body class="apply-page">
+<header class="apply-head">
+  <div class="apply-hero">
+    <img class="logo" src="img/logo-white.png" alt="Everest Real Estate" width="480" height="241">
+    <h1>انضم لفريق Everest</h1>
+    <p>املى الطلب في حوالي 7 دقايق. كلامك بيتحفظ على جهازك لحد ما تبعته، فلو قفلت الصفحة هتلاقيه.</p>
+  </div>
+</header>
+<main class="apply-main" id="main">
+  <div id="progress" class="track" role="progressbar" aria-label="خطوات الطلب" aria-valuemin="1" aria-valuemax="8" aria-valuenow="1"><i id="bar" style="width:12%"></i></div>
+  <ol class="apply-steps" id="steps" aria-label="الخطوات"></ol>
+  <form class="card" id="applyForm" novalidate><div id="formBody"><p class="note">جاري التحميل...</p></div></form>
+  <div class="card done" id="done" hidden>
+    <h2 tabindex="-1">طلبك وصل، شكرًا</h2>
+    <p>رقم طلبك: <b dir="ltr" id="refNo"></b></p>
+    <p class="note">احتفظ بالرقم ده. فريق الموارد البشرية هيراجع طلبك ويكلمك على الموبايل لو فيه مقابلة.</p>
+  </div>
+  <p class="note apply-foot">بياناتك بتتشاف من فريق الموارد البشرية في Everest بس، ومش بنطلب رقم قومي ولا بيانات صحية.</p>
+</main>
+<script type="module" src="js/apply.js?v=202610122300"></script>
+</body>
+</html>

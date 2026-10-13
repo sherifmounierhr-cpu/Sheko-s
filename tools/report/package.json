@@ -1,0 +1,8 @@
+{
+  "name": "everest-hr-weekly-report",
+  "private": true,
+  "type": "module",
+  "description": "Thursday email: company summary to admins, team summary to each manager",
+  "scripts": { "send": "node weekly.mjs" },
+  "dependencies": { "pg": "8.13.1" }
+}
