@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610211500";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211500";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211500";
-import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211500";
+import * as db from "./db.js?v=202610211700";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211700";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211700";
+import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211700";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -122,7 +122,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610211500";
+const BUILD = "202610211700";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -1014,13 +1014,14 @@ function deviceStale(d) {
   const st = E.st, td = today(), wd = new Date(td + "T12:00:00Z").getUTCDay();
   if (st.weekend.includes(wd) || (st.holidays || []).includes(td)) return false;
   if (toMin(nowHM()) < toMin(st.in || "09:00")) return false;
-  return !d.lastSeen || Date.now() - Date.parse(d.lastSeen) > 30 * 60000;
+  // a device registered but never heard from is "waiting for setup", not an alarm
+  return !!d.lastSeen && Date.now() - Date.parse(d.lastSeen) > 30 * 60000;
 }
 function deviceCard() {
   if (DEV == null) return R.admin ? `<div class="card"><h2>${icon("fingerprint")}جهاز البصمة</h2><p class="note">${db.deviceError && !/schema cache|PGRST20|42883|42P01|does not exist/i.test(db.deviceError) ? "حصلت مشكلة وأنا بجيب حالة الجهاز:" : "الربط المباشر بالجهاز لسه مش متفعل. شغّل neon/009_device.sql في Neon SQL Editor، وبعدين notify pgrst."}</p>${db.deviceError ? `<p class="note" dir="ltr">${esc(db.deviceError)}</p>` : ""}</div>` : "";
   const rows = DEV.map((d) => { const stale = deviceStale(d); return `<div class="dev${stale ? " stale" : ""}">
     <div class="row"><b class="spacer">${esc(d.name)} <span class="note" dir="ltr">${esc(d.serial)}</span></b>
-      <span class="pill ${stale ? "p-bad" : d.lastSeen ? "p-ok" : "p-mute"}">آخر اتصال: ${ago(d.lastSeen)}</span>
+      <span class="pill ${stale ? "p-bad" : d.lastSeen ? "p-ok" : "p-mute"}">${d.lastSeen ? `آخر اتصال: ${ago(d.lastSeen)}` : "مستني البرنامج يتركب على كمبيوتر المكتب"}</span>
       ${R.admin ? `<button type="button" class="btn ghost icon-only" data-devdel="${esc(d.serial)}" aria-label="شيل الجهاز ${esc(d.serial)}">${icon("x")}</button>` : ""}</div>
     <div class="note">النهارده وصل ${d.today} بصمة${d.lastPunch ? ` · آخر بصمة ${fmtDate(String(d.lastPunch).slice(0, 10))} ${to12(toMin(String(d.lastPunch).slice(11, 16)))}` : ""}</div>
     ${d.error && (!d.lastSeen || Date.parse(d.errorAt) > Date.parse(d.lastSeen)) ? `<div class="banner">${icon("alert-triangle")}${esc(d.error)}</div>` : ""}
