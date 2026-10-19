@@ -1,16 +1,37 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610191200";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610191200";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610191700";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610191700";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
-export const client = configured
+const raw = configured
   ? createClient({
       auth: { adapter: SupabaseAuthAdapter(), url: NEON_AUTH_URL },
       dataApi: { url: NEON_DATA_API_URL },
     })
   : null;
+
+// "شوف شاشته": while an admin previews someone else's screen, every write is
+// refused here, before it reaches the database. Reads (and the RPCs that only
+// read) still go through, with the admin's own permissions.
+let readOnly = false;
+export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
+const READ_RPCS = new Set(["hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
+const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
+export function setReadOnly(on) { readOnly = !!on; }
+export const isReadOnly = () => readOnly;
+export const client = raw && new Proxy(raw, {
+  get(target, prop) {
+    const v = target[prop];
+    if (prop === "rpc") return (name, ...a) => (readOnly && !READ_RPCS.has(name) ? refuse() : v.call(target, name, ...a));
+    if (prop === "from") return (table) => {
+      const q = v.call(target, table);
+      return new Proxy(q, { get(t, k) { const f = t[k]; if (readOnly && ["insert", "update", "upsert", "delete"].includes(k)) return refuse; return typeof f === "function" ? f.bind(t) : f; } });
+    };
+    return typeof v === "function" ? v.bind(target) : v;
+  },
+});
 
 const STATUS_AR = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض" };
 const STATUS_EN = { "قيد المراجعة": "pending", "معتمد": "approved", "مرفوض": "rejected" };
@@ -335,8 +356,12 @@ export async function deletePolicy(id) { check(await client.from("policy_items")
 export async function notifications(limit = 50) {
   return check(await client.from("notifications").select("*").order("created_at", { ascending: false }).limit(limit));
 }
+// Admin only (neon/007_todos.sql): someone else's inbox, for "شوف شاشته".
+export async function notificationsOf(user, limit = 50) {
+  return check(await client.rpc("hr_peek_notifications", { p_user: user, p_limit: limit })) || [];
+}
 export async function markRead(ids) {
-  if (!ids.length) return;
+  if (!ids.length || readOnly) return;
   check(await client.from("notifications").update({ read_at: new Date().toISOString() }).in("id", ids));
 }
 
@@ -500,3 +525,28 @@ export async function setAssignment(user, team, cat, on) {
   if (on) check(await client.from("eval_assignments").insert({ user_id: user, team_id: team, category: cat }));
   else check(await client.from("eval_assignments").delete().eq("user_id", user).eq("team_id", team).eq("category", cat));
 }
+
+// ---------------------------------------------------------------- to-do lists (neon/007_todos.sql)
+
+export let todoReady = true;
+const mapTodo = (t) => ({
+  id: t.id, code: t.code, title: t.title, note: t.note || "", due: t.due || "", priority: t.priority, repeat: t.repeat,
+  status: t.status, doneAt: t.done_at, doneBy: t.done_by || "", by: t.created_by || "", byCode: t.created_by_code || "", at: t.created_at,
+});
+// Open tasks plus the last 14 days of finished ones; RLS trims it to the caller's own and their team's.
+export async function loadTodos() {
+  const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  try {
+    const rows = await all(() => client.from("todos").select("*").or(`status.eq.open,done_at.gte.${since}`).order("due", { ascending: true, nullsFirst: false }).order("id"));
+    todoReady = true;
+    return rows.map(mapTodo);
+  } catch (e) { if (/schema cache|does not exist|PGRST20/i.test(e.message)) { todoReady = false; return []; } throw e; }
+}
+export async function todoAdd(code, title, note, due, priority, repeat) {
+  return check(await client.rpc("hr_todo_add", { p_code: code, p_title: title, p_note: nullIfEmpty(note), p_due: nullIfEmpty(due), p_priority: priority || "normal", p_repeat: repeat || "none" }));
+}
+export async function todoSet(id, done) { return check(await client.rpc("hr_todo_set", { p_id: id, p_done: !!done })); }
+export async function todoEdit(id, t) {
+  check(await client.rpc("hr_todo_edit", { p_id: id, p_title: t.title, p_note: nullIfEmpty(t.note), p_due: nullIfEmpty(t.due), p_priority: t.priority || "normal", p_repeat: t.repeat || "none" }));
+}
+export async function todoCancel(id) { check(await client.rpc("hr_todo_cancel", { p_id: id })); }

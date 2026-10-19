@@ -456,3 +456,40 @@ form.plan h3 { margin-top: 4px; }
   .card, .kpi, .tbl { break-inside: avoid; }
   .tbl { max-height: none !important; overflow: visible !important; }
 }
+
+/* ---------------------------------------------------------------- to-do lists */
+.todo h2 .note { font-weight: 400; font-size: 13px; margin-inline-start: 6px; }
+.bad-txt { color: var(--bad); }
+.todo-auto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.todo-auto li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; font-size: 14px; }
+.todo-auto li .ic { flex: none; }
+.todo-auto li .grow { min-width: 0; }
+.todo-list { display: flex; flex-direction: column; }
+.todo-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--line); }
+.todo-item:first-child { border-top: 0; }
+.todo-item input[type=checkbox] { width: 22px; height: 22px; margin-top: 1px; flex: none; accent-color: var(--accent); cursor: pointer; }
+.todo-item label { display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.todo-item .t { font-weight: 600; overflow-wrap: anywhere; }
+.todo-item .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.todo-item .meta .ic { width: 13px; height: 13px; }
+.todo-item.late .t { color: var(--bad); }
+.todo-item.done .t { text-decoration: line-through; color: var(--muted); font-weight: 400; }
+.todo-item .btn.icon-only { flex: none; }
+.todo-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 4px; }
+.todo-add .grow { min-width: 200px; }
+.todo-add input[type=date] { width: 150px; }
+.todo-edit { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin: 6px 0; }
+tr.sel td { background: var(--accent-soft); }
+@media (max-width: 520px) {
+  .todo-add > * { flex: 1 1 45%; }
+  .todo-add .grow, .todo-add select[name=code] { flex-basis: 100%; }
+  .todo-add input[type=date] { width: auto; }
+}
+
+/* ---------------------------------------------------------------- "شوف شاشته" */
+.viewas { position: sticky; inset-block-start: 68px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px;
+  padding: 8px 12px; box-shadow: 0 4px 14px rgb(0 0 0 / .08); border-radius: var(--r-card); background: var(--info-soft); color: var(--info); border: 1px solid color-mix(in srgb, var(--info) 35%, transparent); font-size: 14px; }
+.viewas .ic { flex: none; }
+.viewas .spacer { flex: 1 1 220px; min-width: 0; margin: 0; }
+@media (max-width: 520px) { .viewas { font-size: 13px; flex-wrap: nowrap; padding: 6px 10px; } .viewas .wide-only { display: none; } .viewas .btn { --ctl-h: 34px; padding: 0 10px; white-space: nowrap; } }
+@media print { .viewas { display: none; } }
