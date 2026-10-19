@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610211000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211000";
+import * as db from "./db.js?v=202610211500";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211500";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211500";
+import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211500";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -122,7 +122,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610211000";
+const BUILD = "202610211500";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -675,7 +675,9 @@ function templatesCard() {
     <dl class="cap-help">${CAPS.map(([, l, h]) => `<div><dt>${l}</dt><dd>${h}</dd></div>`).join("")}</dl>`);
 }
 function org() {
-  if (!ORG) return db.orgReady ? skelHtml() : (R.admin ? `<div class="banner">${icon("alert-triangle")}الهيكل الوظيفي لسه مش متفعل. شغّل neon/008_org.sql في Neon SQL Editor، وبعدين notify pgrst.</div>` : empty("sitemap", "الهيكل الوظيفي لسه مش جاهز"));
+  const why = db.orgError ? `<div class="note" dir="ltr">${esc(db.orgError)}</div>` : "";
+  if (!ORG && db.orgError && db.orgReady) return R.admin ? `<div class="banner bad">${icon("alert-triangle")}<div>الهيكل الوظيفي مش قادر يتحمّل. ابعت الرسالة دي للدعم الفني:${why}</div></div>` : empty("sitemap", "الهيكل الوظيفي مش متاح دلوقتي");
+  if (!ORG) return db.orgReady ? skelHtml() : (R.admin ? `<div class="banner">${icon("alert-triangle")}<div>الهيكل الوظيفي لسه مش متفعل. شغّل neon/008_org.sql في Neon SQL Editor، وبعدين notify pgrst.${why}</div></div>` : empty("sitemap", "الهيكل الوظيفي لسه مش جاهز"));
   const leads = ORG.people.filter(isLead).sort((a, b) => posOf(a.position).rank - posOf(b.position).rank || a.name.localeCompare(b.name, "ar"));
   const roots = kidsOf(""), loose = ORG.people.filter((p) => !isLead(p) && (p.unit === "" || !unitById(p.unit)));
   const nUnits = ORG.units.length, nPeople = ORG.people.length;
@@ -1015,7 +1017,7 @@ function deviceStale(d) {
   return !d.lastSeen || Date.now() - Date.parse(d.lastSeen) > 30 * 60000;
 }
 function deviceCard() {
-  if (DEV == null) return R.admin ? `<div class="card"><h2>${icon("fingerprint")}جهاز البصمة</h2><p class="note">الربط المباشر بالجهاز لسه مش متفعل. شغّل neon/009_device.sql في Neon SQL Editor، وبعدين notify pgrst.</p></div>` : "";
+  if (DEV == null) return R.admin ? `<div class="card"><h2>${icon("fingerprint")}جهاز البصمة</h2><p class="note">${db.deviceError && !/schema cache|PGRST20|42883|42P01|does not exist/i.test(db.deviceError) ? "حصلت مشكلة وأنا بجيب حالة الجهاز:" : "الربط المباشر بالجهاز لسه مش متفعل. شغّل neon/009_device.sql في Neon SQL Editor، وبعدين notify pgrst."}</p>${db.deviceError ? `<p class="note" dir="ltr">${esc(db.deviceError)}</p>` : ""}</div>` : "";
   const rows = DEV.map((d) => { const stale = deviceStale(d); return `<div class="dev${stale ? " stale" : ""}">
     <div class="row"><b class="spacer">${esc(d.name)} <span class="note" dir="ltr">${esc(d.serial)}</span></b>
       <span class="pill ${stale ? "p-bad" : d.lastSeen ? "p-ok" : "p-mute"}">آخر اتصال: ${ago(d.lastSeen)}</span>

@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211500";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211500";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -556,19 +556,21 @@ export async function todoCancel(id) { check(await client.rpc("hr_todo_cancel", 
 
 // ---------------------------------------------------------------- company structure (neon/008_org.sql)
 
-export let orgReady = true;
+export let orgReady = true, orgError = "", deviceError = "";
+// "the SQL file hasn't been run (or the API hasn't reloaded)" vs any other problem
+const missing = (e) => /schema cache|PGRST20[0-9]|42883|42P01|does not exist/i.test(`${e.code || ""} ${e.message || ""}`);
 // Units, people and positions. Everyone gets names and titles through hr_org_chart();
 // the admin also edits units (teams) and positions directly.
 export async function loadOrg() {
   try {
     const [chart, positions] = await Promise.all([client.rpc("hr_org_chart").then(check), get(client.from("org_positions").select("*").order("sort"))]);
-    orgReady = true;
+    orgReady = true; orgError = "";
     return {
       units: (chart?.units || []).map((u) => ({ id: u.id, name: u.name, parent: u.parent ?? "", kind: u.kind || "sales", head: u.head || "", sort: u.sort || 0 })),
       people: (chart?.people || []).map((p) => ({ code: p.code, name: p.name, unit: p.unit ?? "", position: p.position || "", job: p.job || "" })),
       positions: positions.map((p) => ({ key: p.key, title: p.title, rank: p.rank, roles: p.roles || [], evalCats: p.eval_cats || [], evalScope: p.eval_scope || "none", sort: p.sort })),
     };
-  } catch (e) { if (/schema cache|does not exist|PGRST20|hr_org_chart/i.test(e.message)) { orgReady = false; return null; } throw e; }
+  } catch (e) { orgError = e.message || String(e); orgReady = !missing(e); return null; }
 }
 export async function addUnit(name, parent, kind) {
   return check(await client.from("teams").insert({ name, parent_id: nullIfEmpty(parent) == null ? null : Number(parent), kind: kind || "sales" }).select("id"))?.[0]?.id;
@@ -588,8 +590,8 @@ export async function syncEvalAll() { return check(await client.rpc("hr_sync_eva
 // ---------------------------------------------------------------- fingerprint device sync (neon/009_device.sql)
 
 export async function deviceStatus() {
-  try { return (check(await client.rpc("hr_device_status")) || []).map((d) => ({ serial: d.serial, name: d.name, lastSeen: d.last_seen, lastPunch: d.last_punch, lastCount: d.last_count, error: d.last_error || "", errorAt: d.error_at, today: d.today || 0 })); }
-  catch (e) { if (/schema cache|does not exist|PGRST20|hr_device_status/i.test(e.message)) return null; throw e; }
+  try { deviceError = ""; return (check(await client.rpc("hr_device_status")) || []).map((d) => ({ serial: d.serial, name: d.name, lastSeen: d.last_seen, lastPunch: d.last_punch, lastCount: d.last_count, error: d.last_error || "", errorAt: d.error_at, today: d.today || 0 })); }
+  catch (e) { deviceError = e.message || String(e); if (missing(e)) return null; throw e; }
 }
 export async function deviceAdd(serial, name) { check(await client.rpc("hr_device_add", { p_serial: serial, p_name: name || null })); }
 export async function deviceRemove(serial) { check(await client.rpc("hr_device_remove", { p_serial: serial })); }
