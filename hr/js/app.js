@@ -1,6 +1,7 @@
-import * as db from "./db.js?v=202610191200";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610191200";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610191200";
+import * as db from "./db.js?v=202610191700";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610191700";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610191700";
+import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610191700";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -24,6 +25,7 @@ const TABS = [
   ["live", "الفريق مباشر", (r) => r.admin || r.manager, "broadcast", "team", "مباشر"],
   ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader, "chart-bar", "team", "المتابعة"],
   ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager, "clipboard-check", "team", "الطلبات"],
+  ["tasks", "مهام الفريق", (r) => r.admin || r.manager, "list-check", "team", "المهام"],
   ["actions", "الجزاءات والمنح", (r) => r.admin || r.manager, "gavel", "team", "الجزاءات"],
   ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader, "clock", "team", "اليومي"],
   ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
@@ -47,6 +49,8 @@ let tab = "", dailyEmp = "", dailyFilter = "", empFilter = "", payFilter = "", r
 let EV = null, EVOPEN = false, EWDAY = "", RLEVEL = "", RTEAM = "";
 let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null, RF = { status: "", position: "", sort: "date", q: "" };
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
+// to-do lists; "شوف شاشته" keeps the admin's own identity in REAL while VIEW is someone else
+let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = null;
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -111,12 +115,12 @@ function ask(title, text = "", yes = "تأكيد", danger = false) {
   d.returnValue = "";
   return new Promise((res) => { d.addEventListener("close", () => res(d.returnValue === "yes"), { once: true }); d.showModal(); y.focus(); });
 }
-function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
+function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610191200";
+const BUILD = "202610191700";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -131,9 +135,7 @@ async function boot() {
   const user = await db.currentUser().catch(() => null);
   if (!user) { show("login"); return; }
   try { ME = await db.me(user); } catch (e) { show("login"); toast(errMsg(e), true); return; }
-  R = { admin: ME.roles.includes("admin") };
-  for (const [r] of ROLES) R[r] = R.admin || ME.roles.includes(r);
-  R.code = ME.code;
+  R = rolesFor(ME);
   if (!TABS.some(([, , f]) => f(R))) { show("pending"); $("#pendingEmail").textContent = ME.email || ""; return; }
   show("app");
   $("#who").textContent = ME.email || "";
@@ -149,6 +151,15 @@ async function boot() {
   if (R.admin) db.purgeLocations().catch(() => {});
 }
 
+function rolesFor(me) {
+  const r = { admin: me.roles.includes("admin") };
+  for (const [x] of ROLES) r[x] = r.admin || me.roles.includes(x);
+  r.code = me.code;
+  return r;
+}
+// the identity reads are made with: the admin's own while previewing someone else
+const loadR = () => (VIEW ? REAL.R : R);
+
 // live clock in Cairo time, updated in place
 const clockFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const timeFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit", second: "2-digit" });
@@ -162,9 +173,9 @@ const unread = () => NOTIF.filter((n) => !n.read_at).length;
 let notifSeen = null;
 async function pollNotifications() {
   try {
-    NOTIF = await db.notifications(60);
+    NOTIF = VIEW ? await db.notificationsOf(VIEW.id, 60) : await db.notifications(60);
     const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id);
-    if (notifSeen && ids.some((id) => !notifSeen.has(id))) toast(`عندك ${unread()} إشعار جديد`);
+    if (notifSeen && !VIEW && ids.some((id) => !notifSeen.has(id))) toast(`عندك ${unread()} إشعار جديد`);
     notifSeen = new Set(ids);
     renderTabs();
     if (tab === "inbox" && !typing()) render();
@@ -174,7 +185,7 @@ async function pollNotifications() {
 const typing = () => { const a = document.activeElement; return a && $("#main").contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName); };
 async function loadLive() {
   try {
-    LIVE = await db.live(today()); LIVE_AT = timeFmt.format(new Date());
+    LIVE = await db.live(today()); if (VSCOPE) LIVE = scopeLive(LIVE, VSCOPE); LIVE_AT = timeFmt.format(new Date());
     await loadThreads("meetings", [...LIVE.meetings.map((m) => m.id), ...S.meetings.filter((m) => m.rawStatus === "pending").map((m) => m.id)]);
     if (tab === "live" && !typing()) render();
   } catch (e) { toast(errMsg(e), true); }
@@ -193,7 +204,11 @@ async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
   if (!S) skeleton();
   try {
-    [S, TR, REC] = await Promise.all([db.load(month, R), db.loadTraining(R).catch(() => null), R.admin || R.recruiter ? db.loadRecruit().catch(() => null) : null]);
+    const LR = loadR();
+    [S, TR, REC, TODO] = await Promise.all([db.load(month, LR), db.loadTraining(LR).catch(() => null), (LR.admin || LR.recruiter) && (R.admin || R.recruiter) ? db.loadRecruit().catch(() => null) : null, db.loadTodos().catch(() => [])]);
+    VSCOPE = null;
+    if (VIEW && !R.admin) ({ S, TR, REC, v: VSCOPE } = scopeAs(VIEW, S, TR, REC, VIEW.evalTeams));
+    if (VSCOPE) TODO = scopeTodos(TODO, VSCOPE);
     E = createEngine(S, LAST);
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
     R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
@@ -207,7 +222,7 @@ async function refresh(month = S?.meta.month) {
 
 async function act(fn, okMsg) {
   // yield a task first so a Tab that triggered the save lands on the next field before we re-render
-  try { await fn(); await new Promise((r) => setTimeout(r)); if (okMsg) toast(okMsg); await refresh(); }
+  try { await fn(); await new Promise((r) => setTimeout(r)); if (okMsg) toast(typeof okMsg === "function" ? okMsg() : okMsg); await refresh(); }
   catch (e) { toast(errMsg(e), true); render(); }
 }
 
@@ -219,7 +234,7 @@ async function beforeTab() {
   if (tab === "live") await loadLive();
   if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
-  if (tab === "inbox" && unread()) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
+  if (tab === "inbox" && unread() && !VIEW) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
 }
 async function go(t) { tab = t; render(); await beforeTab(); render(); }
 
@@ -256,11 +271,12 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
-  $("#main").innerHTML = `<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
+  const vbar = VIEW ? `<div class="viewas" role="status">${icon("eye")}<span class="spacer">بتشوف البوابة زي <b>${esc(VIEW.name || (VIEW.code && nameOf(VIEW.code)) || VIEW.email)}</b> · عرض فقط<span class="wide-only">، مفيش أي تعديل بيتحفظ</span></span><button class="btn" id="viewExit">رجوع لحسابي</button></div>` : "";
+  $("#main").innerHTML = `${vbar}<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
   document.title = `${label} | Everest Eco System`;
   tick();
   labelControls();
@@ -342,6 +358,7 @@ function home(ym) {
     </div>
     <div class="row"><button class="btn primary" data-go="field">${icon("map-pin")}سجل تواجدي</button><button class="btn" data-go="mine">${icon("calendar-event")}اطلب إذن أو إجازة</button>
     ${lastCheck ? `<span class="note">آخر تسجيل: ${esc(checkKind(lastCheck.kind))} ${fmtTs(lastCheck.ts)}</span>` : ""}</div></div>
+  ${todoCard()}
   ${fresh.length ? `<div class="banner">${icon("bell")}عندك ${fresh.length} ${fresh.length === 1 ? "إجراء جديد" : "إجراءات جديدة"} من الإدارة. راجعها في (الجزاءات والمنح) تحت وأكد إنك اطلعت.</div>` : ""}
   ${myEvalCard()}
   <div class="grid2">
@@ -400,7 +417,7 @@ async function loadComparison() {
   const list = (MONTHS.length ? MONTHS : [S.meta.month]).slice(0, 6);
   const out = [];
   for (const ym of list) {
-    const S2 = await db.load(ym, R, ME.code), E2 = createEngine(S2, LAST), e2 = S2.employees.find((x) => x.code === ME.code);
+    const S2 = await db.load(ym, loadR(), ME.code), E2 = createEngine(S2, LAST), e2 = S2.employees.find((x) => x.code === ME.code);
     if (!e2) continue;
     const r = E2.payRow(e2, ym);
     out.push({ ym, abs: r.s.abs, latec: r.s.latec, latem: r.s.latem, days: r.days, pen: r.pen, bonus: r.bonus, rnd: r.rnd, sal: r.sal });
@@ -408,10 +425,151 @@ async function loadComparison() {
   COMP = out;
 }
 
+// ---------------------------------------------------------------- to-do lists
+const REPEAT = [["none", "مرة واحدة"], ["daily", "كل يوم شغل"], ["weekly", "كل أسبوع"]];
+
+const todoMine = (code = ME.code) => TODO.filter((t) => t.code === code);
+const isLate = (t) => t.status === "open" && t.due && t.due < today();
+const manages = (code) => R.admin || (R.manager && code !== ME.code && S.employees.some((e) => e.code === code));
+const canManageTodo = (t) => t.by === ME.id || manages(t.code);
+function dueTxt(t) {
+  if (!t.due) return "";
+  const d = t.due, td = today();
+  if (t.status === "open" && d < td) return `<span class="pill p-bad">متأخرة من ${fmtDate(d)}</span>`;
+  return `<span class="note">${d === td ? "النهارده" : d === addDays(td, 1) ? "بكرة" : `${DAYS[new Date(d + "T12:00:00Z").getUTCDay()]} ${fmtDate(d)}`}</span>`;
+}
+function todoItem(t) {
+  if (TODO_EDIT === t.id) return `<form class="todo-edit add" id="todoEdit${t.id}" data-todoform="${t.id}">
+    <label class="wide">المهمة<input type="text" name="title" value="${esc(t.title)}" maxlength="200" required></label>
+    <label>التسليم<input type="date" name="due" value="${esc(t.due)}"></label>
+    <label>الأولوية<select name="priority">${opts([["normal", "عادي"], ["high", "عاجل"]], t.priority)}</select></label>
+    <label>التكرار<select name="repeat">${opts(REPEAT, t.repeat)}</select></label>
+    <label class="wide">ملاحظة<input type="text" name="note" value="${esc(t.note)}" maxlength="1000"></label>
+    <div class="row"><button class="btn primary" type="submit">حفظ</button><button class="btn" type="button" data-todoedit="0">إلغاء</button></div></form>`;
+  const done = t.status === "done", from = t.byCode && t.byCode !== t.code ? nameOf(t.byCode) : t.byCode ? "" : t.by && t.by !== ME.id ? "الإدارة" : "";
+  return `<div class="todo-item${isLate(t) ? " late" : ""}${done ? " done" : ""}">
+    <input type="checkbox" id="td${t.id}" data-todo="${t.id}"${done ? " checked" : ""}>
+    <label for="td${t.id}" class="grow"><span class="t">${t.priority === "high" ? '<span class="pill p-warn">عاجل</span> ' : ""}${esc(t.title)}</span>
+      <span class="meta">${dueTxt(t)}${t.repeat !== "none" ? `<span class="pill p-mute">${icon("repeat")}${t.repeat === "daily" ? "يومي" : "أسبوعي"}</span>` : ""}${from ? `<span class="note">من: ${esc(from)}</span>` : ""}${done && t.doneAt ? `<span class="note">خلصت ${fmtTs(t.doneAt)}</span>` : ""}</span>
+      ${t.note ? `<span class="note">${esc(t.note)}</span>` : ""}</label>
+    ${canManageTodo(t) && !done ? `<button class="btn ghost icon-only" type="button" data-todoedit="${t.id}" aria-label="تعديل: ${esc(t.title)}">${icon("pencil")}</button><button class="btn ghost icon-only" type="button" data-todocancel="${t.id}" aria-label="شيل: ${esc(t.title)}">${icon("x")}</button>` : ""}</div>`;
+}
+const todoList = (list) => list.map(todoItem).join("");
+const sortTodo = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.priority === "high" ? -1 : 0) - (b.priority === "high" ? -1 : 0) || a.id - b.id;
+const todoForm = (id, code, pick = "") => `<form class="todo-add" id="${id}" data-code="${esc(code)}">
+  ${pick}<input type="text" name="title" maxlength="200" required placeholder="مهمة جديدة، مثلًا: اتصل بـ 10 عملاء" aria-label="المهمة" class="grow">
+  <input type="date" name="due" value="${today()}" aria-label="ميعاد التسليم">
+  <select name="priority" aria-label="الأولوية">${opts([["normal", "عادي"], ["high", "عاجل"]], "normal")}</select>
+  <select name="repeat" aria-label="التكرار">${opts(REPEAT, "none")}</select>
+  <button class="btn primary" type="submit">${icon("plus")}إضافة</button></form>`;
+
+// Things the portal already knows are waiting on this person.
+function autoTasks() {
+  const out = [], add = (ic, text, go) => out.push({ ic, text, go });
+  if (R.admin || R.manager) {
+    const n = S.perms.filter((p) => p.rawStatus === "pending" && canDecide(p)).length;
+    if (n) add("clipboard-check", `${n} ${n === 1 ? "طلب إذن أو إجازة مستني" : "طلبات أذونات وإجازات مستنية"} قرارك`, "requests");
+    const m = S.meetings.filter((x) => x.rawStatus === "pending" && canDecideMeet(x)).length;
+    if (m) add("briefcase", `${m} ${m === 1 ? "اجتماع عميل مستني" : "اجتماعات عملاء مستنية"} مراجعتك`, "meet");
+  }
+  if (R.admin) {
+    const a = S.actions.filter((x) => x.status === "pending" || (x.objection && !x.decisionNote)).length;
+    if (a) add("gavel", `${a} ${a === 1 ? "جزاء أو منحة أو تظلم مستني" : "جزاءات ومنح وتظلمات مستنية"} قرارك`, "actions");
+  }
+  if (EV && EVOPEN && EV.week.starts_on === thisFriday()) {
+    let miss = 0;
+    for (const s of evalScope().filter((x) => x.edit && !R.admin)) for (const mm of membersOf(s.team.id)) for (const c of s.cats) if (!entryOf(mm.code, EV.week.id, c)) miss++;
+    if (miss) add("star", `باقي ${miss} تقييم الأسبوع ده، آخر ميعاد الخميس 12 بالليل`, "weekly");
+  }
+  const p = TR && myPlan();
+  if (p && p.status === "active") {
+    const st = planStats(p);
+    if (st.ps.some((x) => x.from <= today() && !respOf(p, x.n, "self"))) add("clipboard-check", "استبيان فترة التدريب مستنيك", "train");
+    const vids = TR.videos.filter((v) => v.active && v.period <= Math.max(st.cur, 1));
+    const unseen = vids.filter((v) => !TR.views.some((x) => x.code === p.code && x.video === v.id)).length;
+    if (unseen) add("video", `${unseen} ${unseen === 1 ? "فيديو تدريب لسه متشافش" : "فيديوهات تدريب لسه متشافتش"}`, "train");
+    const q = vids.map((v) => quizOf(v.id)).filter(Boolean).filter((z) => !TR.attempts.some((a) => a.code === p.code && a.quiz === z.id && a.passed)).length;
+    if (q) add("checklist", `${q} ${q === 1 ? "اختبار" : "اختبارات"} تدريب لسه محتاج تنجح فيها`, "train");
+  }
+  if (TR && ME.code) {
+    const due = TR.plans.filter((x) => x.status === "active" && x.mentor === ME.code && planStats(x).ps.some((y) => y.from <= today() && !respOf(x, y.n, "mentor"))).length;
+    if (due) add("school", `تقييم المدرب مستني لـ ${due} ${due === 1 ? "متدرب" : "متدربين"}`, "trainees");
+  }
+  if (REC && (R.admin || R.recruiter)) {
+    const n = REC.apps.filter((a) => a.status === "new").length;
+    if (n) add("user-check", `${n} ${n === 1 ? "طلب توظيف جديد" : "طلبات توظيف جديدة"} محتاجة فرز`, "recruit");
+  }
+  const fresh = S.actions.filter((a) => a.code === ME.code && a.status === "approved" && !a.ackAt).length;
+  if (fresh) add("bell", `${fresh} ${fresh === 1 ? "إجراء من الإدارة محتاج" : "إجراءات من الإدارة محتاجة"} تأكيد إنك اطلعت`, "");
+  return out;
+}
+
+function todoCard() {
+  if (!db.todoReady) return R.admin ? `<div class="banner">${icon("alert-triangle")}قائمة المهام لسه مش متفعلة. شغّل neon/007_todos.sql في Neon SQL Editor، وبعدين notify pgrst.</div>` : "";
+  const auto = autoTasks(), mine = todoMine(), open = mine.filter((t) => t.status === "open").sort(sortTodo);
+  const done = mine.filter((t) => t.status === "done" && t.doneAt && Date.now() - Date.parse(t.doneAt) < 7 * 864e5).sort((a, b) => b.doneAt.localeCompare(a.doneAt));
+  const late = open.filter(isLate).length;
+  return `<div class="card todo"><h2>${icon("list-check")}مهامي <span class="note">${open.length ? `${open.length} مفتوحة${late ? ` · <b class="bad-txt">${late} متأخرة</b>` : ""}` : "مفيش مهام مفتوحة"}</span></h2>
+    ${auto.length ? `<ul class="todo-auto" aria-label="من البوابة">${auto.map((a) => `<li>${icon(a.ic)}<span class="grow">${esc(a.text)}</span>${a.go && TABS.some(([k, , f]) => k === a.go && f(R)) ? `<button class="btn" data-go="${a.go}">افتح</button>` : ""}</li>`).join("")}</ul>` : ""}
+    ${open.length ? `<div class="todo-list">${todoList(open)}</div>` : auto.length ? "" : `<p class="note">رتب شغلك هنا: اكتب المهمة وميعادها، وعلّم عليها لما تخلص.</p>`}
+    ${todoForm("todoForm", ME.code)}
+    ${done.length ? fold("check#tdone", `خلصت آخر 7 أيام (${done.length})`, `<div class="todo-list">${todoList(done)}</div>`) : ""}</div>`;
+}
+
+// Manager / admin: assign tasks and follow each person's list.
+function tasks() {
+  if (!db.todoReady) return `<div class="banner">${icon("alert-triangle")}قائمة المهام لسه مش متفعلة. شغّل neon/007_todos.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
+  const team = staff().filter((e) => e.code !== ME.code && manages(e.code));
+  const wk = Date.now() - 7 * 864e5;
+  const rows = team.map((e) => { const l = todoMine(e.code); return { e, open: l.filter((t) => t.status === "open").length, late: l.filter(isLate).length, done: l.filter((t) => t.status === "done" && t.doneAt && Date.parse(t.doneAt) >= wk).length }; })
+    .sort((a, b) => b.late - a.late || b.open - a.open || empName(a.e).localeCompare(empName(b.e), "ar"));
+  const sel = TODO_EMP && team.some((e) => e.code === TODO_EMP) ? TODO_EMP : "";
+  const list = sel ? todoMine(sel).filter((t) => t.status !== "cancelled").sort((a, b) => (a.status === "done") - (b.status === "done") || sortTodo(a, b)) : [];
+  return `<div class="card"><h2>${icon("plus")}كلّف حد بمهمة</h2>
+    ${team.length ? todoForm("todoTeamForm", "", `<select name="code" required aria-label="الموظف">${empOpts(sel, "اختار الموظف", team)}</select>`) : empty("users", "مفيش أعضاء في فريقك لسه")}
+    <p class="note">الموظف بيوصله إشعار بالمهمة، وانت بيوصلك إشعار لما يخلصها. المهمة المتكررة بترجع لوحدها بالميعاد الجاي.</p></div>
+  <div class="card"><h2>${icon("list-check")}مهام الفريق</h2>
+    ${rows.length ? `<div class="tbl flat"><table><thead><tr><th>الموظف</th><th>مفتوحة</th><th>متأخرة</th><th>خلصت الأسبوع ده</th><th></th></tr></thead><tbody>
+    ${rows.map((r) => `<tr${r.e.code === sel ? ' class="sel"' : ""}><td>${esc(empName(r.e))}<div class="note">${esc(teamOf(r.e.teamId)?.name || "")}</div></td><td class="num">${r.open}</td><td class="num">${r.late ? `<span class="pill p-bad">${r.late}</span>` : "0"}</td><td class="num">${r.done}</td>
+      <td><button class="btn" data-todoemp="${esc(r.e.code)}"${r.e.code === sel ? ' aria-pressed="true"' : ""}>${r.e.code === sel ? "إخفاء" : "عرض"}</button></td></tr>`).join("")}</tbody></table></div>` : ""}</div>
+  ${sel ? `<div class="card"><h2>${icon("user")}مهام ${esc(nameOf(sel))}</h2>${list.length ? `<div class="todo-list">${todoList(list)}</div>` : '<p class="note">مفيش مهام لسه.</p>'}</div>` : ""}`;
+}
+
+// ---------------------------------------------------------------- "شوف شاشته" (admin preview, read-only)
+async function startView(id) {
+  const u = (REAL ? [] : S.users).find((x) => x.id === id);
+  if (!u) return;
+  const target = { id: u.id, email: u.email, roles: u.roles, code: u.code };
+  if (!TABS.some(([, , f]) => f(rolesFor(target)))) { toast("الحساب ده لسه مالوش صلاحيات ولا مربوط بكود موظف، فمفيش حاجة يشوفها."); return; }
+  busy = true;
+  let evalTeams = [];
+  try { evalTeams = ((await db.loadEval(null))?.assignments || []).filter((a) => a.user === u.id).map((a) => a.team); } catch { /* evaluation not set up */ }
+  busy = false;
+  REAL = { ME, R, tab };
+  VIEW = { ...target, name: u.name || (u.code && nameOf(u.code)) || "", evalTeams };
+  ME = target; R = rolesFor(ME);
+  db.setReadOnly(true);
+  NOTIF = []; notifSeen = null; COMP = null; CMT = {}; LIVE = null; QUIZ = null; EV = null; TODO_EMP = ""; TODO_EDIT = 0; tab = "";
+  await refresh();
+  await pollNotifications();
+  window.scrollTo({ top: 0 });
+  announce(`بتشوف البوابة زي ${VIEW.name || VIEW.email}`);
+}
+async function stopView() {
+  if (!REAL) return;
+  ({ ME, R } = REAL); tab = REAL.tab;
+  VIEW = null; REAL = null; VSCOPE = null;
+  db.setReadOnly(false);
+  NOTIF = []; notifSeen = null; COMP = null; CMT = {}; LIVE = null; QUIZ = null; EV = null; TODO_EMP = ""; TODO_EDIT = 0;
+  await refresh();
+  await pollNotifications();
+  window.scrollTo({ top: 0 });
+}
+
 // ---------------------------------------------------------------- notifications
-const NOTIF_GO = { eval_weeks: "weekly", requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
+const NOTIF_GO = { todos: "home", eval_weeks: "weekly", requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
 function inbox() {
-  const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; return NOTIF_GO[n.ref_table]; };
+  const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; if (n.ref_table === "todos" && /خلّص/.test(n.title) && (R.admin || R.manager)) return "tasks"; return NOTIF_GO[n.ref_table]; };
   return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
   <div class="card">${NOTIF.map((n) => { const g = goFor(n); return `<div class="notif${n.read_at ? "" : " new"}"><div class="row"><b>${esc(n.title)}</b><span class="note">${fmtTs(n.created_at)}</span>
     ${g && TABS.some(([k, , f]) => k === g && f(R)) ? `<button class="btn" data-go="${g}">افتح</button>` : ""}</div>
@@ -839,12 +997,12 @@ function settings() {
   <form class="row" id="teamForm"><input type="text" name="name" placeholder="اسم الفريق الجديد" required><button class="btn" type="submit">إضافة فريق</button></form></div>
 
   <div class="card"><h2>المستخدمين والصلاحيات</h2>
-  <p class="note">أي حد يعمل حساب من صفحة الدخول بيظهر هنا من غير صلاحيات. اربطه بكود الموظف بتاعه، وعلّم الأدوار اللي ليه. الموظف العادي مش محتاج أي دور: بيبعت طلباته ويشوف حضوره بس.</p>
+  <p class="note">(شوف شاشته) بيفتحلك البوابة زي ما الشخص ده بيشوفها بالظبط، عرض بس من غير ما تقدر تعدّل حاجة باسمه. أي حد يعمل حساب من صفحة الدخول بيظهر هنا من غير صلاحيات. اربطه بكود الموظف بتاعه، وعلّم الأدوار اللي ليه. الموظف العادي مش محتاج أي دور: بيبعت طلباته ويشوف حضوره بس.</p>
   <div class="tbl flat"><table><thead><tr><th>الإيميل</th><th>الاسم</th><th>كود الموظف</th>${ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
   ${S.users.map((u) => `<tr class="${!u.code && !u.roles.length ? "missing-name" : ""}"><td dir="ltr">${esc(u.email)}</td><td>${esc(u.name)}</td>
     <td><select data-user="${esc(u.id)}" data-f="code">${empOpts(u.code, "غير مربوط")}</select></td>
     ${ROLES.map(([r]) => `<td class="num"><input type="checkbox" data-user="${esc(u.id)}" data-role="${r}"${u.roles.includes(r) ? " checked" : ""}${u.id === ME.id && r === "admin" ? " disabled" : ""} aria-label="${r}"></td>`).join("")}
-    <td>${u.id === ME.id ? '<span class="note">انت</span>' : `<button class="btn danger" data-userdel="${esc(u.id)}">حذف</button>`}</td></tr>`).join("")}
+    <td><div class="row nowrap">${u.id !== ME.id && (u.code || u.roles.length) ? `<button class="btn" data-viewas="${esc(u.id)}">${icon("eye")}شوف شاشته</button>` : ""}${u.id === ME.id ? '<span class="note">انت</span>' : `<button class="btn danger" data-userdel="${esc(u.id)}">حذف</button>`}</div></td></tr>`).join("")}
   </tbody></table></div></div>
 
   <div class="card"><h2>المواعيد والقواعد</h2><form class="add">
@@ -1345,7 +1503,7 @@ function myEvalCard() {
 }
 
 async function evalLoad() {
-  try { EV = await db.loadEval(EWDAY); EVOPEN = EV ? await db.evalOpen(EV.week.id) : false; } catch (e) { EV = null; if (db.evalReady) toast(errMsg(e), true); }
+  try { EV = await db.loadEval(EWDAY); if (VSCOPE) EV = scopeEval(VIEW, EV, S, VSCOPE); EVOPEN = EV ? await db.evalOpen(EV.week.id) : false; } catch (e) { EV = null; if (db.evalReady) toast(errMsg(e), true); }
 }
 
 // ---------------------------------------------------------------- initial evaluation (trainees)
@@ -1486,6 +1644,11 @@ document.addEventListener("click", async (ev) => {
     window.scrollTo({ top: 0 });
     return;
   }
+  if (d.viewas) { await startView(d.viewas); return; }
+  if (t.id === "viewExit") { await stopView(); return; }
+  if (d.todoemp) { TODO_EMP = TODO_EMP === d.todoemp ? "" : d.todoemp; TODO_EDIT = 0; render(); return; }
+  if (d.todoedit != null) { TODO_EDIT = Number(d.todoedit); render(); if (TODO_EDIT) $(`#todoEdit${TODO_EDIT} [name=title]`)?.focus(); return; }
+  if (d.todocancel) { const x = TODO.find((y) => y.id === Number(d.todocancel)); if (x && (await ask("تشيل المهمة دي؟", x.title, "شيلها", true))) await act(() => db.todoCancel(x.id), "اتشالت المهمة"); return; }
   if (t.id === "moreBtn") { $("#moreSheet").showModal(); $("#moreSheet .nav-item")?.focus(); return; }
   if (t.id === "menuBtn") { toggleMenu(); return; }
   if (d.themeSet) { setTheme(d.themeSet); return; }
@@ -1585,6 +1748,7 @@ document.addEventListener("click", async (ev) => {
 document.addEventListener("change", async (ev) => {
   const t = ev.target, d = t.dataset; if (busy && t.id !== "month") return;
   if (t.id === "month") { refresh(t.value); return; }
+  if (d.todo) { const id = Number(d.todo), on = t.checked; let next = null; await act(async () => { next = await db.todoSet(id, on); }, () => (!on ? "رجعت مفتوحة" : next ? "برافو. ودي مهمة متكررة، فرجعت بميعادها الجاي" : "برافو، اتعلّمت إنها خلصت")); return; }
   if (t.id === "dailyEmp") { dailyEmp = t.value; render(); return; }
   if (t.id === "dailyFilter") { dailyFilter = t.value; render(); return; }
   if (t.id === "empFilter") { empFilter = t.value; render(); return; }
@@ -1663,6 +1827,12 @@ document.addEventListener("submit", async (ev) => {
   }
   if (f.classList.contains("cform")) { const body = v.body.trim(); if (!body) return; const tbl = f.dataset.ct, id = Number(f.dataset.cid); try { await db.addComment(tbl, id, body); await loadThreads(tbl, [id]); render(); } catch (e) { toast(errMsg(e), true); } return; }
   if (f.id === "checkForm") return checkIn(v);
+  if (f.id === "todoForm" || f.id === "todoTeamForm") {
+    const code = f.id === "todoForm" ? f.dataset.code : v.code;
+    if (!code) return;
+    return act(async () => { await db.todoAdd(code, v.title.trim(), "", v.due, v.priority, v.repeat); if (f.id === "todoTeamForm") TODO_EMP = code; }, f.id === "todoForm" ? "اتضافت المهمة" : `اتبعتت المهمة لـ ${nameOf(code)}`);
+  }
+  if (f.dataset.todoform) { const id = Number(f.dataset.todoform); return act(async () => { await db.todoEdit(id, v); TODO_EDIT = 0; }, "اتحفظ التعديل"); }
   if (f.id === "actForm") {
     if (!N0(v.days) && !N0(v.amount) && v.kind !== "warning") { toast("حدد عدد أيام أو مبلغ", true); return; }
     act(() => db.proposeAction(v), R.admin ? "اتسجل ووصل للموظف" : "اتبعت لمدير النظام يعتمده"); return;
@@ -1734,6 +1904,7 @@ function actHint(form) {
 
 // one check-in; a client meeting also files a pending meeting for the manager
 async function checkIn(v) {
+  if (VIEW) { toast(db.READ_ONLY_MSG, true); return; }
   const btn = $("#checkBtn"); btn.disabled = true; btn.textContent = "بحدد موقعك...";
   let pos = null;
   try { pos = await locate(); } catch (e) { if (!(await ask("مقدرتش أحدد موقعك", `${e.message}. تحب تسجل من غير موقع؟`, "سجل من غير موقع"))) { btn.disabled = false; btn.textContent = "سجل موقعي دلوقتي"; return; } }
