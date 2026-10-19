@@ -1,14 +1,14 @@
-import * as db from "./db.js?v=202610211700";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211700";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211700";
-import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211700";
+import * as db from "./db.js?v=202610221000";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610221000";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610221000";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610221000";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["pay", "المرتبات"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
+const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["approveall", "يوافق على الشركة كلها"], ["pay", "المرتبات"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -18,23 +18,23 @@ const checkKind = (k) => CHECK_KINDS.find(([v]) => v === k)?.[1] || k;
 // tab id, label, who sees it, icon, nav group, short label for the phone bar
 const TABS = [
   ["home", "لوحتي", (r) => !!r.code, "home", "me", "لوحتي"],
-  ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager, "bell", "me", "الإشعارات"],
+  ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager || r.viewall || r.approveall, "bell", "me", "الإشعارات"],
   ["field", "تواجدي واجتماعاتي", (r) => !!r.code, "map-pin", "me", "تواجدي"],
   ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
   ["train", "تدريبي", (r) => r.trainee, "school", "me", "تدريبي"],
   ["org", "الهيكل الوظيفي", (r) => !!r.code || r.admin, "sitemap", "team", "الهيكل"],
-  ["live", "الفريق مباشر", (r) => r.admin || r.manager, "broadcast", "team", "مباشر"],
-  ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader, "chart-bar", "team", "المتابعة"],
-  ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager, "clipboard-check", "team", "الطلبات"],
-  ["tasks", "مهام الفريق", (r) => r.admin || r.manager, "list-check", "team", "المهام"],
-  ["actions", "الجزاءات والمنح", (r) => r.admin || r.manager, "gavel", "team", "الجزاءات"],
-  ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.uploader, "clock", "team", "اليومي"],
+  ["live", "الفريق مباشر", (r) => r.admin || r.manager || r.viewall || r.approveall, "broadcast", "team", "مباشر"],
+  ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.viewall || r.approveall || r.uploader, "chart-bar", "team", "المتابعة"],
+  ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager || r.viewall || r.approveall, "clipboard-check", "team", "الطلبات"],
+  ["tasks", "مهام الفريق", (r) => r.admin || r.manager || r.viewall || r.approveall, "list-check", "team", "المهام"],
+  ["actions", "الجزاءات والمنح", (r) => r.admin || r.manager || r.viewall || r.approveall, "gavel", "team", "الجزاءات"],
+  ["daily", "الحضور اليومي", (r) => r.admin || r.manager || r.viewall || r.approveall || r.uploader, "clock", "team", "اليومي"],
   ["meet", "اجتماعات العملاء", (r) => r.admin || r.meetings || r.manager, "briefcase", "team", "الاجتماعات"],
-  ["sum", "ملخص الحضور", (r) => r.admin || r.manager, "list-details", "team", "الملخص"],
-  ["weekly", "التقييم الأسبوعي", (r) => r.admin || r.manager || r.evaluator, "star", "team", "التقييم"],
-  ["trainees", "المتدربين", (r) => r.admin || r.manager || r.mentor, "school", "team", "المتدربين"],
+  ["sum", "ملخص الحضور", (r) => r.admin || r.manager || r.viewall || r.approveall, "list-details", "team", "الملخص"],
+  ["weekly", "التقييم الأسبوعي", (r) => r.admin || r.manager || r.viewall || r.approveall || r.evaluator, "star", "team", "التقييم"],
+  ["trainees", "المتدربين", (r) => r.admin || r.manager || r.viewall || r.approveall || r.mentor, "school", "team", "المتدربين"],
   ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
-  ["reports", "التقارير", (r) => r.admin || r.manager || r.recruiter || !!r.code, "file-text", "team", "التقارير"],
+  ["reports", "التقارير", (r) => r.admin || r.manager || r.viewall || r.approveall || r.recruiter || !!r.code, "file-text", "team", "التقارير"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
   ["pay", "المرتبات", (r) => r.admin || r.pay, "cash", "admin", "المرتبات"],
   ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
@@ -55,6 +55,8 @@ let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = 
 let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set(), DEV = null;
 
 const $ = (s) => document.querySelector(s);
+// links stored by an admin open only when they are plain https
+const safeUrl = (u) => (/^https:\/\/[^\s"'<>]+$/i.test(String(u || "").trim()) ? String(u).trim() : "");
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtMin = (m) => (m == null ? "" : String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"));
 const to12 = (m) => { if (m == null) return ""; let h = Math.floor(m / 60); const mm = String(m % 60).padStart(2, "0"), p = h >= 12 ? "م" : "ص"; h = h % 12 || 12; return `${h}:${mm} ${p}`; };
@@ -122,7 +124,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610211700";
+const BUILD = "202610221000";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -303,7 +305,7 @@ function labelControls() {
 }
 function skeleton() { $("#main").innerHTML = '<section class="panel"><div class="skel" aria-hidden="true"><i class="h"></i><i></i><i class="s"></i><i></i><i class="s"></i></div><p class="sr-only">جاري التحميل</p></section>'; }
 const actBadge = () => { const n = R.admin ? S.actions.filter((a) => a.status === "pending" || (a.objection && !a.decisionNote)).length : 0; return n ? `<span class="badge">${n}</span>` : ""; };
-const canDecideMeet = (m) => R.meetings || (R.manager && m.code !== ME.code && S.employees.some((e) => e.code === m.code));
+const canDecideMeet = (m) => R.admin || (R.meetings && m.code !== ME.code) || decides(m.code);
 const meetBadge = () => { const n = S.meetings.filter((m) => m.rawStatus === "pending" && canDecideMeet(m)).length; return n ? `<span class="badge">${n}</span>` : ""; };
 
 // a comment thread under a meeting or an action
@@ -437,8 +439,11 @@ const REPEAT = [["none", "مرة واحدة"], ["daily", "كل يوم شغل"], 
 
 const todoMine = (code = ME.code) => TODO.filter((t) => t.code === code);
 const isLate = (t) => t.status === "open" && t.due && t.due < today();
-const manages = (code) => R.admin || (R.manager && code !== ME.code && S.employees.some((e) => e.code === code));
-const canManageTodo = (t) => t.by === ME.id || manages(t.code);
+// may the signed-in user decide for `code`? (hr_decides in neon/010_security.sql)
+let DECS = null;
+const decides = (code) => { if (DECS?.S !== S || DECS.me !== ME) DECS = { S, me: ME, f: decidesFor(ME, S) }; return DECS.f(code); };
+const manages = (code) => R.admin || decides(code);
+const canManageTodo = (t) => (t.by === ME.id && t.code === ME.code) || manages(t.code);
 function dueTxt(t) {
   if (!t.due) return "";
   const d = t.due, td = today();
@@ -546,7 +551,8 @@ function tasks() {
 const KIND = [["dept", "قسم / إدارة"], ["sales", "فريق مبيعات"], ["team", "فريق"]];
 const KIND_IC = { dept: "building", sales: "chart-bar", team: "users" };
 const CAPS = [
-  ["viewall", "يشوف الشركة كلها", "كل الموظفين والفرق، ويوافق على طلباتهم"],
+  ["viewall", "يشوف الشركة كلها", "كل الموظفين والفرق، للمتابعة بس من غير موافقات"],
+  ["approveall", "يوافق على الشركة كلها", "يوافق على الأذونات والاجتماعات ويقترح الجزاءات لأي حد، ما عدا نفسه"],
   ["manager", "مدير على اللي تحته", "يشوف الوحدات اللي هو رئيسها واللي تحتها، ويوافق على طلباتهم"],
   ["pay", "المرتبات", "المرتبات والحسابات البنكية وكشف الشهر"],
   ["recruiter", "التوظيف", "طلبات التوظيف والمقابلات والتعيين"],
@@ -592,13 +598,15 @@ function accessText(code) {
   const p = ORG.people.find((x) => x.code === code), pos = posOf(p?.position), u = S.users.find((x) => x.code === code);
   const roles = u ? u.roles : pos?.roles || [], has = (r) => roles.includes(r) || roles.includes("admin");
   const out = [];
-  if (has("viewall")) out.push(`بيشوف الشركة كلها (${ORG.people.length} موظف)`);
+  if (has("viewall") || has("approveall")) out.push(`بيشوف الشركة كلها (${ORG.people.length} موظف)`);
   else if (has("manager")) {
     const heads = ORG.units.filter((x) => x.head === code), ids = [...new Set(heads.flatMap((x) => unitsBelow(x.id)))];
     const n = peopleIn(ids).filter((x) => x.code !== code).length;
     out.push(heads.length ? `بيشوف ${ids.length === 1 ? "وحدة واحدة" : `${ids.length} وحدات`} و${n} موظف تحته` : "دور مدير بس مش رئيس أي وحدة لسه، فمش هيشوف حد");
   } else out.push("بيشوف صفحته بس");
-  if (has("viewall") || has("manager")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات للي تحته");
+  if (has("approveall")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات لأي حد في الشركة");
+  else if (has("manager")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات للي تحته بس");
+  if (has("viewall") && !has("approveall") && !roles.includes("admin")) out.push("مش بيوافق على حد برا اللي تحته");
   out.push(has("pay") ? "بيشوف المرتبات والحسابات البنكية" : "مش بيشوف المرتبات");
   if (has("recruiter")) out.push("بيدير التوظيف");
   if (has("uploader")) out.push("بيرفع ملف البصمة");
@@ -629,7 +637,7 @@ function unitPanel() {
       <label>النوع<select name="kind">${opts(KIND, u.kind)}</select></label>
       <label>تابعة لـ<select name="parent">${opts(ORG.units.filter((x) => !banned.includes(String(x.id))).map((x) => [x.id, x.name]), u.parent, "مش تابعة لحد (أعلى مستوى)")}</select></label>
       <label>رئيس الوحدة<select name="head">${opts(ORG.people.map((x) => [x.code, `${x.name}${posOf(x.position) ? ` (${posOf(x.position).title})` : ""}`]), u.head, "مفيش")}</select></label>
-      <label>الترتيب<input type="number" name="sort" value="${u.sort}" min="0" max="99" style="width:90px"></label>
+      <label>الترتيب<input type="number" name="sort" value="${esc(u.sort)}" min="0" max="99" style="width:90px"></label>
       <div><button class="btn primary" type="submit">حفظ</button></div></form>
     <p class="note">رئيس الوحدة بيشوف كل اللي فيها وكل الوحدات اللي تحتها. لو حطيت فرق المبيعات تحت (التشغيل)، مدير التشغيل هيشوفهم كلهم.</p></div>`;
 }
@@ -658,7 +666,7 @@ function orgAlerts() {
   if (noHead.length) out.push(`${noHead.map((u) => esc(u.name)).join("، ")}: ${noHead.length === 1 ? "مالوش" : "مالهمش"} رئيس`);
   const noPos = ORG.people.filter((p) => !p.position).length;
   if (noPos) out.push(`${noPos} موظف لسه من غير منصب، فمش هياخدوا صلاحيات تلقائي`);
-  for (const u of ORG.units.filter((x) => x.head)) { const acc = S.users.find((x) => x.code === u.head); if (acc && !acc.roles.includes("manager") && !acc.roles.includes("viewall") && !acc.roles.includes("admin")) out.push(`${esc(nameOf(u.head))} رئيس ${esc(u.name)} بس حسابه مالوش دور (مدير)، فمش هيشوف فريقه`); }
+  for (const u of ORG.units.filter((x) => x.head)) { const acc = S.users.find((x) => x.code === u.head); if (acc && !acc.roles.includes("manager") && !acc.roles.includes("viewall") && !acc.roles.includes("approveall") && !acc.roles.includes("admin")) out.push(`${esc(nameOf(u.head))} رئيس ${esc(u.name)} بس حسابه مالوش دور (مدير)، فمش هيشوف فريقه`); }
   if (EV) for (const t of ORG.units.filter((x) => x.kind === "sales")) { const miss = CATS.filter(([c]) => !EV.assignments.some((a) => a.team === t.id && a.cat === c)).map(([, l]) => l); if (miss.length) out.push(`${esc(t.name)}: مفيش مقيّم لـ ${miss.join(" و")}`); }
   return out.length ? `<div class="card org-alerts"><h2>${icon("alert-triangle")}محتاج انتباهك <span class="badge">${out.length}</span></h2><ul>${out.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : `<div class="banner ok">${icon("check")}الهيكل متظبط: كل وحدة ليها رئيس، وكل حد ليه منصب.</div>`;
 }
@@ -767,7 +775,7 @@ function field() {
   <div class="card"><h2>اجتماعاتي</h2>
   ${meets.map((m) => `<div class="act"><div class="row">${pill(m.status)}<b>${esc(m.kind || "اجتماع")}${m.client ? ` - ${esc(m.client)}` : ""}</b><span class="note">${fmtDate(m.date)} ${to12(toMin(m.tFrom))} - ${to12(toMin(m.tTo))}</span>${mapLink(m.lat, m.lng)}</div>
     <div class="note">${[m.project, m.place, m.result].filter(Boolean).map(esc).join(" · ")}</div>
-    ${m.rawStatus === "pending" ? `<div class="row"><label class="row field-inline">النتيجة<select data-myres="${m.id}">${opts(RESULTS, m.result, "-")}</select></label><label class="row field-inline">خلص الساعة<input type="time" data-myto="${m.id}" value="${m.tTo}"></label><button class="btn danger" data-mymdel="${m.id}">سحب</button></div>` : ""}
+    ${m.rawStatus === "pending" ? `<div class="row"><label class="row field-inline">النتيجة<select data-myres="${m.id}">${opts(RESULTS, m.result, "-")}</select></label><label class="row field-inline">خلص الساعة<input type="time" data-myto="${m.id}" value="${esc(m.tTo)}"></label><button class="btn danger" data-mymdel="${m.id}">سحب</button></div>` : ""}
     ${m.decisionNote ? `<div class="note">رد المدير: ${esc(m.decisionNote)}</div>` : ""}
     ${thread("meetings", m.id)}</div>`).join("") || empty("briefcase", "مفيش اجتماعات الشهر ده", "لما تكون مع عميل، اختار (اجتماع مع عميل) واكتب بياناته.")}</div>`;
 }
@@ -822,7 +830,7 @@ function suggestStep(code, policyId, day) {
   const n = S.actions.filter((a) => a.code === code && String(a.policyId) === String(policyId) && a.day.slice(0, 7) === day.slice(0, 7) && ["pending", "approved"].includes(a.status)).length;
   return { occ: n + 1, step: p.steps[Math.min(n, p.steps.length - 1)] };
 }
-const stepText = (x) => (x.kind === "warning" ? "إنذار" : x.kind === "days" ? `${x.value} يوم` : `${x.value} جنيه`);
+const stepText = (x) => (x.kind === "warning" ? "إنذار" : x.kind === "days" ? `${esc(x.value)} يوم` : `${esc(x.value)} جنيه`);
 function actions() {
   const list = S.actions.slice().sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || b.day.localeCompare(a.day));
   const team = staff().filter((e) => R.admin || e.code !== ME.code);
@@ -850,7 +858,7 @@ function actions() {
 }
 
 function badge() { const n = S.perms.filter((p) => p.rawStatus === "pending" && canDecide(p)).length; return n ? `<span class="badge">${n}</span>` : ""; }
-const canDecide = (p) => R.admin || (R.manager && p.code !== ME.code && S.employees.some((e) => e.code === p.code));
+const canDecide = (p) => R.admin || decides(p.code);
 
 function pill(s) {
   const m = { "حاضر": "p-ok", "حاضر - مهمة خارجية": "p-ok", "مهمة خارجية": "p-info", "تأخير": "p-warn", "انصراف مبكر": "p-warn", "تأخير وانصراف مبكر": "p-warn", "بصمة ناقصة": "p-warn", "غياب": "p-bad", "إجازة": "p-acc", "إجازة أسبوعية": "p-mute", "إجازة رسمية": "p-mute", "لم يأتِ بعد": "p-mute", "معفى من البصمة": "p-info", "معتمد": "p-ok", "قيد المراجعة": "p-warn", "مرفوض": "p-bad" };
@@ -911,7 +919,7 @@ function dailyTable(e, ym, editable) {
   <div class="tbl"><table><thead><tr><th>التاريخ</th><th>اليوم</th><th>أول بصمة</th><th>آخر بصمة</th><th>ساعات</th><th>تأخير (د)</th><th>انصراف مبكر (د)</th><th>أذونات / اجتماعات (د)</th><th>الحالة</th><th>الخصم</th>${editable ? "<th>تعديل الخصم</th>" : ""}<th>ملاحظات</th></tr></thead><tbody>
   ${rows.map((r) => `<tr class="${r.type !== "يوم عمل" ? "off" : ""}"><td>${fmtDate(r.d)}</td><td>${DAYS[r.w]}</td><td>${to12(r.pin)}</td><td>${to12(r.pout)}</td><td class="num">${r.hrs == null ? "" : r.hrs.toFixed(1)}</td>
     <td class="num">${r.nlate || ""}</td><td class="num">${r.nearly || ""}</td><td class="num">${r.permMin + r.meetMin || ""}</td><td>${pill(r.status)}</td><td class="num">${r.fin ? n2(r.fin) : ""}</td>
-    ${editable ? `<td><input type="number" step="0.25" min="0" style="width:80px" data-ov="${esc(r.key)}" value="${r.ov?.ded ?? ""}" placeholder="${r.calc ? n2(r.calc) : "-"}" aria-label="تعديل خصم ${r.d}"></td>
+    ${editable ? `<td><input type="number" step="0.25" min="0" style="width:80px" data-ov="${esc(r.key)}" value="${esc(r.ov?.ded ?? "")}" placeholder="${r.calc ? n2(r.calc) : "-"}" aria-label="تعديل خصم ${r.d}"></td>
     <td><input type="text" class="plain" style="width:180px" data-ovn="${esc(r.key)}" value="${esc(r.ov?.note || "")}" aria-label="ملاحظة ${r.d}"></td>` : `<td>${esc(r.ov?.note || "")}</td>`}</tr>`).join("")}
   </tbody></table></div>`;
 }
@@ -983,8 +991,8 @@ function meet(ym) {
   <p class="note">الاجتماع المعتمد وقته مش بيتحسب تأخير أو غياب.</p>
   <form class="add" id="meetForm">
     <label>الموظف<select name="code" required>${empOpts(p.code || "", "اختار")}</select></label>
-    <label>التاريخ<input type="date" name="date" required value="${p.date || ""}"></label>
-    <label>من<input type="time" name="tFrom" required value="${E.st.in}"></label><label>إلى<input type="time" name="tTo" required></label>
+    <label>التاريخ<input type="date" name="date" required value="${esc(p.date || "")}"></label>
+    <label>من<input type="time" name="tFrom" required value="${esc(E.st.in)}"></label><label>إلى<input type="time" name="tTo" required></label>
     <label>نوع المهمة<select name="kind">${opts(MEET_KINDS)}</select></label>
     <label>اسم العميل<input type="text" name="client" id="meetClient"></label><label>موبايل العميل<input type="tel" name="phone" dir="ltr"></label>
     <label>المشروع<input type="text" name="project"></label><label>مكان الاجتماع<input type="text" name="place"></label>
@@ -1062,7 +1070,7 @@ function pay(ym) {
   if (payFilter === "diff") rows = all.filter((r) => r.appr != null && Math.abs(r.appr - r.s.ddays) > 0.001);
   const T = (list, k) => list.reduce((a, r) => a + r[k], 0), pos = (list) => list.reduce((a, r) => a + Math.max(0, r.rnd), 0);
   const bank = all.filter((r) => r.method === "bank"), cash = all.filter((r) => r.method === "cash"), noAcc = bank.filter((r) => !r.e.account).length;
-  const inp = (r, f, w = 80) => `<input type="number" step="any" style="width:${w}px" data-pay="${esc(r.e.code)}" data-f="${f}" value="${has(r.p[f]) && (r.p[f] !== 0 || f === "approvedDays") ? r.p[f] : ""}" aria-label="${f}">`;
+  const inp = (r, f, w = 80) => `<input type="number" step="any" style="width:${w}px" data-pay="${esc(r.e.code)}" data-f="${f}" value="${esc(has(r.p[f]) && (r.p[f] !== 0 || f === "approvedDays") ? r.p[f] : "")}" aria-label="${f}">`;
   return `
   <div class="kpis">
     <div class="kpi"><span>صافي الرواتب (بعد التقريب)</span><b>${money(pos(all))}</b></div>
@@ -1076,7 +1084,7 @@ function pay(ym) {
   <p class="note">سعر اليوم = الراتب ÷ ${E.st.workDays}. أيام الخصم المعتمدة من كشف المرتبات، ولو فاضية بتتحسب من الحضور. الصافي بيتقرب لأقرب 5 جنيه.</p>
   <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الوظيفة</th><th>الراتب</th><th>سعر اليوم</th><th>عمولات</th><th>مردودات</th><th>الاستحقاقات</th><th>أيام الخصم المعتمدة</th><th>خصم التأخير</th><th>خصم مبلغ ثابت</th><th>خصومات إدارية</th><th>خصومات الأيام</th><th>تطبيق اللائحة</th><th>سلف</th><th>جزاءات / منح النظام</th><th>الاستقطاعات</th><th>الصافي</th><th>طريقة الصرف</th><th>رقم الحساب</th><th>ملاحظة</th></tr></thead><tbody>
   ${rows.map((r) => { const c = esc(r.e.code), diff = r.appr != null && Math.abs(r.appr - r.s.ddays) > 0.001; return `<tr><td>${c}</td><td>${esc(empName(r.e))}</td><td>${esc(r.e.job)}</td>
-    <td><input type="number" style="width:90px" data-e="${c}" data-f="salary" value="${r.sal || ""}"></td><td class="num">${n2(r.rate)}</td><td>${inp(r, "commission")}</td><td>${inp(r, "ret")}</td><td class="num"><b>${money(r.earn)}</b></td>
+    <td><input type="number" style="width:90px" data-e="${c}" data-f="salary" value="${esc(r.sal || "")}"></td><td class="num">${n2(r.rate)}</td><td>${inp(r, "commission")}</td><td>${inp(r, "ret")}</td><td class="num"><b>${money(r.earn)}</b></td>
     <td>${inp(r, "approvedDays", 70)}<div class="note">الحضور: ${n2(r.s.ddays)}${diff ? ' <span class="pill p-warn">مختلف</span>' : ""}</div></td>
     <td class="num">${money(r.late)}</td><td>${inp(r, "lateAmt")}</td><td>${inp(r, "adminDed")}</td><td>${inp(r, "daysDed")}</td><td>${inp(r, "regDed")}</td><td>${inp(r, "advance")}</td>
     <td class="num">${r.pen ? `<span class="pill p-bad">-${money(r.pen)}</span>` : ""}${r.bonus ? ` <span class="pill p-ok">+${money(r.bonus)}</span>` : ""}</td>
@@ -1108,7 +1116,7 @@ function emp() {
     <td><input type="date" data-e="${c}" data-f="hireDate" value="${esc(e.hireDate)}"></td>
     <td><select data-e="${c}" data-f="experience">${opts([["experienced", "خبرة"], ["fresh", "بدون خبرة"]], e.experience, "-")}</select></td>
     <td><input type="text" data-e="${c}" data-f="fullName" value="${esc(e.fullName)}" style="width:190px"></td>
-    <td><input type="number" data-e="${c}" data-f="salary" value="${e.salary || ""}" style="width:90px"></td>
+    <td><input type="number" data-e="${c}" data-f="salary" value="${esc(e.salary || "")}" style="width:90px"></td>
     <td><input type="text" dir="ltr" data-e="${c}" data-f="account" value="${esc(e.account)}" style="width:110px"></td>
     <td><select data-e="${c}" data-f="pay">${opts([["bank", "بنك"], ["cash", "نقدي"]], e.pay)}</select></td></tr>`; }).join("")}
   </tbody></table></div>
@@ -1122,8 +1130,8 @@ function emp() {
       <label><input type="radio" name="experience" value="experienced" required> أيوة، خبرة</label>
       <label><input type="radio" name="experience" value="fresh"> لأ، بدون خبرة (يدخل فترة تدريب)</label></fieldset>
     <fieldset class="wide meetbox" id="trainBox" hidden disabled><legend>فترة التدريب</legend><div class="add">
-      <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${N0(E.st.trainDays) || 30}" required></label>
-      <label>استبيان متابعة كل (يوم)<input type="number" name="every" min="3" max="31" value="${N0(E.st.trainEvery) || 7}" required></label>
+      <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${esc(N0(E.st.trainDays) || 30)}" required></label>
+      <label>استبيان متابعة كل (يوم)<input type="number" name="every" min="3" max="31" value="${esc(N0(E.st.trainEvery) || 7)}" required></label>
       <label>المدرب<select name="mentor" id="trainMentor">${empOpts("", "من غير مدرب", S.employees.filter((x) => x.active !== false))}</select></label>
       <label class="wide">هدف التدريب<input type="text" name="goals" maxlength="300" placeholder="مثال: يحفظ مشاريع الساحل ويقفل أول حجز"></label>
       <p class="note wide" id="trainHint"></p></div></fieldset>
@@ -1133,7 +1141,7 @@ function emp() {
 function settings() {
   const st = E.st;
   const tierT = (k, label) => `<div class="card"><h2>${label}</h2><table><thead><tr><th>من (دقيقة)</th><th>الخصم (يوم)</th><th></th></tr></thead><tbody>
-    ${st[k].map((t, i) => `<tr><td><input type="number" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="0" value="${t[0]}" aria-label="${label}: الشريحة ${i + 1} من دقيقة"></td><td><input type="number" step="0.25" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="1" value="${t[1]}" aria-label="${label}: الشريحة ${i + 1} الخصم بالأيام"></td><td>${i ? `<button class="btn danger sm" data-tdel="${k}" data-i="${i}">حذف</button>` : ""}</td></tr>`).join("")}
+    ${st[k].map((t, i) => `<tr><td><input type="number" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="0" value="${esc(t[0])}" aria-label="${label}: الشريحة ${i + 1} من دقيقة"></td><td><input type="number" step="0.25" min="0" class="w-sm" data-tier="${k}" data-i="${i}" data-j="1" value="${esc(t[1])}" aria-label="${label}: الشريحة ${i + 1} الخصم بالأيام"></td><td>${i ? `<button class="btn danger sm" data-tdel="${k}" data-i="${i}">حذف</button>` : ""}</td></tr>`).join("")}
     </tbody></table><div><button class="btn" data-tadd="${k}">إضافة شريحة</button></div></div>`;
   const members = (id) => S.employees.filter((e) => String(e.teamId) === String(id));
   const linked = new Set(S.users.map((u) => u.code).filter(Boolean));
@@ -1166,12 +1174,12 @@ function settings() {
   <form class="add" id="polForm"><label>رقم البند<input type="text" name="ref"></label><label>التصنيف<input type="text" name="category" placeholder="مواعيد / سلوك / عملاء"></label>
     <label>البند<input type="text" name="title" required></label><label>الجزاء بالتكرار<input type="text" name="steps" placeholder="إنذار، 0.25 يوم، 0.5 يوم"></label>
     <label class="wide">التفاصيل<input type="text" name="body"></label><div><button class="btn primary" type="submit">إضافة بند</button></div></form>
-  <form class="add"><label>أقصى جزاءات في الشهر (أيام، 0 = بدون حد)<input type="number" step="0.5" min="0" data-s="maxPenaltyDays" value="${st.maxPenaltyDays ?? 5}"></label></form></div>
+  <form class="add"><label>أقصى جزاءات في الشهر (أيام، 0 = بدون حد)<input type="number" step="0.5" min="0" data-s="maxPenaltyDays" value="${esc(st.maxPenaltyDays ?? 5)}"></label></form></div>
 
   <div class="card"><h2>موقع المكتب</h2>
   <p class="note">بيُستخدم عشان تسجيل التواجد يبين (داخل المكتب) أو المسافة منه. افتح الصفحة من المكتب واضغط الزرار.</p>
   <div class="row"><span>${o.lat ? `${Number(o.lat).toFixed(5)}, ${Number(o.lng).toFixed(5)} ${mapLink(o.lat, o.lng)}` : "مش متحدد"}</span>
-    <label class="row field-inline">نطاق المكتب (متر)<input type="number" min="20" step="10" data-office="radius" value="${o.radius || 150}" style="width:90px"></label>
+    <label class="row field-inline">نطاق المكتب (متر)<input type="number" min="20" step="10" data-office="radius" value="${esc(o.radius || 150)}" style="width:90px"></label>
     <button class="btn" id="setOffice">استخدم موقعي الحالي</button></div></div>
 
   <div class="card"><h2>سجل التعديلات</h2><p class="note">كل تعديل في المرتبات والموظفين والجزاءات والصلاحيات واللائحة بيتسجل باسم اللي عمله.</p>
@@ -1197,12 +1205,12 @@ function settings() {
   </tbody></table></div></div>
 
   <div class="card"><h2>المواعيد والقواعد</h2><form class="add">
-    <label>ميعاد الحضور<input type="time" data-s="in" value="${st.in}"></label><label>ميعاد الانصراف<input type="time" data-s="out" value="${st.out}"></label>
-    <label>عدد الأيام لحساب سعر اليوم<input type="number" data-s="workDays" value="${st.workDays}"></label>
-    <label>خصم البصمة الناقصة (يوم)<input type="number" step="0.25" data-s="missDed" value="${st.missDed}"></label>
-    <label>خصم الغياب بدون إذن (يوم)<input type="number" step="0.25" data-s="absDed" value="${st.absDed}"></label>
-    <label>رصيد الأذونات الشهري (ساعات)<input type="number" step="0.5" data-s="permAllowH" value="${st.permAllowH}"></label>
-    <label>وحدة خصم الإذن (دقيقة)<input type="number" step="15" min="0" data-s="permUnit" value="${st.permUnit}"></label></form>
+    <label>ميعاد الحضور<input type="time" data-s="in" value="${esc(st.in)}"></label><label>ميعاد الانصراف<input type="time" data-s="out" value="${esc(st.out)}"></label>
+    <label>عدد الأيام لحساب سعر اليوم<input type="number" data-s="workDays" value="${esc(st.workDays)}"></label>
+    <label>خصم البصمة الناقصة (يوم)<input type="number" step="0.25" data-s="missDed" value="${esc(st.missDed)}"></label>
+    <label>خصم الغياب بدون إذن (يوم)<input type="number" step="0.25" data-s="absDed" value="${esc(st.absDed)}"></label>
+    <label>رصيد الأذونات الشهري (ساعات)<input type="number" step="0.5" data-s="permAllowH" value="${esc(st.permAllowH)}"></label>
+    <label>وحدة خصم الإذن (دقيقة)<input type="number" step="15" min="0" data-s="permUnit" value="${esc(st.permUnit)}"></label></form>
   <div class="row"><span class="note">الإجازة الأسبوعية:</span>${DAYS.map((d, i) => `<label class="row" style="gap:4px"><input type="checkbox" data-wk="${i}"${st.weekend.includes(i) ? " checked" : ""}>${d}</label>`).join("")}</div></div>
   <div class="tiers">${tierT("lateTiers", "شرائح خصم التأخير")}${tierT("earlyTiers", "شرائح خصم الانصراف المبكر")}
   <div class="card"><h2>الإجازات الرسمية</h2>${(st.holidays || []).slice().sort().map((h) => `<div class="row"><span>${h.split("-").reverse().join("/")}</span><button class="btn danger" data-hdel="${h}">حذف</button></div>`).join("")}
@@ -1283,7 +1291,7 @@ function surveyForm(p, n, side) {
   const scale = ["ضعيف", "مقبول", "جيد", "جيد جدًا", "ممتاز"];
   return `<form class="survey" id="surveyForm${p.id}" data-plan="${p.id}" data-n="${n}" data-side="${side}">
     ${tpl.questions.map((q, i) => q.type === "scale"
-      ? `<fieldset class="scale"><legend>${i + 1}. ${esc(q.text)}</legend><div class="opts">${scale.map((l, k) => `<label><input type="radio" name="${esc(q.id)}" value="${k + 1}" required${Number(old[q.id]) === k + 1 ? " checked" : ""}><span><b>${k + 1}</b>${l}</span></label>`).join("")}</div></fieldset>`
+      ? `<fieldset class="scale"><legend>${i + 1}. ${esc(q.text)}</legend><div class="opts">${scale.map((l, k) => `<label><input type="radio" name="${esc(q.id)}" value="${esc(k + 1)}" required${Number(old[q.id]) === k + 1 ? " checked" : ""}><span><b>${k + 1}</b>${l}</span></label>`).join("")}</div></fieldset>`
       : `<label class="field">${i + 1}. ${esc(q.text)}<textarea name="${esc(q.id)}" rows="2" maxlength="600">${esc(old[q.id] || "")}</textarea></label>`).join("")}
     <div class="row"><button class="btn primary" type="submit">${respOf(p, n, side) ? "تحديث الإجابات" : "إرسال"}</button><span class="note">من 1 (ضعيف) لـ 5 (ممتاز).</span></div></form>`;
 }
@@ -1305,8 +1313,8 @@ function videoCard(v, code, open) {
   return `<div class="act vid${open ? "" : " locked"}"><div class="row">${icon("video")}<b class="spacer">${esc(v.title)}</b><span class="pill p-mute">الفترة ${v.period}</span>
       ${q ? (passed ? `<span class="pill p-ok">نجحت ${b}%</span>` : tries.length ? `<span class="pill p-warn">آخر نتيجة ${b}%</span>` : '<span class="pill p-info">فيه اختبار</span>') : ""}</div>
     ${v.summary ? `<p class="note">${esc(v.summary)}</p>` : ""}
-    ${open ? `<div class="row"><a class="btn" href="${esc(v.drive)}" target="_blank" rel="noopener noreferrer">${icon("player-play")}شاهد الفيديو</a>
-      ${v.notebook ? `<a class="btn" href="${esc(v.notebook)}" target="_blank" rel="noopener noreferrer">${icon("notebook")}اسأل عن الفيديو</a>` : ""}
+    ${open ? `<div class="row"><a class="btn" href="${esc(safeUrl(v.drive) || "#")}" target="_blank" rel="noopener noreferrer">${icon("player-play")}شاهد الفيديو</a>
+      ${safeUrl(v.notebook) ? `<a class="btn" href="${esc(safeUrl(v.notebook))}" target="_blank" rel="noopener noreferrer">${icon("notebook")}اسأل عن الفيديو</a>` : ""}
       ${seen ? `<span class="pill p-ok">${icon("check")}شفته</span>` : `<button class="btn" data-watch="${v.id}">${icon("check")}خلصت الفيديو</button>`}
       ${q && !passed && left > 0 ? `<button class="btn primary" data-quiz="${q.id}"${seen ? "" : " disabled title=\"شوف الفيديو الأول\""}>${icon("checklist")}${tries.length ? "حاول تاني" : "ابدأ الاختبار"} (${q.count} سؤال، ${q.minutes} دقيقة)</button>` : ""}
       ${q && !passed && left <= 0 ? '<span class="note">خلصت محاولاتك. مدربك هيراجع معاك.</span>' : ""}</div>`
@@ -1321,7 +1329,7 @@ function quizPanel() {
     <button class="btn" data-quizclose="1">${res ? "رجوع" : "إلغاء"}</button></div>
     ${res ? `<div class="banner ${res.passed ? "ok" : ""}" role="status">${icon(res.passed ? "check" : "alert-triangle")}<b>${res.score}%</b> (${res.correct} من ${res.total}) · ${res.passed ? "نجحت، برافو" : res.left > 0 ? `محتاج ${z.pass_mark}% عشان تنجح. باقيلك ${res.left} محاولة، راجع الفيديو وجرب تاني.` : "خلصت محاولاتك. مدربك هيراجع معاك النقط دي."}</div>` : `<p class="note">محتاج ${z.pass_mark}% عشان تنجح. المحاولة ${z.used + 1} من ${z.max_attempts}.</p>`}
     <form id="quizForm">${z.questions.map((q, i) => { const r = res?.review?.[i];
-      return `<fieldset class="qq${r ? (r.right ? " right" : " wrong") : ""}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label class="${r && r.answer === k ? "key" : ""}"><input type="radio" name="q${i}" value="${k}"${QUIZ.answers[i] === k ? " checked" : ""}${res ? " disabled" : ""}> ${esc(o)}</label>`).join("")}
+      return `<fieldset class="qq${r ? (r.right ? " right" : " wrong") : ""}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label class="${r && r.answer === k ? "key" : ""}"><input type="radio" name="q${i}" value="${esc(k)}"${QUIZ.answers[i] === k ? " checked" : ""}${res ? " disabled" : ""}> ${esc(o)}</label>`).join("")}
         ${r ? `<p class="note">${r.right ? "إجابة صح" : "إجابة غلط"}${r.why ? ` · ${esc(r.why)}` : ""}</p>` : ""}</fieldset>`; }).join("")}
       ${res ? "" : `<div class="row"><button class="btn primary" type="submit">سلّم الإجابات</button><span class="note">${Object.keys(QUIZ.answers).length} من ${z.questions.length} متجاوب</span></div>`}</form></div>`;
 }
@@ -1382,8 +1390,8 @@ function trainees() {
   ${R.admin ? fold("plus", "ابدأ تدريب لموظف موجود", `<form class="add" id="planForm">
     <label>الموظف<select name="code" required>${empOpts("", "اختار", cand)}</select></label>
     <label>يبدأ من<input type="date" name="start" value="${today()}" required></label>
-    <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${N0(E.st.trainDays) || 30}" required></label>
-    <label>استبيان كل (يوم)<input type="number" name="every" min="3" max="31" value="${N0(E.st.trainEvery) || 7}" required></label>
+    <label>مدة التدريب (يوم)<input type="number" name="days" min="7" max="180" value="${esc(N0(E.st.trainDays) || 30)}" required></label>
+    <label>استبيان كل (يوم)<input type="number" name="every" min="3" max="31" value="${esc(N0(E.st.trainEvery) || 7)}" required></label>
     <label>المدرب<select name="mentor">${empOpts("", "من غير مدرب", S.employees.filter((e) => e.active !== false))}</select></label>
     <label class="wide">هدف التدريب<input type="text" name="goals" maxlength="300" placeholder="مثال: يقفل أول حجز ويحفظ مشاريع الساحل"></label>
     <div><button class="btn primary" type="submit">ابدأ التدريب</button></div></form>`) : ""}
@@ -1456,13 +1464,13 @@ function content() {
         <label class="field">الاسم<input type="text" data-vid="${v.id}" data-f="title" value="${esc(v.title)}"></label>
         <label class="field">لينك Drive<input type="url" dir="ltr" data-vid="${v.id}" data-f="drive_url" value="${esc(v.drive)}"></label>
         <label class="field">لينك NotebookLM<input type="url" dir="ltr" data-vid="${v.id}" data-f="notebooklm_url" value="${esc(v.notebook)}"></label>
-        <label class="field">الفترة<input type="number" min="1" data-vid="${v.id}" data-f="period_n" value="${v.period}"></label>
+        <label class="field">الفترة<input type="number" min="1" data-vid="${v.id}" data-f="period_n" value="${esc(v.period)}"></label>
         <label class="field wide">ملخص يظهر للمتدرب<textarea rows="2" data-vid="${v.id}" data-f="summary">${esc(v.summary)}</textarea></label>
         <label class="check"><input type="checkbox" data-vid="${v.id}" data-f="active"${v.active ? " checked" : ""}> ظاهر للمتدربين</label></div>
       <h3>الاختبار</h3>
-      ${q ? `<div class="row"><label class="row field-inline">النجاح من<input type="number" class="w-sm" min="1" max="100" data-qz="${v.id}" data-f="pass" value="${q.pass}">%</label>
-        <label class="row field-inline">المحاولات<input type="number" class="w-sm" min="1" max="10" data-qz="${v.id}" data-f="attempts" value="${q.attempts}"></label>
-        <label class="row field-inline">الوقت (دقيقة)<input type="number" class="w-sm" min="1" max="120" data-qz="${v.id}" data-f="minutes" value="${q.minutes}"></label>
+      ${q ? `<div class="row"><label class="row field-inline">النجاح من<input type="number" class="w-sm" min="1" max="100" data-qz="${v.id}" data-f="pass" value="${esc(q.pass)}">%</label>
+        <label class="row field-inline">المحاولات<input type="number" class="w-sm" min="1" max="10" data-qz="${v.id}" data-f="attempts" value="${esc(q.attempts)}"></label>
+        <label class="row field-inline">الوقت (دقيقة)<input type="number" class="w-sm" min="1" max="120" data-qz="${v.id}" data-f="minutes" value="${esc(q.minutes)}"></label>
         <button class="btn danger" data-qzdel="${v.id}">حذف الاختبار</button></div>
         <details><summary>عرض الأسئلة والإجابات</summary><ol class="qlist">${q.questions.map((x) => `<li>${esc(x.q)}<ul>${x.options.map((o, k) => `<li class="${k === x.answer ? "key" : ""}">${esc(o)}${k === x.answer ? " (الصح)" : ""}</li>`).join("")}</ul></li>`).join("")}</ol></details>` : ""}
       <label class="field">${q ? "استبدل الأسئلة: الصق رد NotebookLM" : "الصق رد NotebookLM هنا"}<textarea rows="6" id="qzText${v.id}">${esc(pv?.text || "")}</textarea></label>
@@ -1474,11 +1482,11 @@ function content() {
       <label class="field">تقييم المدرب<textarea rows="8" id="tplMentor">${esc(tplText("mentor"))}</textarea></label></div>
     <div class="row"><button class="btn primary" id="tplSave">احفظ الأسئلة</button><span class="note">التعديل بيسري على الاستبيانات الجاية بس.</span></div></div>
   <div class="card"><h2>${icon("settings")}الافتراضي للمتدرب الجديد</h2><div class="row">
-    <label class="row field-inline">مدة التدريب<input type="number" class="w-sm" min="7" max="180" data-s="trainDays" value="${N0(E.st.trainDays) || 30}"> يوم</label>
-    <label class="row field-inline">استبيان كل<input type="number" class="w-sm" min="3" max="31" data-s="trainEvery" value="${N0(E.st.trainEvery) || 7}"> يوم</label></div></div>
+    <label class="row field-inline">مدة التدريب<input type="number" class="w-sm" min="7" max="180" data-s="trainDays" value="${esc(N0(E.st.trainDays) || 30)}"> يوم</label>
+    <label class="row field-inline">استبيان كل<input type="number" class="w-sm" min="3" max="31" data-s="trainEvery" value="${esc(N0(E.st.trainEvery) || 7)}"> يوم</label></div></div>
   <div class="card"><h2>${icon("chart-bar")}أوزان التقييم المبدئي للمتدرب</h2>
     <p class="note">الدرجة من 100. لو جزء مفيهوش بيانات لسه، وزنه بيتوزع على الباقي. الدرجة توصية بس، والقرار ليك.</p>
-    <div class="row">${W_KEYS.map(([k, l, d]) => `<label class="row field-inline">${l}<input type="number" class="w-sm" min="0" max="100" data-s="${k}" value="${weightOf(k, d)}">%</label>`).join("")}</div>
+    <div class="row">${W_KEYS.map(([k, l, d]) => `<label class="row field-inline">${l}<input type="number" class="w-sm" min="0" max="100" data-s="${k}" value="${esc(weightOf(k, d))}">%</label>`).join("")}</div>
     <p class="note">المجموع الحالي: ${W_KEYS.reduce((a, [k, , d]) => a + weightOf(k, d), 0)}%</p></div>`;
 }
 
