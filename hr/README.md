@@ -1,4 +1,4 @@
-# Everest HR
+# Everest Eco System
 
 Attendance, requests, client meetings and payroll for Everest Real Estate,
 with a login per person and permissions enforced by the database.
@@ -81,7 +81,7 @@ mentor surveys, attendance, weekly sales ratings and self surveys (weights in
 recruitment scores as the baseline and a suggested next step. التقارير has a
 printable report for senior management, HR, team managers and each employee.
 
-Every Thursday the "HR weekly email" Action (`tools/report/weekly.mjs`) logs in
+Every Thursday the "Eco System weekly email" Action (`tools/report/weekly.mjs`) logs in
 as `hr_report`, which may only call `hr_weekly_report()`
 (`neon/006_weekly_report.sql`), and emails the company summary to admins and
 each manager their team's figures through Resend. Secrets: `NEON_REPORT_URL`,
