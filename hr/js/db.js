@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610201000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610201000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211000";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211000";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -17,7 +17,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -584,3 +584,12 @@ export async function savePosition(key, fields) {
 }
 export async function applyTemplate(key) { return check(await client.rpc("hr_apply_template", { p_position: key })); }
 export async function syncEvalAll() { return check(await client.rpc("hr_sync_eval_all")); }
+
+// ---------------------------------------------------------------- fingerprint device sync (neon/009_device.sql)
+
+export async function deviceStatus() {
+  try { return (check(await client.rpc("hr_device_status")) || []).map((d) => ({ serial: d.serial, name: d.name, lastSeen: d.last_seen, lastPunch: d.last_punch, lastCount: d.last_count, error: d.last_error || "", errorAt: d.error_at, today: d.today || 0 })); }
+  catch (e) { if (/schema cache|does not exist|PGRST20|hr_device_status/i.test(e.message)) return null; throw e; }
+}
+export async function deviceAdd(serial, name) { check(await client.rpc("hr_device_add", { p_serial: serial, p_name: name || null })); }
+export async function deviceRemove(serial) { check(await client.rpc("hr_device_remove", { p_serial: serial })); }

@@ -18,3 +18,8 @@ supabase/.temp/
 # Real HR data generated for Neon
 seed.sql
 node_modules/
+
+# fingerprint sync: machine-local settings and logs
+tools/device/config.ini
+tools/device/state.json
+tools/device/sync.log*

@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610201000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610201000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610201000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610201000";
+import * as db from "./db.js?v=202610211000";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211000";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211000";
+import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610211000";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -52,7 +52,7 @@ let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null,
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 // to-do lists; "شوف شاشته" keeps the admin's own identity in REAL while VIEW is someone else
 let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = null;
-let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set();
+let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set(), DEV = null;
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -122,7 +122,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610201000";
+const BUILD = "202610211000";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -211,6 +211,7 @@ async function refresh(month = S?.meta.month) {
     VSCOPE = null;
     if (VIEW && !R.admin) ({ S, TR, REC, v: VSCOPE } = scopeAs(VIEW, S, TR, REC, VIEW.evalTeams));
     if (VSCOPE) TODO = scopeTodos(TODO, VSCOPE);
+    DEV = R.admin || R.uploader ? await db.deviceStatus().catch(() => null) : null;
     E = createEngine(S, LAST);
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
     R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
@@ -235,6 +236,7 @@ async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
   if (tab === "org") { await orgLoad(); if (R.admin) await evalLoad(); }
+  if (tab === "upload") DEV = await db.deviceStatus().catch(() => null);
   if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread() && !VIEW) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
@@ -276,10 +278,12 @@ function render() {
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
   const views = { org, tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
+  const staleDev = tab !== "upload" && (R.admin || R.uploader) && DEV?.find(deviceStale);
+  const devWarn = staleDev ? `<div class="banner bad">${icon("fingerprint")}<span class="spacer">جهاز البصمة مبعتش بصمات ${ago(staleDev.lastSeen)}. اتأكد إن كمبيوتر المكتب شغال.</span><button class="btn" data-go="upload">التفاصيل</button></div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
   const vbar = VIEW ? `<div class="viewas" role="status">${icon("eye")}<span class="spacer">بتشوف البوابة زي <b>${esc(VIEW.name || (VIEW.code && nameOf(VIEW.code)) || VIEW.email)}</b> · عرض فقط<span class="wide-only">، مفيش أي تعديل بيتحفظ</span></span><button class="btn" id="viewExit">رجوع لحسابي</button></div>` : "";
-  $("#main").innerHTML = `${vbar}<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
+  $("#main").innerHTML = `${vbar}<section class="panel" aria-label="${label}">${title}${warn}${devWarn}${views[tab](S.meta.month)}</section>`;
   document.title = `${label} | Everest Eco System`;
   tick();
   labelControls();
@@ -997,9 +1001,36 @@ function meet(ym) {
   </tbody></table></div>`;
 }
 
+// minutes since a timestamp, in words
+function ago(ts) {
+  if (!ts) return "لسه ما اتصلش";
+  const m = Math.round((Date.now() - Date.parse(ts)) / 60000);
+  return m < 2 ? "دلوقتي" : m < 60 ? `من ${m} دقيقة` : m < 1440 ? `من ${Math.round(m / 60)} ساعة` : `من ${Math.round(m / 1440)} يوم`;
+}
+// stale = a work day, after the shift start, and no word from the device for 30+ minutes
+function deviceStale(d) {
+  const st = E.st, td = today(), wd = new Date(td + "T12:00:00Z").getUTCDay();
+  if (st.weekend.includes(wd) || (st.holidays || []).includes(td)) return false;
+  if (toMin(nowHM()) < toMin(st.in || "09:00")) return false;
+  return !d.lastSeen || Date.now() - Date.parse(d.lastSeen) > 30 * 60000;
+}
+function deviceCard() {
+  if (DEV == null) return R.admin ? `<div class="card"><h2>${icon("fingerprint")}جهاز البصمة</h2><p class="note">الربط المباشر بالجهاز لسه مش متفعل. شغّل neon/009_device.sql في Neon SQL Editor، وبعدين notify pgrst.</p></div>` : "";
+  const rows = DEV.map((d) => { const stale = deviceStale(d); return `<div class="dev${stale ? " stale" : ""}">
+    <div class="row"><b class="spacer">${esc(d.name)} <span class="note" dir="ltr">${esc(d.serial)}</span></b>
+      <span class="pill ${stale ? "p-bad" : d.lastSeen ? "p-ok" : "p-mute"}">آخر اتصال: ${ago(d.lastSeen)}</span>
+      ${R.admin ? `<button type="button" class="btn ghost icon-only" data-devdel="${esc(d.serial)}" aria-label="شيل الجهاز ${esc(d.serial)}">${icon("x")}</button>` : ""}</div>
+    <div class="note">النهارده وصل ${d.today} بصمة${d.lastPunch ? ` · آخر بصمة ${fmtDate(String(d.lastPunch).slice(0, 10))} ${to12(toMin(String(d.lastPunch).slice(11, 16)))}` : ""}</div>
+    ${d.error && (!d.lastSeen || Date.parse(d.errorAt) > Date.parse(d.lastSeen)) ? `<div class="banner">${icon("alert-triangle")}${esc(d.error)}</div>` : ""}
+    ${stale ? `<p class="note bad-txt">الجهاز مبعتش حاجة من أكتر من نص ساعة. اتأكد إن كمبيوتر المكتب شغال ومتوصل بالشبكة.</p>` : ""}</div>`; }).join("");
+  return `<div class="card"><h2>${icon("fingerprint")}جهاز البصمة</h2>
+    <p class="note">برنامج صغير على كمبيوتر المكتب بيقرا البصمات من الجهاز كل 5 دقايق ويبعتها هنا لوحده. خطوات التركيب في tools/device/README.md.</p>
+    ${rows || '<p class="note">لسه مفيش جهاز متسجل.</p>'}
+    ${R.admin ? `<form class="row" id="devForm"><input type="text" name="serial" required pattern="[A-Za-z0-9_\-]{3,40}" placeholder="الرقم التسلسلي (Serial Number)" aria-label="الرقم التسلسلي" dir="ltr"><input type="text" name="name" placeholder="اسمه، مثلًا: بصمة المكتب" aria-label="اسم الجهاز"><button class="btn primary" type="submit">${icon("plus")}سجّل الجهاز</button></form>` : ""}</div>`;
+}
 function upload() {
   const counts = Object.entries(S.punches).map(([c, l]) => [c, l.length]);
-  return `<div class="card"><h2>رفع كشف البصمة</h2>
+  return `${deviceCard()}<div class="card"><h2>رفع كشف البصمة</h2>
     <p class="note">ارفع ملف التصدير من جهاز البصمة (.xls زي ملف سبتمبر، أو CSV). البصمات المتكررة مش بتتضاف مرتين.${R.admin ? " الأكواد الجديدة بتتضاف للموظفين." : " لو فيه أكواد جديدة، مدير النظام هيضيفهم للموظفين."}</p>
     <div class="row"><input type="file" id="imp" accept=".xls,.csv,.txt" aria-label="ملف البصمة"><span class="note" id="impMsg"></span></div></div>
   <div class="card"><h2>بصمات الشهر ده</h2><p class="note">${counts.reduce((a, [, n]) => a + n, 0)} بصمة لـ ${counts.length} كود. آخر يوم فيه بصمات: ${LAST || "-"}.</p></div>`;
@@ -1806,6 +1837,7 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "unitNew") { ORG_UNIT = "new"; ORG_SEL = ""; render(); $("#unitForm input")?.focus(); return; }
   if (t.id === "orgClose") { ORG_SEL = ""; ORG_UNIT = 0; render(); return; }
   if (d.apply) { const k = d.apply; await orgAct(async () => { const n = await db.applyTemplate(k); ORG_DIRTY.delete(k); toast(`اتطبق قالب (${posOf(k)?.title}) على ${n} ${n === 1 ? "حساب" : "حسابات"}`); }, null, true); return; }
+  if (d.devdel) { if (await ask("تشيل الجهاز ده من البوابة؟", d.devdel, "شيله", true)) { try { await db.deviceRemove(d.devdel); DEV = await db.deviceStatus(); toast("اتشال الجهاز"); } catch (e) { toast(errMsg(e), true); } render(); } return; }
   if (d.viewas) { await startView(d.viewas); return; }
   if (t.id === "viewExit") { await stopView(); return; }
   if (d.todoemp) { TODO_EMP = TODO_EMP === d.todoemp ? "" : d.todoemp; TODO_EDIT = 0; render(); return; }
@@ -1999,6 +2031,7 @@ document.addEventListener("submit", async (ev) => {
   }
   if (f.classList.contains("cform")) { const body = v.body.trim(); if (!body) return; const tbl = f.dataset.ct, id = Number(f.dataset.cid); try { await db.addComment(tbl, id, body); await loadThreads(tbl, [id]); render(); } catch (e) { toast(errMsg(e), true); } return; }
   if (f.id === "checkForm") return checkIn(v);
+  if (f.id === "devForm") { try { await db.deviceAdd(v.serial.trim(), v.name.trim()); DEV = await db.deviceStatus(); toast("اتسجل الجهاز. ركّب البرنامج على كمبيوتر المكتب بنفس الرقم"); } catch (e) { toast(errMsg(e), true); } render(); return; }
   if (f.id === "personForm") {
     const code = f.dataset.code, p = ORG.people.find((x) => x.code === code), oldUnit = unitById(p.unit);
     return orgAct(async () => {

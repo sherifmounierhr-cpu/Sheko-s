@@ -547,3 +547,10 @@ tr.dirty td, tr.dirty th { background: var(--warn-soft); }
   .org-roots { grid-template-columns: 1fr; }
 }
 @media print { .org-panel, .org-alerts { display: none; } }
+
+/* ---------------------------------------------------------------- fingerprint device */
+.banner.bad { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
+.dev { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.dev:first-of-type { border-top: 0; }
+.dev.stale b { color: var(--bad); }
+#devForm input[name=serial] { min-width: 220px; }
