@@ -13,7 +13,10 @@
 2. في البوابة: رفع البصمة > جهاز البصمة > سجّل الـ Serial Number.
 3. في Neon: شغّل `neon/009_device.sql` وبعدين ادّي `hr_device` باسورد (آخر سطر في الملف).
 4. على كمبيوتر المكتب:
-   - نزّل Python من python.org، ووقت التثبيت علّم على **Add python.exe to PATH**.
+   - نزّل Python 3.12 من الرابط ده مباشرة:
+     https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
+     ووقت التثبيت علّم على **Add python.exe to PATH** تحت في أول شاشة، وبعدين Install Now.
+     (لو نزّلت نسخة أحدث مفيهاش الاختيار ده، مش مشكلة: `install.bat` بيلاقي Python لوحده.)
    - انسخ فولدر `tools/device` على الكمبيوتر (مثلًا `C:\EverestSync`).
    - دوس دبل كليك على `install.bat`. أول مرة هيفتحلك `config.ini` تملاه، احفظ وشغّل `install.bat` تاني.
 5. بعد 5 دقايق، رفع البصمة في البوابة هتقول "آخر اتصال: دلوقتي".
