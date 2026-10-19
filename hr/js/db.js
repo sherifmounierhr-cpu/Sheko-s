@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610191700";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610191700";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610201000";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610201000";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -17,7 +17,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
+const READ_RPCS = new Set(["hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -188,12 +188,12 @@ export async function load(ym, R = {}, only = "") {
   ]);
 
   let pay = [], payroll = [], users = [], invites = [];
-  if (isAdmin) {
+  if (isAdmin || R.pay) {
     [pay, payroll, users, invites] = await Promise.all([
       all(() => f(client.from("employee_pay").select("*"))),
       all(() => f(client.from("payroll").select("*")).eq("month", ym)),
-      all(() => client.from("app_users").select("*").order("created_at")),
-      soft(get(client.from("invites").select("employee_code,created_at,expires_at,used_at"))),
+      isAdmin ? all(() => client.from("app_users").select("*").order("created_at")) : [],
+      isAdmin ? soft(get(client.from("invites").select("employee_code,created_at,expires_at,used_at"))) : [],
     ]);
   } else if (R.code) {
     const mine = await soft(client.rpc("hr_my_pay", { ym }).then(check));
@@ -207,14 +207,14 @@ export async function load(ym, R = {}, only = "") {
   const S = {
     meta: { month: ym },
     settings: settingsRows[0]?.data || {},
-    teams: teams.map((t) => ({ id: t.id, name: t.name, manager: t.manager_code || "" })),
+    teams: teams.map((t) => ({ id: t.id, name: t.name, manager: t.manager_code || "", parent: t.parent_id ?? "", kind: t.kind || "sales", sort: t.sort || 0 })),
     employees: employees.map((e) => {
       const p = payBy[e.code] || {};
       return {
         code: e.code, name: e.name || "", fullName: e.full_name || "", device: e.device_name || "",
         teamId: e.team_id ?? "", job: e.job || "", dept: e.dept || "",
         in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false,
-        hireDate: e.hire_date || "", experience: e.experience || "",
+        hireDate: e.hire_date || "", experience: e.experience || "", position: e.position || "",
         salary: Number(p.salary) || 0, account: p.account || "", pay: p.pay_method || (p.account ? "bank" : "cash"),
       };
     }),
@@ -277,6 +277,9 @@ export async function updateTeam(id, fields) {
   const row = {};
   if ("name" in fields) row.name = fields.name;
   if ("manager" in fields) row.manager_code = nullIfEmpty(fields.manager);
+  if ("parent" in fields) row.parent_id = nullIfEmpty(fields.parent) == null ? null : Number(fields.parent);
+  if ("kind" in fields) row.kind = fields.kind;
+  if ("sort" in fields) row.sort = Number(fields.sort) || 0;
   check(await client.from("teams").update(row).eq("id", id));
 }
 export async function deleteTeam(id) { check(await client.from("teams").delete().eq("id", id)); }
@@ -550,3 +553,34 @@ export async function todoEdit(id, t) {
   check(await client.rpc("hr_todo_edit", { p_id: id, p_title: t.title, p_note: nullIfEmpty(t.note), p_due: nullIfEmpty(t.due), p_priority: t.priority || "normal", p_repeat: t.repeat || "none" }));
 }
 export async function todoCancel(id) { check(await client.rpc("hr_todo_cancel", { p_id: id })); }
+
+// ---------------------------------------------------------------- company structure (neon/008_org.sql)
+
+export let orgReady = true;
+// Units, people and positions. Everyone gets names and titles through hr_org_chart();
+// the admin also edits units (teams) and positions directly.
+export async function loadOrg() {
+  try {
+    const [chart, positions] = await Promise.all([client.rpc("hr_org_chart").then(check), get(client.from("org_positions").select("*").order("sort"))]);
+    orgReady = true;
+    return {
+      units: (chart?.units || []).map((u) => ({ id: u.id, name: u.name, parent: u.parent ?? "", kind: u.kind || "sales", head: u.head || "", sort: u.sort || 0 })),
+      people: (chart?.people || []).map((p) => ({ code: p.code, name: p.name, unit: p.unit ?? "", position: p.position || "", job: p.job || "" })),
+      positions: positions.map((p) => ({ key: p.key, title: p.title, rank: p.rank, roles: p.roles || [], evalCats: p.eval_cats || [], evalScope: p.eval_scope || "none", sort: p.sort })),
+    };
+  } catch (e) { if (/schema cache|does not exist|PGRST20|hr_org_chart/i.test(e.message)) { orgReady = false; return null; } throw e; }
+}
+export async function addUnit(name, parent, kind) {
+  return check(await client.from("teams").insert({ name, parent_id: nullIfEmpty(parent) == null ? null : Number(parent), kind: kind || "sales" }).select("id"))?.[0]?.id;
+}
+export async function setPosition(code, position) { check(await client.rpc("hr_set_position", { p_code: code, p_position: nullIfEmpty(position) })); }
+export async function savePosition(key, fields) {
+  const row = {};
+  if ("roles" in fields) row.roles = fields.roles;
+  if ("evalCats" in fields) row.eval_cats = fields.evalCats;
+  if ("evalScope" in fields) row.eval_scope = fields.evalScope;
+  if ("title" in fields) row.title = fields.title;
+  check(await client.from("org_positions").update(row).eq("key", key));
+}
+export async function applyTemplate(key) { return check(await client.rpc("hr_apply_template", { p_position: key })); }
+export async function syncEvalAll() { return check(await client.rpc("hr_sync_eval_all")); }

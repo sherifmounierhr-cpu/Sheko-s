@@ -5,11 +5,18 @@
 // neon/schema.sql and neon/002-007). Keep the two in step: tools/viewas test
 // compares this against the real policies for every test user.
 
-// target: { id, code, roles }. evalTeams: team ids the target rates (eval_assignments).
+// target: { id, code, roles } (roles as stored; admin previews are not trimmed). evalTeams: team ids the target rates (eval_assignments).
 export function visibleCodes(target, S, TR, evalTeams = []) {
   const has = (r) => target.roles.includes(r);
   const mine = target.code || "";
-  const managed = new Set(has("manager") && mine ? S.employees.filter((e) => S.teams.some((t) => String(t.id) === String(e.teamId) && t.manager === mine)).map((e) => e.code) : []);
+  // hr_manages in neon/008_org.sql: everyone with viewall; with manager, every unit at or below one they head
+  let managed;
+  if (has("viewall")) managed = new Set(S.employees.map((e) => e.code));
+  else {
+    const units = new Set(has("manager") && mine ? S.teams.filter((t) => t.manager === mine).map((t) => String(t.id)) : []);
+    for (let grew = true; grew;) { grew = false; for (const t of S.teams) if (t.parent !== "" && t.parent != null && units.has(String(t.parent)) && !units.has(String(t.id))) { units.add(String(t.id)); grew = true; } }
+    managed = new Set(S.employees.filter((e) => units.has(String(e.teamId))).map((e) => e.code));
+  }
   const evaluated = new Set(S.employees.filter((e) => evalTeams.some((t) => String(t) === String(e.teamId))).map((e) => e.code));
   const plans = TR?.plans || [];
   const mentees = new Set(mine ? plans.filter((p) => p.status === "active" && p.mentor && p.mentor === mine).map((p) => p.code) : []);
@@ -27,14 +34,15 @@ export function scopeAs(target, S, TR, REC, evalTeams = []) {
   const meetOk = (c) => has("meetings") || team(c);
 
   const out = { ...S };
-  out.employees = S.employees.map((e) => (self(e.code) ? e : { ...e, salary: 0, account: "", pay: "cash" })).filter((e) => empOk(e.code));
+  const payOk = has("pay");
+  out.employees = S.employees.map((e) => (self(e.code) || payOk ? e : { ...e, salary: 0, account: "", pay: "cash" })).filter((e) => empOk(e.code));
   out.punches = Object.fromEntries(Object.entries(S.punches).filter(([c]) => punchOk(c)));
   out.perms = S.perms.filter((p) => team(p.code));
   out.meetings = S.meetings.filter((m) => meetOk(m.code));
   out.overrides = Object.fromEntries(Object.entries(S.overrides).filter(([k]) => team(k.split("|")[0])));
   out.actions = S.actions.filter((a) => v.managed.has(a.code) || (self(a.code) && a.status === "approved"));
   out.checkins = S.checkins.filter((c) => team(c.code));
-  out.payroll = Object.fromEntries(Object.entries(S.payroll).map(([m, rows]) => [m, Object.fromEntries(Object.entries(rows).filter(([c]) => self(c)))]));
+  out.payroll = Object.fromEntries(Object.entries(S.payroll).map(([m, rows]) => [m, Object.fromEntries(Object.entries(rows).filter(([c]) => payOk || self(c)))]));
   out.users = [];
   out.invites = [];
 
