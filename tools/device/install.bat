@@ -33,9 +33,12 @@ if errorlevel 1 (echo The test run failed. Open sync.log to see why. & pause & e
 
 rem The scheduled task needs the real pythonw.exe path, not a launcher alias
 for /f "usebackq delims=" %%P in (`%PY% -c "import sys,os;print(os.path.join(os.path.dirname(sys.executable),'pythonw.exe'))"`) do set "PYW=%%P"
-echo [3/3] Scheduling every 5 minutes and at logon, with %PYW%
+echo [3/3] Scheduling every 5 minutes, with %PYW%
 schtasks /Create /F /TN "Everest Fingerprint Sync" /SC MINUTE /MO 5 /TR "\"%PYW%\" \"%~dp0sync.py\""
-schtasks /Create /F /TN "Everest Fingerprint Sync (logon)" /SC ONLOGON /TR "\"%PYW%\" \"%~dp0sync.py\""
+rem Also run once at sign-in (Startup folder: no admin rights needed)
+set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+> "%STARTUP%\EverestSync.cmd" echo @start "" "%PYW%" "%~dp0sync.py"
+if exist "%STARTUP%\EverestSync.cmd" (echo Added to Startup: runs at sign-in too.)
 echo.
 echo Done. The portal shows the device as connected within 5 minutes.
 pause

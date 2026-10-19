@@ -97,7 +97,7 @@ def run(c, read=read_device, db_connect=connect_db):
         newest = max((ts for _, ts in records), default=last)
         if newest and (last is None or newest > last):
             save_state(newest)
-        log.info("الجهاز فيه %d بصمة، اتبعت %d، الجديد منهم %d", len(records), len(rows), sent)
+        log.info("device: %d punches, sent %d, new %d", len(records), len(rows), sent)
         return sent
     finally:
         db.close()
