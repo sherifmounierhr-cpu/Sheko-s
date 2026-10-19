@@ -1,6 +1,6 @@
-import * as db from "./db.js?v=202610122300";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610122300";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610122300";
+import * as db from "./db.js?v=202610191200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610191200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610191200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -116,7 +116,7 @@ function errMsg(e) { const m = String(e?.message || e); if (/not allowed|permiss
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610122300";
+const BUILD = "202610191200";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -261,7 +261,7 @@ function render() {
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
   $("#main").innerHTML = `<section class="panel" aria-label="${label}">${title}${warn}${views[tab](S.meta.month)}</section>`;
-  document.title = `${label} | Everest HR`;
+  document.title = `${label} | Everest Eco System`;
   tick();
   labelControls();
   if (fk) { const el = document.querySelector(fk); if (el) el.focus({ preventScroll: true }); }

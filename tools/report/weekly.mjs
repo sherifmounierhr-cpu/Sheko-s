@@ -1,8 +1,8 @@
-// Weekly HR email. Runs from GitHub Actions every Thursday evening.
+// Weekly Eco System email. Runs from GitHub Actions every Thursday evening.
 //
 //   NEON_REPORT_URL  connection string for the hr_report login (can only call hr_weekly_report)
 //   RESEND_API_KEY   Resend key; without it the emails are written to ./out instead of sent
-//   MAIL_FROM        e.g. "Everest HR <hr@everest-realestate.net>" (a domain verified in Resend)
+//   MAIL_FROM        e.g. "Everest Eco System <hr@everest-realestate.net>" (a domain verified in Resend)
 //   PORTAL_URL       link to the portal
 //
 // Logs show counts only, never names or addresses.
@@ -33,11 +33,11 @@ const grid = (cells) => `<table role="presentation" width="100%" cellspacing="0"
 const layout = (title, body) => `<!doctype html><html lang="ar" dir="rtl"><body style="margin:0;background:#f4f7f7;font-family:Tahoma,Arial,sans-serif;color:#10262c">
   <div style="max-width:640px;margin:0 auto;padding:16px">
     <div style="background:linear-gradient(160deg,#0f7e76,#0a4f49);color:#fff;border-radius:14px;padding:18px">
-      <div style="font-size:13px;opacity:.9">Everest HR · ${period}</div><div style="font-size:20px;font-weight:700;margin-top:4px">${title}</div></div>
+      <div style="font-size:13px;opacity:.9">Everest Eco System · ${period}</div><div style="font-size:20px;font-weight:700;margin-top:4px">${title}</div></div>
     <div style="padding:8px 0">${body}</div>
     <p style="color:#5b6d6b;font-size:13px">${attNote}</p>
     <p style="text-align:center;margin:18px 0"><a href="${esc(PORTAL_URL)}" style="background:#0f7e76;color:#fff;text-decoration:none;padding:10px 22px;border-radius:10px;font-weight:700">افتح البوابة</a></p>
-    <p style="color:#8a9b99;font-size:12px;text-align:center">إيميل تلقائي كل خميس من بوابة Everest HR. الأرقام بس، والتفاصيل جوه البوابة.</p>
+    <p style="color:#8a9b99;font-size:12px;text-align:center">إيميل تلقائي كل خميس من بوابة Everest Eco System. الأرقام بس، والتفاصيل جوه البوابة.</p>
   </div></body></html>`;
 
 function teamTable(teams) {
@@ -55,7 +55,7 @@ if (R.recipients.admins.length) {
     tile("طلبات مستنية قرار", C.pending_requests + C.pending_actions + C.pending_meetings, C.pending_requests + C.pending_actions + C.pending_meetings > 0),
     tile("طلبات توظيف مفتوحة", C.open_applications),
   ]) + `<h3 style="margin:16px 0 8px">الفرق</h3>` + teamTable(R.teams);
-  mails.push({ to: R.recipients.admins, subject: `ملخص الأسبوع ${period} | Everest HR`, html: layout("ملخص الشركة الأسبوعي", body) });
+  mails.push({ to: R.recipients.admins, subject: `ملخص الأسبوع ${period} | Everest Eco System`, html: layout("ملخص الشركة الأسبوعي", body) });
 }
 for (const t of R.teams) {
   if (!t.manager_email) continue;

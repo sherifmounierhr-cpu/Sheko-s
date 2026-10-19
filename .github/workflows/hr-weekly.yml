@@ -1,4 +1,4 @@
-name: HR weekly email
+name: Eco System weekly email
 
 # Every Thursday evening: company summary to admins, team summary to each
 # team manager. The database login can only call hr_weekly_report().
