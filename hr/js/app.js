@@ -1,14 +1,14 @@
-import * as db from "./db.js?v=202610191700";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610191700";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610191700";
-import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610191700";
+import * as db from "./db.js?v=202610201000";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610201000";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610201000";
+import { scopeAs, scopeEval, scopeTodos, scopeLive } from "./viewas.js?v=202610201000";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير فريق"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
+const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["pay", "المرتبات"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -22,6 +22,7 @@ const TABS = [
   ["field", "تواجدي واجتماعاتي", (r) => !!r.code, "map-pin", "me", "تواجدي"],
   ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
   ["train", "تدريبي", (r) => r.trainee, "school", "me", "تدريبي"],
+  ["org", "الهيكل الوظيفي", (r) => !!r.code || r.admin, "sitemap", "team", "الهيكل"],
   ["live", "الفريق مباشر", (r) => r.admin || r.manager, "broadcast", "team", "مباشر"],
   ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.uploader, "chart-bar", "team", "المتابعة"],
   ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager, "clipboard-check", "team", "الطلبات"],
@@ -35,7 +36,7 @@ const TABS = [
   ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
   ["reports", "التقارير", (r) => r.admin || r.manager || r.recruiter || !!r.code, "file-text", "team", "التقارير"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
-  ["pay", "المرتبات", (r) => r.admin, "cash", "admin", "المرتبات"],
+  ["pay", "المرتبات", (r) => r.admin || r.pay, "cash", "admin", "المرتبات"],
   ["emp", "الموظفين", (r) => r.admin, "users", "admin", "الموظفين"],
   ["content", "محتوى التدريب", (r) => r.admin, "video", "admin", "التدريب"],
   ["set", "الإعدادات والفرق", (r) => r.admin, "settings", "admin", "الإعدادات"],
@@ -51,6 +52,7 @@ let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null,
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 // to-do lists; "شوف شاشته" keeps the admin's own identity in REAL while VIEW is someone else
 let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = null;
+let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set();
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -120,7 +122,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610191700";
+const BUILD = "202610201000";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -232,6 +234,7 @@ const visibleTabs = () => TABS.filter(([, , f]) => f(R));
 async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
+  if (tab === "org") { await orgLoad(); if (R.admin) await evalLoad(); }
   if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread() && !VIEW) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
@@ -271,7 +274,7 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { org, tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const [, label, , ic] = TABS.find(([k]) => k === tab);
   const title = ["home", "field", "live", "train"].includes(tab) ? `<h2 class="sr-only">${label}</h2>` : `<div class="page-title">${icon(ic)}<h2>${label}</h2></div>`;
@@ -533,6 +536,160 @@ function tasks() {
     ${rows.map((r) => `<tr${r.e.code === sel ? ' class="sel"' : ""}><td>${esc(empName(r.e))}<div class="note">${esc(teamOf(r.e.teamId)?.name || "")}</div></td><td class="num">${r.open}</td><td class="num">${r.late ? `<span class="pill p-bad">${r.late}</span>` : "0"}</td><td class="num">${r.done}</td>
       <td><button class="btn" data-todoemp="${esc(r.e.code)}"${r.e.code === sel ? ' aria-pressed="true"' : ""}>${r.e.code === sel ? "إخفاء" : "عرض"}</button></td></tr>`).join("")}</tbody></table></div>` : ""}</div>
   ${sel ? `<div class="card"><h2>${icon("user")}مهام ${esc(nameOf(sel))}</h2>${list.length ? `<div class="todo-list">${todoList(list)}</div>` : '<p class="note">مفيش مهام لسه.</p>'}</div>` : ""}`;
+}
+
+// ---------------------------------------------------------------- company structure (neon/008_org.sql)
+const KIND = [["dept", "قسم / إدارة"], ["sales", "فريق مبيعات"], ["team", "فريق"]];
+const KIND_IC = { dept: "building", sales: "chart-bar", team: "users" };
+const CAPS = [
+  ["viewall", "يشوف الشركة كلها", "كل الموظفين والفرق، ويوافق على طلباتهم"],
+  ["manager", "مدير على اللي تحته", "يشوف الوحدات اللي هو رئيسها واللي تحتها، ويوافق على طلباتهم"],
+  ["pay", "المرتبات", "المرتبات والحسابات البنكية وكشف الشهر"],
+  ["recruiter", "التوظيف", "طلبات التوظيف والمقابلات والتعيين"],
+  ["uploader", "رفع البصمة", "يرفع ملف جهاز البصمة"],
+  ["meetings", "اجتماعات العملاء", "يشوف ويراجع اجتماعات الكل"],
+  ["evaluator", "التقييم الأسبوعي", "يقيّم الأعمدة اللي تحت"],
+];
+async function orgLoad() { try { ORG = await db.loadOrg(); } catch (e) { ORG = null; toast(errMsg(e), true); } }
+const posOf = (k) => ORG?.positions.find((p) => p.key === k);
+const initials = (n) => String(n || "").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
+const normAr = (v) => String(v || "").toLowerCase().replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+const unitById = (id) => ORG?.units.find((u) => String(u.id) === String(id));
+const kidsOf = (id) => ORG.units.filter((u) => String(u.parent) === String(id)).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, "ar"));
+function unitsBelow(id) { const out = [String(id)]; for (let i = 0; i < out.length; i++) for (const k of kidsOf(out[i])) if (!out.includes(String(k.id))) out.push(String(k.id)); return out; }
+const isLead = (p) => (posOf(p.position)?.rank ?? 9) <= 2;
+const peopleIn = (ids) => ORG.people.filter((p) => ids.includes(String(p.unit)) && !isLead(p));
+function accState(code) {
+  if (!R.admin) return "";
+  if (S.users.some((u) => u.code === code)) return "";
+  const inv = S.invites.find((i) => i.code === code && !i.usedAt && (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()));
+  return inv ? '<span class="pill p-info">مستني يفعّل</span>' : '<span class="pill p-mute">مالوش حساب</span>';
+}
+function pchip(p, head = false) {
+  const pos = posOf(p.position), sel = ORG_SEL === p.code;
+  const inner = `<span class="av r${pos?.rank || 5}" aria-hidden="true">${esc(initials(p.name))}</span><span class="who"><b>${esc(p.name)}</b><small>${esc(pos?.title || p.job || "من غير منصب")}</small></span>${head ? '<span class="pill p-acc">رئيس</span>' : ""}${accState(p.code)}`;
+  return R.admin ? `<button type="button" class="pchip${head ? " head" : ""}${sel ? " sel" : ""}" data-person="${esc(p.code)}"${sel ? ' aria-pressed="true"' : ""}>${inner}</button>` : `<div class="pchip${head ? " head" : ""}">${inner}</div>`;
+}
+function unitBox(u, depth = 0) {
+  const head = ORG.people.find((p) => p.code === u.head);
+  const members = ORG.people.filter((p) => String(p.unit) === String(u.id) && p.code !== u.head && !isLead(p)).sort((a, b) => (posOf(a.position)?.rank ?? 9) - (posOf(b.position)?.rank ?? 9) || a.name.localeCompare(b.name, "ar"));
+  const total = peopleIn(unitsBelow(u.id)).length, kids = kidsOf(u.id);
+  const many = members.length > 8;
+  const list = `<div class="u-members">${members.map((p) => pchip(p)).join("")}</div>`;
+  return `<section class="unit k-${u.kind}${depth ? " sub" : ""}${kids.length > 1 ? " wide" : ""}" aria-label="${esc(u.name)}">
+    <header><span class="u-ic">${icon(KIND_IC[u.kind] || "users")}</span><h3>${esc(u.name)}</h3><span class="note">${total} ${total === 1 ? "شخص" : "شخص"}</span>
+      ${R.admin ? `<button type="button" class="btn ghost icon-only" data-unit="${u.id}" aria-label="تعديل ${esc(u.name)}">${icon("pencil")}</button>` : ""}</header>
+    ${head ? `<div class="u-head">${pchip(head, true)}</div>` : R.admin && u.kind !== "dept" ? `<p class="note warn-txt">${icon("alert-triangle")}مفيش رئيس للوحدة دي</p>` : ""}
+    ${members.length ? (many ? `<details class="u-more"${OPEN.get("u" + u.id) ? " open" : ""} data-fold="u${u.id}"><summary>${members.length} عضو</summary>${list}</details>` : list) : ""}
+    ${kids.length ? `<div class="u-kids">${kids.map((k) => unitBox(k, depth + 1)).join("")}</div>` : ""}</section>`;
+}
+// What a person can see and do, in plain words.
+function accessText(code) {
+  const p = ORG.people.find((x) => x.code === code), pos = posOf(p?.position), u = S.users.find((x) => x.code === code);
+  const roles = u ? u.roles : pos?.roles || [], has = (r) => roles.includes(r) || roles.includes("admin");
+  const out = [];
+  if (has("viewall")) out.push(`بيشوف الشركة كلها (${ORG.people.length} موظف)`);
+  else if (has("manager")) {
+    const heads = ORG.units.filter((x) => x.head === code), ids = [...new Set(heads.flatMap((x) => unitsBelow(x.id)))];
+    const n = peopleIn(ids).filter((x) => x.code !== code).length;
+    out.push(heads.length ? `بيشوف ${ids.length === 1 ? "وحدة واحدة" : `${ids.length} وحدات`} و${n} موظف تحته` : "دور مدير بس مش رئيس أي وحدة لسه، فمش هيشوف حد");
+  } else out.push("بيشوف صفحته بس");
+  if (has("viewall") || has("manager")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات للي تحته");
+  out.push(has("pay") ? "بيشوف المرتبات والحسابات البنكية" : "مش بيشوف المرتبات");
+  if (has("recruiter")) out.push("بيدير التوظيف");
+  if (has("uploader")) out.push("بيرفع ملف البصمة");
+  if (has("meetings")) out.push("بيراجع اجتماعات العملاء كلها");
+  if (has("evaluator")) { const a = u && EV ? EV.assignments.filter((x) => x.user === u.id) : []; out.push(a.length ? `بيقيّم: ${[...new Set(a.map((x) => catName(x.cat)))].join("، ")} لـ ${new Set(a.map((x) => x.team)).size} فريق` : "بيقيّم أسبوعيًا (لسه متعيّنلوش فرق)"); }
+  return { lines: out, linked: !!u, user: u };
+}
+function personPanel() {
+  const p = ORG.people.find((x) => x.code === ORG_SEL); if (!p) return "";
+  const e = empBy(p.code), unit = unitById(p.unit), a = accessText(p.code);
+  return `<div class="card org-panel" id="orgPanel"><div class="row"><h2 class="spacer">${icon("user")}${esc(p.name)}</h2><button type="button" class="btn ghost icon-only" id="orgClose" aria-label="قفل">${icon("x")}</button></div>
+    <form class="add" id="personForm" data-code="${esc(p.code)}">
+      <label>المنصب<select name="position">${opts(ORG.positions.map((x) => [x.key, x.title]), p.position, "من غير منصب")}</select></label>
+      <label>الوحدة<select name="unit">${opts(ORG.units.map((x) => [x.id, x.name]), p.unit, "من غير وحدة")}</select></label>
+      <label class="field-inline"><input type="checkbox" name="head"${unit && unit.head === p.code ? " checked" : ""}> رئيس الوحدة دي</label>
+      <div><button class="btn primary" type="submit">حفظ</button></div></form>
+    <div class="access"><h3>${icon("shield-check")}صلاحياته</h3><ul>${a.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+      ${a.linked ? "" : '<p class="note">لسه مالوش حساب. الصلاحيات دي هتتطبق لوحدها أول ما حسابه يتربط.</p>'}</div>
+    <div class="row">${a.linked ? `<button type="button" class="btn" data-viewas="${esc(a.user.id)}">${icon("eye")}شوف شاشته</button>` : `<button type="button" class="btn" data-go="set">${icon("key")}اعمله كود تفعيل</button>`}
+      ${e?.job ? `<span class="note">الوظيفة في الملف: ${esc(e.job)}</span>` : ""}</div></div>`;
+}
+function unitPanel() {
+  const isNew = ORG_UNIT === "new", u = isNew ? { id: "", name: "", parent: "", kind: "sales", head: "", sort: 0 } : unitById(ORG_UNIT); if (!u) return "";
+  const banned = isNew ? [] : unitsBelow(u.id);
+  return `<div class="card org-panel" id="orgPanel"><div class="row"><h2 class="spacer">${icon(isNew ? "plus" : "pencil")}${isNew ? "وحدة جديدة" : esc(u.name)}</h2><button type="button" class="btn ghost icon-only" id="orgClose" aria-label="قفل">${icon("x")}</button></div>
+    <form class="add" id="unitForm" data-unit="${u.id}">
+      <label>الاسم<input type="text" name="name" value="${esc(u.name)}" required maxlength="60"></label>
+      <label>النوع<select name="kind">${opts(KIND, u.kind)}</select></label>
+      <label>تابعة لـ<select name="parent">${opts(ORG.units.filter((x) => !banned.includes(String(x.id))).map((x) => [x.id, x.name]), u.parent, "مش تابعة لحد (أعلى مستوى)")}</select></label>
+      <label>رئيس الوحدة<select name="head">${opts(ORG.people.map((x) => [x.code, `${x.name}${posOf(x.position) ? ` (${posOf(x.position).title})` : ""}`]), u.head, "مفيش")}</select></label>
+      <label>الترتيب<input type="number" name="sort" value="${u.sort}" min="0" max="99" style="width:90px"></label>
+      <div><button class="btn primary" type="submit">حفظ</button></div></form>
+    <p class="note">رئيس الوحدة بيشوف كل اللي فيها وكل الوحدات اللي تحتها. لو حطيت فرق المبيعات تحت (التشغيل)، مدير التشغيل هيشوفهم كلهم.</p></div>`;
+}
+// Accounts that signed up but aren't linked to an employee yet, with a best guess.
+function pendingCard() {
+  const pend = S.users.filter((u) => !u.code && !u.roles.includes("admin"));
+  if (!pend.length) return "";
+  const free = S.employees.filter((e) => e.active !== false && !S.users.some((u) => u.code === e.code));
+  const guess = (u) => {
+    const a = new Set(normAr(u.name).split(" ").filter((w) => w.length > 1)), mail = normAr(u.email.split("@")[0]);
+    let best = "", score = 0;
+    for (const e of free) { const ws = normAr(e.name + " " + e.fullName).split(" "); let sc = ws.filter((w) => a.has(w)).length * 2 + (mail.includes(normAr(e.code)) ? 3 : 0); if (sc > score) { score = sc; best = e.code; } }
+    return best;
+  };
+  return `<div class="card"><h2>${icon("user-check")}مين لسه مستني <span class="badge">${pend.length}</span></h2>
+    <p class="note">دول عملوا حساب ولسه مش مربوطين بموظف. اختار الموظف ومنصبه ودوس اربط: الصلاحيات بتتحط لوحدها حسب المنصب.</p>
+    ${pend.map((u) => { const g = guess(u), ge = g ? empBy(g) : null; return `<form class="pend" data-pend="${esc(u.id)}">
+      <div class="pend-who"><b>${esc(u.name || "بدون اسم")}</b><span class="note" dir="ltr">${esc(u.email)}</span>${g ? '<span class="pill p-ok">اقتراح</span>' : ""}</div>
+      <select name="code" required aria-label="الموظف">${empOpts(g, "اختار الموظف", free)}</select>
+      <select name="position" aria-label="المنصب">${opts(ORG.positions.map((x) => [x.key, x.title]), ge?.position || "", "المنصب")}</select>
+      <button class="btn primary" type="submit">${icon("check")}اربط</button></form>`; }).join("")}</div>`;
+}
+function orgAlerts() {
+  const out = [];
+  const noHead = ORG.units.filter((u) => u.kind !== "dept" && !u.head);
+  if (noHead.length) out.push(`${noHead.map((u) => esc(u.name)).join("، ")}: ${noHead.length === 1 ? "مالوش" : "مالهمش"} رئيس`);
+  const noPos = ORG.people.filter((p) => !p.position).length;
+  if (noPos) out.push(`${noPos} موظف لسه من غير منصب، فمش هياخدوا صلاحيات تلقائي`);
+  for (const u of ORG.units.filter((x) => x.head)) { const acc = S.users.find((x) => x.code === u.head); if (acc && !acc.roles.includes("manager") && !acc.roles.includes("viewall") && !acc.roles.includes("admin")) out.push(`${esc(nameOf(u.head))} رئيس ${esc(u.name)} بس حسابه مالوش دور (مدير)، فمش هيشوف فريقه`); }
+  if (EV) for (const t of ORG.units.filter((x) => x.kind === "sales")) { const miss = CATS.filter(([c]) => !EV.assignments.some((a) => a.team === t.id && a.cat === c)).map(([, l]) => l); if (miss.length) out.push(`${esc(t.name)}: مفيش مقيّم لـ ${miss.join(" و")}`); }
+  return out.length ? `<div class="card org-alerts"><h2>${icon("alert-triangle")}محتاج انتباهك <span class="badge">${out.length}</span></h2><ul>${out.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : `<div class="banner ok">${icon("check")}الهيكل متظبط: كل وحدة ليها رئيس، وكل حد ليه منصب.</div>`;
+}
+function templatesCard() {
+  const count = (k) => S.employees.filter((e) => e.position === k && S.users.some((u) => u.code === e.code)).length;
+  return fold("shield-check#orgTpl", "قوالب الصلاحيات حسب المنصب", `<p class="note">كل منصب ليه قالب. أي حد يتربط حسابه بموظف في المنصب ده بياخد القالب لوحده. لو عدّلت قالب، دوس (طبّق) عشان يتحدث عند اللي في المنصب دلوقتي.</p>
+    <div class="tbl flat"><table class="caps"><thead><tr><th>المنصب</th>${CAPS.map(([k, l, h]) => `<th title="${esc(h)}">${l}</th>`).join("")}<th>أعمدة التقييم</th><th></th></tr></thead><tbody>
+    ${ORG.positions.map((p) => `<tr${ORG_DIRTY.has(p.key) ? ' class="dirty"' : ""}><th scope="row">${esc(p.title)}</th>
+      ${CAPS.map(([k, l]) => `<td class="num"><input type="checkbox" data-cap="${p.key}|${k}"${p.roles.includes(k) ? " checked" : ""} aria-label="${esc(p.title)}: ${l}"></td>`).join("")}
+      <td>${p.roles.includes("evaluator") ? `<div class="row nowrap">${CATS.map(([c, l]) => `<label class="mini-chk"><input type="checkbox" data-capcat="${p.key}|${c}"${p.evalCats.includes(c) ? " checked" : ""}>${l}</label>`).join("")}
+        <select data-capscope="${p.key}" aria-label="${esc(p.title)}: نطاق التقييم">${opts([["below", "فرقه"], ["sales", "كل فرق المبيعات"]], p.evalScope === "none" ? "below" : p.evalScope)}</select></div>` : '<span class="note">-</span>'}</td>
+      <td><button type="button" class="btn${ORG_DIRTY.has(p.key) ? " primary" : ""}" data-apply="${p.key}">طبّق (${count(p.key)})</button></td></tr>`).join("")}
+    </tbody></table></div>
+    <dl class="cap-help">${CAPS.map(([, l, h]) => `<div><dt>${l}</dt><dd>${h}</dd></div>`).join("")}</dl>`);
+}
+function org() {
+  if (!ORG) return db.orgReady ? skelHtml() : (R.admin ? `<div class="banner">${icon("alert-triangle")}الهيكل الوظيفي لسه مش متفعل. شغّل neon/008_org.sql في Neon SQL Editor، وبعدين notify pgrst.</div>` : empty("sitemap", "الهيكل الوظيفي لسه مش جاهز"));
+  const leads = ORG.people.filter(isLead).sort((a, b) => posOf(a.position).rank - posOf(b.position).rank || a.name.localeCompare(b.name, "ar"));
+  const roots = kidsOf(""), loose = ORG.people.filter((p) => !isLead(p) && (p.unit === "" || !unitById(p.unit)));
+  const nUnits = ORG.units.length, nPeople = ORG.people.length;
+  return `${R.admin ? `${pendingCard()}${orgAlerts()}` : ""}
+  <div class="row"><p class="note spacer">${nPeople} موظف في ${nUnits} ${nUnits === 1 ? "وحدة" : "وحدات"}${R.admin ? ". دوس على أي شخص أو وحدة عشان تعدّل." : ""}</p>
+    ${R.admin ? `<button type="button" class="btn" id="unitNew">${icon("plus")}وحدة جديدة</button>` : ""}</div>
+  ${R.admin && ORG_SEL ? personPanel() : ""}${R.admin && ORG_UNIT ? unitPanel() : ""}
+  <div class="org">
+    ${leads.length ? `<section class="org-top" aria-label="القيادة"><h3 class="sr-only">القيادة</h3>${leads.map((p) => pchip(p)).join("")}</section><div class="org-stem" aria-hidden="true"></div>` : ""}
+    <div class="org-roots">${roots.map((u) => unitBox(u)).join("") || empty("sitemap", "لسه مفيش وحدات")}</div>
+    ${loose.length ? `<section class="unit loose" aria-label="من غير وحدة"><header><span class="u-ic">${icon("help")}</span><h3>من غير وحدة</h3><span class="note">${loose.length} شخص</span></header><div class="u-members">${loose.map((p) => pchip(p)).join("")}</div></section>` : ""}
+  </div>
+  ${R.admin ? templatesCard() : ""}`;
+}
+const skelHtml = () => '<div class="skel" aria-hidden="true"><i class="h"></i><i></i><i class="s"></i></div>';
+async function orgAct(fn, msg, full = false) {
+  try { await fn(); if (msg) toast(typeof msg === "function" ? msg() : msg); if (full) await refresh(); await orgLoad(); if (R.admin) await evalLoad(); render(); }
+  catch (e) { toast(errMsg(e), true); render(); }
 }
 
 // ---------------------------------------------------------------- "شوف شاشته" (admin preview, read-only)
@@ -1644,6 +1801,11 @@ document.addEventListener("click", async (ev) => {
     window.scrollTo({ top: 0 });
     return;
   }
+  if (d.person) { ORG_SEL = ORG_SEL === d.person ? "" : d.person; ORG_UNIT = 0; render(); $("#orgPanel")?.scrollIntoView({ block: "nearest" }); $("#personForm select")?.focus(); return; }
+  if (d.unit && !t.closest("form")) { ORG_UNIT = Number(d.unit); ORG_SEL = ""; render(); $("#orgPanel")?.scrollIntoView({ block: "nearest" }); $("#unitForm input")?.focus(); return; }
+  if (t.id === "unitNew") { ORG_UNIT = "new"; ORG_SEL = ""; render(); $("#unitForm input")?.focus(); return; }
+  if (t.id === "orgClose") { ORG_SEL = ""; ORG_UNIT = 0; render(); return; }
+  if (d.apply) { const k = d.apply; await orgAct(async () => { const n = await db.applyTemplate(k); ORG_DIRTY.delete(k); toast(`اتطبق قالب (${posOf(k)?.title}) على ${n} ${n === 1 ? "حساب" : "حسابات"}`); }, null, true); return; }
   if (d.viewas) { await startView(d.viewas); return; }
   if (t.id === "viewExit") { await stopView(); return; }
   if (d.todoemp) { TODO_EMP = TODO_EMP === d.todoemp ? "" : d.todoemp; TODO_EDIT = 0; render(); return; }
@@ -1748,6 +1910,16 @@ document.addEventListener("click", async (ev) => {
 document.addEventListener("change", async (ev) => {
   const t = ev.target, d = t.dataset; if (busy && t.id !== "month") return;
   if (t.id === "month") { refresh(t.value); return; }
+  if (d.cap || d.capcat || d.capscope) {
+    const key = (d.cap || d.capcat || d.capscope).split("|")[0], p = posOf(key); if (!p) return;
+    const f = {};
+    if (d.cap) { const r = new Set(p.roles); t.checked ? r.add(d.cap.split("|")[1]) : r.delete(d.cap.split("|")[1]); f.roles = [...r]; if (!r.has("evaluator")) { f.evalCats = []; f.evalScope = "none"; } else if (p.evalScope === "none") f.evalScope = "below"; }
+    if (d.capcat) { const c = new Set(p.evalCats); t.checked ? c.add(d.capcat.split("|")[1]) : c.delete(d.capcat.split("|")[1]); f.evalCats = [...c]; if (p.evalScope === "none") f.evalScope = "below"; }
+    if (d.capscope) f.evalScope = t.value;
+    ORG_DIRTY.add(key);
+    await orgAct(() => db.savePosition(key, f), "اتحفظ القالب. دوس (طبّق) عشان يوصل للي في المنصب ده");
+    return;
+  }
   if (d.todo) { const id = Number(d.todo), on = t.checked; let next = null; await act(async () => { next = await db.todoSet(id, on); }, () => (!on ? "رجعت مفتوحة" : next ? "برافو. ودي مهمة متكررة، فرجعت بميعادها الجاي" : "برافو، اتعلّمت إنها خلصت")); return; }
   if (t.id === "dailyEmp") { dailyEmp = t.value; render(); return; }
   if (t.id === "dailyFilter") { dailyFilter = t.value; render(); return; }
@@ -1827,6 +1999,33 @@ document.addEventListener("submit", async (ev) => {
   }
   if (f.classList.contains("cform")) { const body = v.body.trim(); if (!body) return; const tbl = f.dataset.ct, id = Number(f.dataset.cid); try { await db.addComment(tbl, id, body); await loadThreads(tbl, [id]); render(); } catch (e) { toast(errMsg(e), true); } return; }
   if (f.id === "checkForm") return checkIn(v);
+  if (f.id === "personForm") {
+    const code = f.dataset.code, p = ORG.people.find((x) => x.code === code), oldUnit = unitById(p.unit);
+    return orgAct(async () => {
+      if ((v.position || "") !== (p.position || "")) await db.setPosition(code, v.position);
+      if (String(v.unit || "") !== String(p.unit ?? "")) await db.updateEmployee(code, "teamId", v.unit);
+      const unit = unitById(v.unit);
+      if (v.head && unit && unit.head !== code) await db.updateTeam(unit.id, { manager: code });
+      if (!v.head && oldUnit && oldUnit.head === code) await db.updateTeam(oldUnit.id, { manager: "" });
+      if (v.head && oldUnit && String(oldUnit.id) !== String(v.unit) && oldUnit.head === code) await db.updateTeam(oldUnit.id, { manager: "" });
+      await db.syncEvalAll().catch(() => 0);
+    }, `اتحفظ ${p.name}`, true);
+  }
+  if (f.id === "unitForm") {
+    const id = f.dataset.unit;
+    return orgAct(async () => {
+      if (!id) { const nid = await db.addUnit(v.name.trim(), v.parent, v.kind); if (v.head) await db.updateTeam(nid, { manager: v.head }); ORG_UNIT = 0; }
+      else await db.updateTeam(Number(id), { name: v.name.trim(), parent: v.parent, kind: v.kind, manager: v.head, sort: v.sort });
+      await db.syncEvalAll().catch(() => 0);
+    }, id ? "اتحفظت الوحدة" : "اتضافت الوحدة", true);
+  }
+  if (f.dataset.pend) {
+    const uid = f.dataset.pend, e = empBy(v.code); if (!e) return;
+    return orgAct(async () => {
+      if (v.position && v.position !== e.position) await db.setPosition(e.code, v.position);
+      await db.updateUser(uid, { code: e.code });
+    }, () => `اتربط الحساب بـ ${empName(e)}${v.position || e.position ? ` وخد صلاحيات (${posOf(v.position || e.position)?.title})` : ""}`, true);
+  }
   if (f.id === "todoForm" || f.id === "todoTeamForm") {
     const code = f.id === "todoForm" ? f.dataset.code : v.code;
     if (!code) return;
