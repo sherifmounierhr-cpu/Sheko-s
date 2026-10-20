@@ -1,14 +1,16 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241200";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241200";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241500";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241500";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
 const raw = configured
   ? createClient({
       auth: { adapter: SupabaseAuthAdapter(), url: NEON_AUTH_URL },
-      dataApi: { url: NEON_DATA_API_URL },
+      // never answer a read from the browser's cache: an answer saved for one
+      // sign-in (or none) must not be reused for another
+      dataApi: { url: NEON_DATA_API_URL, options: { global: { fetch: (u, o) => fetch(u, { ...o, cache: "no-store" }) } } },
     })
   : null;
 
