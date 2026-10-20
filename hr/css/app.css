@@ -290,8 +290,12 @@ details > summary { cursor: pointer; }
 .gate .seg label:has(input:checked) { background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
 .gate .seg label:has(input:focus-visible) { outline: 3px solid var(--focus); }
 .pw { position: relative; display: flex; }
-.pw input { flex: 1; padding-inline-end: 44px; }
-.pw .btn { position: absolute; inset-inline-end: 3px; inset-block: 3px; min-height: 0; width: 38px; padding: 0; border: 0; background: transparent; }
+/* the password is typed left to right, so the eye sits on the far side of it:
+   on the right in the Arabic page (on the left if the page is ever English) */
+.pw input { flex: 1; padding-right: 44px; }
+.pw .btn { position: absolute; right: 3px; inset-block: 3px; min-height: 0; width: 38px; padding: 0; border: 0; background: transparent; }
+html[dir=ltr] .pw input { padding-right: 12px; padding-left: 44px; }
+html[dir=ltr] .pw .btn { right: auto; left: 3px; }
 .err { color: var(--bad); font-size: 13.5px; min-height: 1.4em; margin: 0; }
 .gate .btn.primary { min-height: 44px; }
 
@@ -554,3 +558,7 @@ tr.dirty td, tr.dirty th { background: var(--warn-soft); }
 .dev:first-of-type { border-top: 0; }
 .dev.stale b { color: var(--bad); }
 #devForm input[name=serial] { min-width: 220px; }
+
+/* interview invitation preview and hiring profile (neon/011_cv_leavers.sql) */
+.msg-preview { margin-top: 10px; }
+.msg-preview p.wrap, .access p.wrap { white-space: pre-line; background: var(--soft, rgba(127,127,127,.08)); border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; line-height: 1.8; }
