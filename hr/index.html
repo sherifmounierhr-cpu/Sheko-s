@@ -6,14 +6,21 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://ep-dry-mountain-b27klpe6.neonauth.c-6.eu-central-1.aws.neon.tech https://ep-dry-mountain-b27klpe6.apirest.c-6.eu-central-1.aws.neon.tech; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#0f7e76">
+<meta name="description" content="بوابة موظفي Everest Real Estate: الحضور والمرتب والطلبات والمهام في مكان واحد.">
+<meta property="og:site_name" content="Everest Eco System">
+<meta property="og:title" content="Everest Eco System">
+<meta property="og:description" content="بوابة موظفي Everest Real Estate: الحضور والمرتب والطلبات والمهام في مكان واحد.">
+<meta property="og:image" content="https://sherifmounierhr-cpu.github.io/Sheko-s/hr/img/share.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ar_EG">
 <link rel="icon" type="image/png" href="img/mark-64.png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <title>Everest Eco System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202610221000">
-<script src="js/theme.js?v=202610221000"></script>
+<link rel="stylesheet" href="css/app.css?v=202610231400">
+<script src="js/theme.js?v=202610231400"></script>
 </head>
 <body>
 <a class="skip" href="#main">انتقل للمحتوى</a>
@@ -37,6 +44,8 @@
       <label>الباسورد <span class="note" id="pwHint" hidden>8 حروف على الأقل</span>
         <span class="pw"><input type="password" name="password" required minlength="8" autocomplete="current-password" dir="ltr" aria-describedby="loginErr pwHint">
         <button class="btn" type="button" id="pwToggle" aria-label="إظهار الباسورد" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="icons.svg#eye"/></svg></button></span></label>
+      <label id="pw2Row" hidden>اكتب الباسورد تاني للتأكيد
+        <input type="password" name="password2" minlength="8" autocomplete="new-password" dir="ltr" aria-describedby="loginErr"></label>
       <p class="err" id="loginErr" role="alert"></p>
       <button class="btn primary" id="loginBtn" type="submit">دخول</button>
     </form>
@@ -46,8 +55,8 @@
 <div class="gate" id="view-pending" hidden>
   <div class="art"><img class="logo" src="img/logo-white.png" alt="Everest" width="480" height="241"><h2>خطوة واحدة وتبدأ</h2><p>الإدارة بعتتلك كود تفعيل على واتساب. اكتبه هنا وحسابك هيتربط ببياناتك.</p></div>
   <div class="pane"><div class="card">
-    <h1>فعّل حسابك</h1>
-    <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> لسه مش مربوط بموظف.</p>
+    <h1 id="pendingTitle">فعّل حسابك</h1>
+    <p class="note">الحساب <b id="pendingEmail" dir="ltr"></b> <span id="pendingNote">لسه مش مربوط بموظف.</span></p>
     <form id="inviteForm">
       <label>كود التفعيل<input type="text" name="token" required minlength="6" maxlength="20" autocomplete="one-time-code" dir="ltr" class="code-input" aria-describedby="invErr"></label>
       <p class="err" id="invErr" role="alert"></p>
@@ -89,6 +98,6 @@
 
 <div class="toasts" id="toasts"></div>
 <div class="sr-only" aria-live="polite" id="announce"></div>
-<script type="module" src="js/app.js?v=202610221000"></script>
+<script type="module" src="js/app.js?v=202610231400"></script>
 </body>
 </html>

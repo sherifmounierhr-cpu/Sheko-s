@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610221000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610221000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610221000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610221000";
+import * as db from "./db.js?v=202610231400";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231400";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231400";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610231400";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,7 +124,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610221000";
+const BUILD = "202610231400";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -140,6 +140,7 @@ async function boot() {
   if (!user) { show("login"); return; }
   try { ME = await db.me(user); } catch (e) { show("login"); toast(errMsg(e), true); return; }
   R = rolesFor(ME);
+  if (ME.off) { show("pending"); $("#pendingEmail").textContent = ME.email || ""; $("#pendingNote").textContent = "موقوف لأن الموظف المربوط بيه مبقاش شغال. لو ده غلط، كلّم الموارد البشرية."; $("#inviteForm").hidden = true; $("#claim").hidden = true; $("#pendingTitle").textContent = "الحساب موقوف"; return; }
   if (!TABS.some(([, , f]) => f(R))) { show("pending"); $("#pendingEmail").textContent = ME.email || ""; return; }
   show("app");
   $("#who").textContent = ME.email || "";
@@ -614,6 +615,21 @@ function accessText(code) {
   if (has("evaluator")) { const a = u && EV ? EV.assignments.filter((x) => x.user === u.id) : []; out.push(a.length ? `بيقيّم: ${[...new Set(a.map((x) => catName(x.cat)))].join("، ")} لـ ${new Set(a.map((x) => x.team)).size} فريق` : "بيقيّم أسبوعيًا (لسه متعيّنلوش فرق)"); }
   return { lines: out, linked: !!u, user: u };
 }
+// what HR wrote when the person was hired (neon/011_cv_leavers.sql), loaded on demand
+const PROFILES = new Map();
+function profileBox(code) {
+  if (!PROFILES.has(code)) {
+    PROFILES.set(code, undefined);
+    db.empProfile(code).then((x) => { PROFILES.set(code, x || null); render(); }).catch(() => PROFILES.set(code, null));
+    return "";
+  }
+  const x = PROFILES.get(code); if (!x) return "";
+  return `<div class="access"><h3>${icon("file-text")}من ملف التوظيف ${matchPill(x.match)}</h3>
+    ${x.about ? `<p class="wrap">${esc(x.about)}</p>` : '<p class="note">مفيش نبذة متسجلة.</p>'}
+    ${x.note ? `<p class="note">ملاحظة على الـ CV: ${esc(x.note)}</p>` : ""}
+    <p class="note">قدّم على (${esc(x.position)}) · الدرجة المبدئية ${esc(x.auto)} · المقابلة ${x.interview ?? "-"}/90</p>
+    ${x.cv ? `<button type="button" class="btn sm" data-appcv="${esc(x.app)}">${icon("file-text")}نزّل الـ CV</button>` : ""}</div>`;
+}
 function personPanel() {
   const p = ORG.people.find((x) => x.code === ORG_SEL); if (!p) return "";
   const e = empBy(p.code), unit = unitById(p.unit), a = accessText(p.code);
@@ -625,6 +641,7 @@ function personPanel() {
       <div><button class="btn primary" type="submit">حفظ</button></div></form>
     <div class="access"><h3>${icon("shield-check")}صلاحياته</h3><ul>${a.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
       ${a.linked ? "" : '<p class="note">لسه مالوش حساب. الصلاحيات دي هتتطبق لوحدها أول ما حسابه يتربط.</p>'}</div>
+    ${profileBox(p.code)}
     <div class="row">${a.linked ? `<button type="button" class="btn" data-viewas="${esc(a.user.id)}">${icon("eye")}شوف شاشته</button>` : `<button type="button" class="btn" data-go="set">${icon("key")}اعمله كود تفعيل</button>`}
       ${e?.job ? `<span class="note">الوظيفة في الملف: ${esc(e.job)}</span>` : ""}</div></div>`;
 }
@@ -1218,7 +1235,16 @@ function settings() {
 }
 
 const SITE = location.origin + location.pathname;
-const inviteText = (i) => `أهلاً ${nameOf(i.code)}،\nده رابط نظام الحضور والمرتبات في Everest:\n${SITE}\n1) اختار (حساب جديد) واعمل حساب بإيميلك وباسورد قوي.\n2) اكتب كود التفعيل ده: ${i.token}\nالكود لمرة واحدة وصالح 14 يوم. متبعتوش لحد.`;
+const inviteText = (i) => `أهلاً ${nameOf(i.code)}،
+مرحبًا بيك في Everest Eco System، بوابة موظفي Everest Real Estate: حضورك ومرتبك وطلباتك ومهامك في مكان واحد.
+
+إزاي تفعّل حسابك:
+1) افتح الرابط ده: ${SITE}
+2) اختار (حساب جديد)، اكتب إيميلك وباسورد 8 حروف على الأقل، واكتبه تاني للتأكيد.
+3) اكتب كود التفعيل ده: ${i.token}
+
+الكود بيشتغل مرة واحدة ولمدة 14 يوم، ومتبعتهوش لحد.
+فريق الموارد البشرية - Everest Real Estate`;
 
 const TBL_AR = { employees: "الموظفين", employee_pay: "الرواتب", payroll: "كشف المرتبات", overrides: "تعديل خصم", actions: "جزاءات ومنح", policy_items: "اللائحة", app_users: "الصلاحيات", settings: "الإعدادات", teams: "الفرق", invites: "أكواد التفعيل" };
 const OP_AR = { INSERT: "إضافة", UPDATE: "تعديل", DELETE: "حذف" };
@@ -1529,6 +1555,47 @@ const scorePill = (n) => { const [l, c] = band(n); return `<span class="pill ${c
 const APPLY_URL = new URL("apply.html", location.href).href;
 const applyShare = () => `Everest Real Estate بتعين دلوقتي.\nقدّم من هنا في 7 دقايق:\n${APPLY_URL}`;
 const waLink = (m) => `https://wa.me/${String(m).replace(/^0/, "20").replace(/\D/g, "")}`;
+const MATCH = [["match", "مطابق"], ["partial", "مطابق جزئيًا"], ["mismatch", "مش مطابق"]];
+const MATCH_PILL = { match: "p-ok", partial: "p-warn", mismatch: "p-bad" };
+const matchPill = (m) => (m ? `<span class="pill ${MATCH_PILL[m]}">الـ CV ${esc(MATCH.find(([k]) => k === m)?.[1])}</span>` : "");
+const cairoParts = (iso) => {
+  const d = new Date(iso), z = { timeZone: "Africa/Cairo" };
+  return { day: d.toLocaleDateString("ar-EG-u-nu-latn", { ...z, weekday: "long", day: "numeric", month: "long" }),
+    time: d.toLocaleTimeString("ar-EG-u-nu-latn", { ...z, hour: "numeric", minute: "2-digit" }),
+    ymd: d.toLocaleDateString("en-CA", z), hm: d.toLocaleTimeString("en-GB", { ...z, hour: "2-digit", minute: "2-digit" }) };
+};
+// the invitation the applicant gets on WhatsApp or email
+function interviewMsg(a) {
+  const { day, time } = cairoParts(a.interviewAt), first = a.name.trim().split(/\s+/)[0];
+  return `أهلاً ${first}،
+شكرًا لاهتمامك بالانضمام لـ Everest Real Estate.
+يسعدنا ندعوك لمقابلة شخصية على وظيفة (${a.position}):
+
+اليوم: ${day}
+الساعة: ${time}
+المكان: ${a.interviewPlace}
+
+ياريت تأكد حضورك بالرد على الرسالة دي، ولو الميعاد مش مناسب قولنا ونحدد ميعاد تاني.
+رقم طلبك: ${a.ref}
+
+فريق الموارد البشرية - Everest Real Estate`;
+}
+// a Cairo wall-clock day and time as an instant (handles summer time)
+function cairoTime(day, hm) {
+  const guess = Date.parse(`${day}T${hm}:00Z`); if (Number.isNaN(guess)) return new Date(NaN);
+  const shown = cairoParts(new Date(guess).toISOString()), back = Date.parse(`${shown.ymd}T${shown.hm}:00Z`);
+  return new Date(guess - (back - guess));
+}
+async function downloadCv(id) {
+  try {
+    const f = await db.appCv(id); if (!f) { toast("مفيش CV للطلب ده", true); return; }
+    const bin = Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bin], { type: f.mime }));
+    const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast(errMsg(e), true); }
+}
+const lastPlace = () => REC?.apps.filter((x) => x.interviewPlace).sort((x, y) => String(y.invitedAt).localeCompare(String(x.invitedAt)))[0]?.interviewPlace || "";
 
 function recruit() {
   if (!REC || !db.recruitReady) return `<div class="banner">${icon("alert-triangle")}جداول التوظيف لسه مش ظاهرة. شغّل neon/004_recruitment.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
@@ -1578,6 +1645,25 @@ function appDetail(a) {
     <div class="row no-print"><a class="btn" href="tel:${esc(a.mobile)}">${esc(a.mobile)}</a><a class="btn" target="_blank" rel="noopener noreferrer" href="${waLink(a.mobile)}">واتساب</a>${a.email ? `<a class="btn" href="mailto:${esc(a.email)}">إيميل</a>` : ""}
       <span class="spacer"></span>${a.status !== "hired" ? `<label class="row field-inline">نقل إلى<select id="appSt" data-id="${a.id}">${opts(Object.entries(APP_ST).filter(([k]) => k !== "hired").map(([k, [l]]) => [k, l]), a.status)}</select></label>` : `<span class="note">اتعين بكود ${esc(a.hired)} · ${esc(nameOf(a.hired))}</span>`}
       ${R.admin && a.status !== "hired" ? `<button class="btn primary" data-apphire="${a.id}">${icon("user-check")}تعيين</button>` : ""}</div></div>
+  <div class="grid2 even">
+    <div class="card"><h2>${icon("file-text")}الـ CV والنبذة</h2>
+      <div class="row">${a.hasCv ? `<button class="btn" data-appcv="${a.id}">${icon("file-text")}نزّل الـ CV</button>` : '<span class="note">المتقدم مارفعش CV.</span>'}<span class="spacer"></span>${matchPill(a.cvMatch)}</div>
+      <form id="aboutForm" data-id="${a.id}" class="add-grid">
+        <label class="field wide">نبذة عنه: خبرته وإمكانياته (بتظهر في ملفه لو اتعين)<textarea name="about" rows="4" maxlength="3000">${esc(a.about)}</textarea></label>
+        <label class="field">الـ CV مطابق لكلامه في الفورم؟<select name="match">${opts(MATCH, a.cvMatch, "لسه متراجعش")}</select></label>
+        <label class="field">إيه اللي مختلف (لو فيه)<input type="text" name="note" value="${esc(a.cvNote)}" maxlength="1000"></label>
+        <div><button class="btn primary" type="submit">احفظ النبذة</button></div></form></div>
+    <div class="card"><h2>${icon("calendar-event")}دعوة المقابلة</h2>
+      ${a.status === "hired" || a.status === "rejected" || a.status === "withdrawn" ? `<p class="note">الطلب ده ${esc(APP_ST[a.status][0])}.</p>` : `
+      <form id="appInviteForm" data-id="${a.id}" class="add-grid">
+        <label class="field">اليوم<input type="date" name="day" required value="${esc(a.interviewAt ? cairoParts(a.interviewAt).ymd : "")}" min="${today()}"></label>
+        <label class="field">الساعة<input type="time" name="time" required value="${esc(a.interviewAt ? cairoParts(a.interviewAt).hm : "")}"></label>
+        <label class="field wide">المكان<input type="text" name="place" required maxlength="200" value="${esc(a.interviewPlace || lastPlace())}" placeholder="مثلًا: مكتب Everest، شارع ...، سموحة"></label>
+        <div><button class="btn primary" type="submit">${a.interviewAt ? "حدّث الميعاد" : "احفظ الميعاد"}</button></div></form>`}
+      ${a.interviewAt ? `<p class="note">الميعاد: ${esc(cairoParts(a.interviewAt).day)} الساعة ${esc(cairoParts(a.interviewAt).time)} · ${esc(a.interviewPlace)}</p>
+      <div class="row no-print"><a class="btn ok" target="_blank" rel="noopener noreferrer" href="${waLink(a.mobile)}?text=${encodeURIComponent(interviewMsg(a))}">${icon("message-circle")}ابعت الدعوة واتساب</a>
+        ${a.email ? `<a class="btn" href="mailto:${esc(a.email)}?subject=${encodeURIComponent("دعوة لمقابلة شخصية - Everest Real Estate")}&body=${encodeURIComponent(interviewMsg(a))}">ابعتها إيميل</a>` : '<span class="note">مفيش إيميل متسجل.</span>'}</div>
+      <details class="msg-preview"><summary>شوف الرسالة</summary><p class="wrap">${esc(interviewMsg(a))}</p></details>` : '<p class="note">حدد اليوم والساعة والمكان، وبعدها هيظهرلك زرار يبعت الدعوة جاهزة على واتساب أو إيميل.</p>'}</div></div>
   <div class="grid2 even">
     <div class="card"><h2>${icon("clipboard-check")}تقييم المقابلة</h2>
       <form id="intForm" data-id="${a.id}" class="int"><div class="tbl flat"><table><thead><tr><th>المعيار</th><th>الدرجة من 10</th></tr></thead><tbody>
@@ -1858,7 +1944,7 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "menuBtn") { toggleMenu(); return; }
   if (d.themeSet) { setTheme(d.themeSet); return; }
   if (d.tip != null) { const box = $("#calTip"); if (box) box.textContent = d.tip; return; }
-  if (t.id === "pwToggle") { const i = $("#loginForm [name=password]"), on = i.type === "password"; i.type = on ? "text" : "password"; t.setAttribute("aria-pressed", String(on)); t.setAttribute("aria-label", on ? "إخفاء الباسورد" : "إظهار الباسورد"); t.innerHTML = icon(on ? "eye-off" : "eye"); return; }
+  if (t.id === "pwToggle") { const i = $("#loginForm [name=password]"), on = i.type === "password"; i.type = on ? "text" : "password"; $("#loginForm [name=password2]").type = i.type; t.setAttribute("aria-pressed", String(on)); t.setAttribute("aria-label", on ? "إخفاء الباسورد" : "إظهار الباسورد"); t.innerHTML = icon(on ? "eye-off" : "eye"); return; }
   if (t.id === "loadComp") { t.disabled = true; t.textContent = "جاري التحميل..."; try { await loadComparison(); } catch (e) { toast(errMsg(e), true); COMP = null; } render(); return; }
   if (t.id === "liveNow") { loadLive(); return; }
   if (t.id === "loadAudit") { try { AUDIT = await db.audit(200); } catch (e) { toast(errMsg(e), true); } render(); return; }
@@ -1870,6 +1956,7 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.hirecancel) { HIRE = null; render(); return; }
+  if (d.appcv) { downloadCv(d.appcv); return; }
   if (d.rlevel) { RLEVEL = d.rlevel; render(); return; }
   if (t.id === "repPrint") { window.print(); return; }
   if (d.ewk) { EWDAY = d.ewk === "now" ? "" : addDays(EV.week.starts_on, Number(d.ewk)); if (EWDAY && EWDAY >= thisFriday()) EWDAY = ""; await evalLoad(); render(); return; }
@@ -1926,6 +2013,7 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "diag") {
     const box = $("#diagOut"); box.textContent = "جاري الفحص...";
     const rows = await db.diagnose(S.meta.month);
+    rows.push(["التوظيف في الصفحة", REC ? `${REC.apps.length} طلب، الجداول ${db.recruitReady ? "ظاهرة" : "مش ظاهرة"}` : "مش محمّل"]);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
     box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
     return;
@@ -2112,6 +2200,12 @@ document.addEventListener("submit", async (ev) => {
     if (!Object.keys(scores).length) { toast("اختار درجة لمعيار واحد على الأقل", true); return; }
     act(() => db.appReview(f.dataset.id, scores, v.date, v.by, v.notes), "اتحفظ تقييم المقابلة"); return;
   }
+  if (f.id === "aboutForm") { act(() => db.appAbout(f.dataset.id, v.about, v.match, v.note), "اتحفظت النبذة"); return; }
+  if (f.id === "appInviteForm") {
+    const at = cairoTime(v.day, v.time);
+    if (Number.isNaN(at.getTime())) { toast("اختار اليوم والساعة", true); return; }
+    act(() => db.appInvite(f.dataset.id, at.toISOString(), v.place.trim()), "اتحفظ الميعاد. ابعت الدعوة من الزرار الأخضر"); return;
+  }
   if (f.id === "decAppForm") {
     if (v.decision === "رفض" && !(await ask("ترفض الطلب ده؟", "الطلب هيتقفل. تقدر ترجعه بعدين من (نقل إلى).", "رفض", true))) return;
     act(() => db.appDecide(f.dataset.id, v.decision, v.note), "اتسجل القرار"); return;
@@ -2169,6 +2263,7 @@ async function login(v) {
   err.textContent = "";
   if (!/^\S+@\S+\.\S+$/.test(v.email.trim())) { err.textContent = "اكتب إيميل صحيح."; $("#loginForm [name=email]").focus(); return; }
   if (v.password.length < 8) { err.textContent = "الباسورد لازم يكون 8 حروف أو أكتر."; $("#loginForm [name=password]").focus(); return; }
+  if (v.mode === "signup" && v.password !== v.password2) { err.textContent = "الباسورد والتأكيد مش زي بعض. اكتبهم تاني."; $("#loginForm [name=password2]").value = ""; $("#loginForm [name=password2]").focus(); return; }
   btn.disabled = true; btn.textContent = "لحظة...";
   try {
     if (v.mode === "signup") { await db.signUp(v.email.trim(), v.password, v.name?.trim() || ""); }
@@ -2182,7 +2277,7 @@ document.addEventListener("input", (ev) => {
   if (ev.target.id === "rfQ") { RF.q = ev.target.value; const pos = ev.target.selectionStart; render(); const el = $("#rfQ"); el.focus(); el.setSelectionRange(pos, pos); return; }
   if (ev.target.name === "mode") {
     const signup = ev.target.value === "signup";
-    $("#nameRow").hidden = !signup; $("#pwHint").hidden = !signup;
+    $("#nameRow").hidden = !signup; $("#pwHint").hidden = !signup; $("#pw2Row").hidden = !signup; $("#loginForm [name=password2]").required = signup;
     $("#loginBtn").textContent = signup ? "إنشاء الحساب" : "دخول";
     $("#loginForm [name=password]").autocomplete = signup ? "new-password" : "current-password";
   }

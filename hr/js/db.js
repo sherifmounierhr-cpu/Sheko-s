@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610231400";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610231400";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -17,7 +17,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -75,6 +75,9 @@ export async function me(user) {
     rows = check(await client.from("app_users").select("*").eq("user_id", user.id));
   }
   const row = rows[0] || { roles: [] };
+  // effective roles: someone who left (neon/011_cv_leavers.sql) has none
+  const st = await client.rpc("hr_my_state").then((r) => (r.error ? null : r.data)).catch(() => null);
+  if (st) return { id: user.id, email: user.email, roles: st.roles || [], code: st.code || "", off: !!st.off };
   return { id: user.id, email: user.email, roles: row.roles || [], code: row.employee_code || "" };
 }
 
@@ -125,6 +128,9 @@ export async function diagnose(ym) {
     ["checkins", () => client.from("checkins").select("id").limit(1000)],
     ["policy_items", () => client.from("policy_items").select("id")],
     ["rpc hr_roles", () => client.rpc("hr_roles")],
+    ["rpc hr_my_state", () => client.rpc("hr_my_state")],
+    ["applications", () => client.from("applications").select("ref,status").limit(1000)],
+    ["application_reviews", () => client.from("application_reviews").select("application_id").limit(1000)],
     ["rpc hr_punch_months", () => client.rpc("hr_punch_months")],
     ["rpc hr_last_punch_day", () => client.rpc("hr_last_punch_day")],
   ];
@@ -480,7 +486,9 @@ export async function loadRecruit() {
       return { id: a.id, ref: a.ref, at: a.created_at, position: a.position, name: a.full_name, mobile: a.mobile, email: a.email || "", source: a.source || "",
         answers: a.answers || {}, auto: a.auto_score, status: a.status, statusAt: a.status_at, hired: a.hired_code || "",
         scores: r.scores || {}, interview: r.interview_total ?? null, intDate: r.interview_date || "", interviewer: r.interviewer || "", notes: r.hr_notes || "",
-        decision: r.decision || "", decisionNote: r.decision_note || "", decidedAt: r.decided_at };
+        decision: r.decision || "", decisionNote: r.decision_note || "", decidedAt: r.decided_at,
+        hasCv: !!a.has_cv, about: r.about || "", cvMatch: r.cv_match || "", cvNote: r.cv_note || "",
+        interviewAt: r.interview_at || "", interviewPlace: r.interview_place || "", invitedAt: r.invited_at || "" };
     }),
     positions: positions.map((p) => ({ id: p.id, title: p.title, active: p.active, sort: p.sort })),
   };
@@ -490,6 +498,11 @@ export async function appReview(id, scores, date, interviewer, notes) {
 }
 export async function appDecide(id, decision, note) { check(await client.rpc("hr_app_decide", { p_app: id, p_decision: decision, p_note: note || null })); }
 export async function appStatus(id, status) { check(await client.rpc("hr_app_status", { p_app: id, p_status: status })); }
+// CVs, HR's profile and interview invitations (neon/011_cv_leavers.sql)
+export async function appCv(id) { return check(await client.rpc("hr_app_cv", { p_app: id })); }
+export async function appAbout(id, about, match, note) { check(await client.rpc("hr_app_about", { p_app: id, p_about: about || null, p_match: match || null, p_note: note || null })); }
+export async function appInvite(id, at, place) { check(await client.rpc("hr_app_invite", { p_app: id, p_at: at, p_place: place || null })); }
+export async function empProfile(code) { return check(await client.rpc("hr_emp_profile", { p_code: code })); }
 export async function hireApplication(id, code) { check(await client.rpc("hr_app_hire", { p_app: id, p_code: code })); }
 export async function addPosition(title, sort) { check(await client.from("job_positions").insert({ title, sort })); }
 export async function updatePosition(id, fields) { check(await client.from("job_positions").update(fields).eq("id", id)); }

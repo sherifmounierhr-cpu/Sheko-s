@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221000";
-import { SECTIONS } from "./applyForm.js?v=202610221000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610231400";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610231400";
+import { SECTIONS } from "./applyForm.js?v=202610231400";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -12,6 +12,11 @@ const client = NEON_AUTH_URL && NEON_DATA_API_URL
   : null;
 
 let step = 0, positions = [], data = {};
+// The CV stays in memory only (never in the saved draft) and is sent right after the application.
+let cvFile = null;
+const CV_TYPES = { pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
+const CV_MAX = 3 * 1024 * 1024;
+const cvType = (f) => CV_TYPES[(f.name.split(".").pop() || "").toLowerCase()] || "";
 // The draft (personal details) stays on this device for a day at most.
 const DAY = 24 * 60 * 60 * 1000;
 try {
@@ -34,6 +39,10 @@ function field(x) {
   }
   if (x.type === "radio") {
     return `<fieldset class="wide choice" data-for="${x.name}"${hide}><legend>${esc(x.label)}${star}</legend>${x.options.map((o) => `<label><input type="radio" name="${x.name}" value="${esc(o)}"${v === o ? " checked" : ""}${req}> ${esc(o)}</label>`).join("")}</fieldset>`;
+  }
+  if (x.type === "file") {
+    return `<label class="wide" for="${id}">${esc(x.label)}<input id="${id}" type="file" name="${x.name}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+      <span class="note" id="cvName">${cvFile ? `اخترت: ${esc(cvFile.name)}` : ""}</span></label>`;
   }
   if (x.type === "check") {
     return `<label class="wide check" data-for="${x.name}"${hide}><input type="checkbox" name="${x.name}" value="نعم"${v ? " checked" : ""}${req}> <span>${esc(x.label)}${star}</span></label>`;
@@ -62,7 +71,7 @@ function render(focus = true) {
 
 function collect() {
   for (const el of $("#applyForm").elements) {
-    if (!el.name) continue;
+    if (!el.name || el.type === "file") continue;
     if (el.type === "radio") { if (el.checked) data[el.name] = el.value; continue; }
     if (el.type === "checkbox") { data[el.name] = el.checked ? el.value : ""; continue; }
     data[el.name] = el.value.trim();
@@ -97,10 +106,21 @@ function showErr(name, msg) {
 
 async function submit() {
   const btn = $("#next"); btn.disabled = true; btn.textContent = "بنبعت...";
-  const answers = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== "" && v != null));
+  const answers = Object.fromEntries(Object.entries(data).filter(([k, v]) => k !== "cv" && v !== "" && v != null));
   try {
     const { data: ref, error } = await client.rpc("hr_apply", { p_answers: answers });
     if (error) throw error;
+    let cvMsg = "";
+    if (cvFile) {
+      btn.textContent = "بنرفع الـ CV...";
+      try {
+        const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(cvFile); });
+        const up = await client.rpc("hr_apply_cv", { p_ref: ref, p_mobile: data.mobile, p_name: cvFile.name, p_mime: cvType(cvFile), p_b64: b64 });
+        if (up.error) throw up.error;
+        cvMsg = "والـ CV اتبعت معاه.";
+      } catch { cvMsg = "الطلب اتبعت، بس الـ CV ماترفعش. ابعته لنا على واتساب ومعاه رقم الطلب."; }
+    }
+    $("#cvDone").textContent = cvMsg;
     try { localStorage.removeItem(KEY); } catch { /* nothing saved */ }
     $("#applyForm").hidden = true; $("#steps").hidden = true; $("#progress").hidden = true;
     $("#done").hidden = false; $("#refNo").textContent = ref; $("#done h2").focus();
@@ -119,6 +139,14 @@ async function submit() {
 
 document.addEventListener("change", (ev) => {
   const t = ev.target; if (!t.form) return;
+  if (t.type === "file") {
+    const f = t.files?.[0] || null; $("#formErr").textContent = "";
+    if (f && !cvType(f)) { t.value = ""; cvFile = null; $("#formErr").textContent = "الـ CV لازم يكون PDF أو Word أو صورة (JPG أو PNG)."; }
+    else if (f && f.size > CV_MAX) { t.value = ""; cvFile = null; $("#formErr").textContent = "الملف أكبر من 3 ميجا. صغّره أو ابعته PDF."; }
+    else cvFile = f;
+    $("#cvName").textContent = cvFile ? `اخترت: ${cvFile.name}` : "";
+    return;
+  }
   collect();
   for (const x of SECTIONS[step].fields) if (x.showWhen && x.showWhen[0] === t.name) {
     const box = $(`[data-for="${x.name}"]`); if (box) box.hidden = !shown(x);
@@ -137,7 +165,7 @@ $("#applyForm").addEventListener("submit", (ev) => {
   submit();
 });
 
-const BUILD = "202610221000";
+const BUILD = "202610231400";
 async function boot() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();

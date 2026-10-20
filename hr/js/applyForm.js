@@ -76,6 +76,7 @@ export const SECTIONS = [
     f("emg_name", "اسم حد نكلمه في الطوارئ", "text"),
     f("emg_relation", "صلة القرابة", "text"),
     f("emg_phone", "رقم موبايله", "tel", { dir: "ltr", inputmode: "tel" }),
+    { type: "file", name: "cv", label: "ارفع الـ CV بتاعك (اختياري: PDF أو Word أو صورة، لحد 3 ميجا)", wide: true },
     f("declare_name", "اكتب اسمك بالكامل كإقرار", "text", { required: true }),
     f("declare_ok", "أقر إن كل البيانات دي صحيحة، وموافق إن Everest تحتفظ بيها لغرض التوظيف بس.", "check", { required: true }),
   ] },
