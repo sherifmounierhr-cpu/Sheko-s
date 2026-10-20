@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610231400";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231400";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231400";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610231400";
+import * as db from "./db.js?v=202610241200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241200";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,11 +124,16 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610231400";
+const BUILD = "202610241200";
+// A plain reload can come back from the browser's cache (GitHub Pages lets it keep
+// pages for 10 minutes), still on the old build. Asking for the page under a new
+// address skips that cache, so every file comes from the new build.
+function newBuild(v) { const u = new URL(location.href); u.searchParams.set("v", v); location.replace(u.href); }
+if (new URLSearchParams(location.search).has("v")) { const u = new URL(location.href); u.searchParams.delete("v"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
-    if (v && v !== BUILD && sessionStorage.getItem("hr-build") !== v) { sessionStorage.setItem("hr-build", v); location.reload(); return false; }
+    if (v && v !== BUILD && sessionStorage.getItem("hr-build") !== v) { sessionStorage.setItem("hr-build", v); newBuild(v); return false; }
   } catch { /* offline or blocked storage: carry on with this build */ }
   return true;
 }
@@ -205,12 +210,25 @@ async function loadThreads(table, ids) {
 
 function show(view) { for (const v of ["setup", "login", "pending", "app"]) $(`#view-${v}`).hidden = v !== view; }
 
+// Sometimes the very first load right after opening comes back without the
+// signed-in person's own employee row (see GLITCH in the connection check).
+// Retry once, quietly, and keep what the first answer looked like.
+let RETRIED = false, GLITCH = null;
 async function refresh(month = S?.meta.month) {
   busy = true; $("#main").setAttribute("aria-busy", "true");
   if (!S) skeleton();
   try {
     const LR = loadR();
     [S, TR, REC, TODO] = await Promise.all([db.load(month, LR), db.loadTraining(LR).catch(() => null), (LR.admin || LR.recruiter) && (R.admin || R.recruiter) ? db.loadRecruit().catch(() => null) : null, db.loadTodos().catch(() => [])]);
+    if (ME.code && !VIEW && !RETRIED && !S.employees.some((e) => e.code === ME.code)) {
+      RETRIED = true;
+      const st = await db.client.rpc("hr_my_state").then((r) => r.data ?? r.error?.message).catch((e) => e.message);
+      GLITCH = { at: new Date().toLocaleTimeString("en-GB"), employees: S.employees.length, teams: S.teams.length, punches: Object.keys(S.punches).length, state: st };
+      try { sessionStorage.setItem("hr-glitch", JSON.stringify(GLITCH)); } catch { /* storage blocked */ }
+      await new Promise((r) => setTimeout(r, 800));
+      busy = false;
+      return refresh(month);
+    }
     VSCOPE = null;
     if (VIEW && !R.admin) ({ S, TR, REC, v: VSCOPE } = scopeAs(VIEW, S, TR, REC, VIEW.evalTeams));
     if (VSCOPE) TODO = scopeTodos(TODO, VSCOPE);
@@ -2013,6 +2031,8 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "diag") {
     const box = $("#diagOut"); box.textContent = "جاري الفحص...";
     const rows = await db.diagnose(S.meta.month);
+    let g = GLITCH; try { g ||= JSON.parse(sessionStorage.getItem("hr-glitch") || "null"); } catch { /* storage blocked */ }
+    if (g) rows.push(["أول تحميل كان ناقص", JSON.stringify(g).slice(0, 300)]);
     rows.push(["التوظيف في الصفحة", REC ? `${REC.apps.length} طلب، الجداول ${db.recruitReady ? "ظاهرة" : "مش ظاهرة"}` : "مش محمّل"]);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
     box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
