@@ -1,6 +1,6 @@
 """Send new punches from the office fingerprint device to the portal.
 
-Runs on an office Windows PC (Task Scheduler, every 5 minutes and at logon).
+Runs on an office Windows PC (Task Scheduler, every 5 minutes, and at sign-in).
 It reads the ZKTeco device over the network (TCP 4370, through pyzk), keeps
 only punches newer than the last ones it sent, and hands them to Neon as the
 `hr_device` login, which can do nothing else (neon/009_device.sql).
@@ -14,7 +14,9 @@ import json
 import logging
 import logging.handlers
 import pathlib
+import re
 import sys
+import traceback
 
 HERE = pathlib.Path(__file__).resolve().parent
 STATE = HERE / "state.json"
@@ -22,6 +24,13 @@ MARGIN = dt.timedelta(minutes=30)   # overlap with the last run; the database sk
 BATCH = 500
 
 log = logging.getLogger("sync")
+
+SECRET = re.compile(r"postgres(?:ql)?://\S+|password\s*=\s*\S+", re.I)
+
+
+def redact(text):
+    """Keep connection strings and passwords out of the log and the portal."""
+    return SECRET.sub("[hidden]", str(text))
 
 
 def setup_logging():
@@ -47,9 +56,13 @@ def load_config():
 def load_state():
     try:
         s = json.loads(STATE.read_text(encoding="utf-8"))
-        return dt.datetime.fromisoformat(s["last"]) if s.get("last") else None
+        last = dt.datetime.fromisoformat(s["last"]) if s.get("last") else None
     except (OSError, ValueError, KeyError):
         return None
+    if last and last > dt.datetime.now() + dt.timedelta(days=1):
+        log.warning("state.json points to the future (%s); ignoring it", last)
+        return None
+    return last
 
 
 def save_state(last):
@@ -69,7 +82,11 @@ def read_device(c):
 
 def connect_db(url):
     import psycopg
-    return psycopg.connect(url, autocommit=True, connect_timeout=20)
+    extra = {}
+    if "sslmode=verify" in url and "sslrootcert=" not in url:
+        import certifi  # Windows has no CA file libpq can read; use certifi's
+        extra["sslrootcert"] = certifi.where()
+    return psycopg.connect(url, autocommit=True, connect_timeout=20, **extra)
 
 
 def run(c, read=read_device, db_connect=connect_db):
@@ -79,7 +96,7 @@ def run(c, read=read_device, db_connect=connect_db):
         try:
             records = read(c)
         except Exception as e:  # device off, wrong IP, network down
-            msg = f"مش قادر أوصل لجهاز البصمة على {c['ip']}: {e}"
+            msg = redact(f"مش قادر أوصل لجهاز البصمة على {c['ip']}: {e}")
             log.error(msg)
             db.execute("select hr_device_ping(%s, %s)", (c["serial"], msg[:300]))
             return 0
@@ -94,10 +111,12 @@ def run(c, read=read_device, db_connect=connect_db):
             sent += db.execute("select hr_device_punches(%s, %s::jsonb)", (c["serial"], json.dumps(chunk))).fetchone()[0]
         if not rows:
             db.execute("select hr_device_ping(%s, null)", (c["serial"],))
-        newest = max((ts for _, ts in records), default=last)
+        # a device clock set in the future must not stall the next runs
+        cap = dt.datetime.now() + dt.timedelta(days=1)
+        newest = max((ts for _, ts in records if ts <= cap), default=last)
         if newest and (last is None or newest > last):
             save_state(newest)
-        log.info("الجهاز فيه %d بصمة، اتبعت %d، الجديد منهم %d", len(records), len(rows), sent)
+        log.info("device: %d punches, sent %d, new %d", len(records), len(rows), sent)
         return sent
     finally:
         db.close()
@@ -110,5 +129,5 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception:
-        log.exception("حصلت مشكلة")
+        log.error("حصلت مشكلة: %s", redact(traceback.format_exc()))
         sys.exit(1)

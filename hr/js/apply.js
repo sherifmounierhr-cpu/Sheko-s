@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211000";
-import { SECTIONS } from "./applyForm.js?v=202610211000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221000";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221000";
+import { SECTIONS } from "./applyForm.js?v=202610221000";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -12,8 +12,13 @@ const client = NEON_AUTH_URL && NEON_DATA_API_URL
   : null;
 
 let step = 0, positions = [], data = {};
-try { data = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { data = {}; }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { /* private mode: the draft lives in memory only */ } };
+// The draft (personal details) stays on this device for a day at most.
+const DAY = 24 * 60 * 60 * 1000;
+try {
+  const kept = JSON.parse(localStorage.getItem(KEY) || "{}") || {};
+  if (kept.at && Date.now() - kept.at < DAY && kept.data) data = kept.data; else localStorage.removeItem(KEY);
+} catch { data = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* private mode: the draft lives in memory only */ } };
 
 const shown = (x) => !x.showWhen || data[x.showWhen[0]] === x.showWhen[1];
 const attrs = (x) => ["autocomplete", "dir", "inputmode", "min", "max", "minlength"].filter((k) => x[k] != null).map((k) => ` ${k}="${esc(x[k])}"`).join("");
@@ -132,7 +137,7 @@ $("#applyForm").addEventListener("submit", (ev) => {
   submit();
 });
 
-const BUILD = "202610211000";
+const BUILD = "202610221000";
 async function boot() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();

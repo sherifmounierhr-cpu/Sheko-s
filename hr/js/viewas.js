@@ -9,14 +9,8 @@
 export function visibleCodes(target, S, TR, evalTeams = []) {
   const has = (r) => target.roles.includes(r);
   const mine = target.code || "";
-  // hr_manages in neon/008_org.sql: everyone with viewall; with manager, every unit at or below one they head
-  let managed;
-  if (has("viewall")) managed = new Set(S.employees.map((e) => e.code));
-  else {
-    const units = new Set(has("manager") && mine ? S.teams.filter((t) => t.manager === mine).map((t) => String(t.id)) : []);
-    for (let grew = true; grew;) { grew = false; for (const t of S.teams) if (t.parent !== "" && t.parent != null && units.has(String(t.parent)) && !units.has(String(t.id))) { units.add(String(t.id)); grew = true; } }
-    managed = new Set(S.employees.filter((e) => units.has(String(e.teamId))).map((e) => e.code));
-  }
+  // hr_manages in neon/010_security.sql: everyone with viewall or approveall; with manager, every unit at or below one they head
+  const managed = has("viewall") || has("approveall") ? new Set(S.employees.map((e) => e.code)) : treeCodes(target, S);
   const evaluated = new Set(S.employees.filter((e) => evalTeams.some((t) => String(t) === String(e.teamId))).map((e) => e.code));
   const plans = TR?.plans || [];
   const mentees = new Set(mine ? plans.filter((p) => p.status === "active" && p.mentor && p.mentor === mine).map((p) => p.code) : []);
@@ -25,6 +19,24 @@ export function visibleCodes(target, S, TR, evalTeams = []) {
   return { mine, managed, evaluated, mentees, myMentors, self, has,
     team: (c) => managed.has(c) || self(c),
     follows: (c) => managed.has(c) || mentees.has(c) };
+}
+
+// employees in the units `target` heads and everything below them
+function treeCodes(target, S) {
+  const mine = target.code || "";
+  const units = new Set(target.roles.includes("manager") && mine ? S.teams.filter((t) => t.manager === mine).map((t) => String(t.id)) : []);
+  for (let grew = true; grew;) { grew = false; for (const t of S.teams) if (t.parent !== "" && t.parent != null && units.has(String(t.parent)) && !units.has(String(t.id))) { units.add(String(t.id)); grew = true; } }
+  return new Set(S.employees.filter((e) => units.has(String(e.teamId))).map((e) => e.code));
+}
+
+// hr_decides in neon/010_security.sql: who `me` may decide for (never themself);
+// approveall decides for anyone, a manager for their tree. viewall alone only sees.
+export function decidesFor(me, S) {
+  const mine = me.code || "";
+  if (me.roles.includes("admin")) return () => true;
+  if (me.roles.includes("approveall")) return (c) => !!c && c !== mine;
+  const tree = treeCodes(me, S);
+  return (c) => !!c && c !== mine && tree.has(c);
 }
 
 export function scopeAs(target, S, TR, REC, evalTeams = []) {
