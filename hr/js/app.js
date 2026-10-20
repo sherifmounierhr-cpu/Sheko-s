@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610251000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610251000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610251000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor } from "./viewas.js?v=202610251000";
+import * as db from "./db.js?v=202610251200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610251200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610251200";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor } from "./viewas.js?v=202610251200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -131,7 +131,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610251000";
+const BUILD = "202610251200";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -1782,12 +1782,20 @@ function leadAddForm(dist) {
     <label>الموبايل<input type="tel" name="phone" required dir="ltr" inputmode="tel" autocomplete="off"></label>
     <label>المصدر<select name="source">${opts(SOURCES_CRM.filter(([k]) => k !== "excel"), "whatsapp")}</select></label>
     <label>المشروع<select name="project">${opts(CRM.projects.filter((p) => p.active).map((p) => [p.id, p.name]), "", "مش محدد")}</select></label>
-    ${dist ? `<label>السيلز<select name="owner">${opts(salesPeople().map((e) => [e.code, empName(e)]), "", "يتوزع بعدين")}</select></label>` : ""}
+    ${dist ? `<label>السيلز<select name="owner">${ownerOptions("", "يتوزع بعدين")}</select></label>` : ""}
     <label>الحملة / الإعلان<input type="text" name="campaign" maxlength="120"></label>
     <label class="wide">ملاحظات<input type="text" name="notes" maxlength="2000"></label>
     <div><button class="btn primary" type="submit">إضافة</button></div></form></div>`;
 }
-const salesPeople = () => staff().filter((e) => ["sales", "lead"].includes(e.position) || CRM?.leads.some((l) => l.owner === e.code));
+const salesOnly = () => staff().filter((e) => ["sales", "lead"].includes(e.position) || CRM?.leads.some((l) => l.owner === e.code));
+// suggestions: the sales people; until positions are set, everyone working
+const salesPeople = () => { const s = salesOnly(); return s.length ? s : staff(); };
+// any working employee can receive a lead; sales people listed first
+function ownerOptions(sel, blank) {
+  const s = salesOnly(), rest = staff().filter((e) => !s.includes(e));
+  const o = (list) => list.map((e) => `<option value="${esc(e.code)}"${e.code === sel ? " selected" : ""}>${esc(empName(e))}</option>`).join("");
+  return (blank != null ? `<option value="">${esc(blank)}</option>` : "") + (s.length ? `<optgroup label="المبيعات">${o(s)}</optgroup><optgroup label="باقي الموظفين">${o(rest)}</optgroup>` : o(rest));
+}
 
 function leads() {
   if (!CRM || !db.crmReady) return `<div class="banner">${icon("alert-triangle")}الـ CRM لسه مش متفعّل. شغّل neon/012_crm.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
@@ -1848,11 +1856,11 @@ function crm() {
   return `<div class="kpis"><div class="kpi${inbox.length ? " bad" : ""}"><span>مستنية توزيع</span><b>${inbox.length}</b></div><div class="kpi${breach ? " bad" : ""}"><span>عدّت الـ 6 ساعات من غير رد</span><b>${breach}</b></div>
     <div class="kpi"><span>مفتوحة مع السيلز</span><b>${CRM.leads.filter((l) => l.owner && isOpen(l)).length}</b></div><div class="kpi"><span>تعاقدات آخر 90 يوم</span><b>${CRM.leads.filter((l) => l.stage === "won").length}</b></div></div>
     <div class="card"><h2>${icon("bell")}مستنية توزيع <span class="badge">${inbox.length}</span></h2>
-      ${sug.length ? `<p class="note">الترشيح: الحاضر النهارده الأول، وبعدين الأقل في العملاء المفتوحين، وبعدين الأعلى في التحويل.</p>` : '<p class="note">حدد مناصب فرق المبيعات في الهيكل الوظيفي عشان أرشحلك مين ياخد.</p>'}
+      <p class="note">${salesOnly().length ? "الترشيح: الحاضر النهارده الأول، وبعدين الأقل في العملاء المفتوحين، وبعدين الأعلى في التحويل." : "لحد ما تحدد مناصب فرق المبيعات في الهيكل الوظيفي، الترشيح بيبقى من كل الموظفين الحاضرين."}</p>
       ${inbox.map((l) => `<div class="act lead"><div class="row"><b class="spacer">${esc(l.name)}</b><span class="pill p-warn">مستني من ${ago(l.at)}</span></div>
         <div class="note">${[l.phone, projName(l.project), srcName(l.source), l.campaign].filter(Boolean).map(esc).join(" · ")}</div>${l.notes ? `<div class="note">${esc(l.notes)}</div>` : ""}
         <div class="row">${sug.map(({ e, s }) => `<button class="btn sm" data-assign="${l.id}" data-to="${esc(e.code)}">${esc(empName(e))}<small class="note"> ${s.present ? "حاضر · " : ""}${s.open} مفتوح${s.conv != null ? ` · ${s.conv}%` : ""}</small></button>`).join("")}
-          <select data-assignsel="${l.id}" aria-label="توزيع ${esc(l.name)}">${opts(ownerOpts, "", "حد تاني...")}</select>
+          <select data-assignsel="${l.id}" aria-label="توزيع ${esc(l.name)}">${ownerOptions("", "حد تاني...")}</select>
           <button class="btn ghost sm" data-leadclose="${l.id}">مكرر / مش مناسب</button></div></div>`).join("") || '<p class="note">مفيش ليدز مستنية. كل حاجة اتوزعت.</p>'}</div>
     ${leadAddForm(true)}
     <div class="card"><h2>${icon("list-details")}كل العملاء مع السيلز</h2>
@@ -1862,7 +1870,7 @@ function crm() {
       <div class="tbl flat"><table><thead><tr><th>العميل</th><th>الموبايل</th><th>المشروع</th><th>السيلز</th><th>المرحلة</th><th>الـ 6 ساعات</th><th>المتابعة</th><th>تحويل</th></tr></thead><tbody>
       ${list.slice(0, 300).map((l) => `<tr><td>${esc(l.name)}<div class="note">${esc(srcName(l.source))}${l.campaign ? " · " + esc(l.campaign) : ""}</div></td><td dir="ltr">${esc(l.phone)}</td><td>${esc(projName(l.project))}</td><td>${esc(nameOf(l.owner))}</td>
         <td>${stagePill(l.stage)}</td><td>${slaBadge(l) || (sla(l)?.done ? '<span class="pill p-ok">في الميعاد</span>' : "-")}</td><td>${nextBadge(l) || "-"}</td>
-        <td>${isOpen(l) ? `<select data-assignsel="${l.id}" aria-label="تحويل ${esc(l.name)}">${opts(ownerOpts, l.owner)}</select>` : "-"}</td></tr>`).join("") || `<tr><td colspan="8">${empty("list-details", "مفيش عملاء هنا")}</td></tr>`}</tbody></table></div></div>
+        <td>${isOpen(l) ? `<select data-assignsel="${l.id}" aria-label="تحويل ${esc(l.name)}">${ownerOptions(l.owner)}</select>` : "-"}</td></tr>`).join("") || `<tr><td colspan="8">${empty("list-details", "مفيش عملاء هنا")}</td></tr>`}</tbody></table></div></div>
     ${fold("upload#crmimport", "استيراد من Excel", `<p class="note">انسخ الأعمدة من Excel بالترتيب ده والزقها هنا (سطر لكل عميل): <b>الاسم، الموبايل، المصدر، الحملة، المشروع، كود السيلز، ملاحظات</b>. المصدر والحملة والمشروع والكود اختياريين. لو فيه أي غلطة مش هيتضاف ولا سطر، وهيقولك الغلط فين.</p>
       <form id="leadImportForm"><textarea name="rows" rows="6" dir="auto" style="width:100%" placeholder="أحمد محمد&#9;01012345678&#9;facebook&#9;حملة الساحل&#9;مشروع الساحل&#9;357"></textarea>
       <div id="importOut"></div><div><button class="btn primary" type="submit">استيراد</button></div></form>`)}
