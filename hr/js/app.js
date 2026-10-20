@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610241200";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241200";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241200";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241200";
+import * as db from "./db.js?v=202610241500";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241500";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241500";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241500";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,7 +124,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610241200";
+const BUILD = "202610241500";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
