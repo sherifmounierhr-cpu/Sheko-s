@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241700";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241700";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241800";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241800";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -101,14 +101,6 @@ export async function me(user) {
   const st = await client.rpc("hr_my_state").then((r) => (r.error ? null : r.data)).catch(() => null);
   if (st) return { id: user.id, email: user.email, roles: st.roles || [], code: st.code || "", off: !!st.off };
   return { id: user.id, email: user.email, roles: row.roles || [], code: row.employee_code || "" };
-}
-
-// Before the first burst of parallel reads: settle the session and its token
-// with one authenticated read, so every read in the burst carries the same,
-// fresh sign-in.
-export async function ready() {
-  await client.auth.getSession().catch(() => null);
-  await client.rpc("hr_my_state").catch(() => null);
 }
 
 export async function claimAdmin() {
