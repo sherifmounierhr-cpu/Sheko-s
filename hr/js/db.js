@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610231000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610231000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610231400";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610231400";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -128,6 +128,9 @@ export async function diagnose(ym) {
     ["checkins", () => client.from("checkins").select("id").limit(1000)],
     ["policy_items", () => client.from("policy_items").select("id")],
     ["rpc hr_roles", () => client.rpc("hr_roles")],
+    ["rpc hr_my_state", () => client.rpc("hr_my_state")],
+    ["applications", () => client.from("applications").select("ref,status").limit(1000)],
+    ["application_reviews", () => client.from("application_reviews").select("application_id").limit(1000)],
     ["rpc hr_punch_months", () => client.rpc("hr_punch_months")],
     ["rpc hr_last_punch_day", () => client.rpc("hr_last_punch_day")],
   ];

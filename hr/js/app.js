@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610231000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610231000";
+import * as db from "./db.js?v=202610231400";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231400";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231400";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610231400";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,7 +124,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610231000";
+const BUILD = "202610231400";
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
@@ -2013,6 +2013,7 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "diag") {
     const box = $("#diagOut"); box.textContent = "جاري الفحص...";
     const rows = await db.diagnose(S.meta.month);
+    rows.push(["التوظيف في الصفحة", REC ? `${REC.apps.length} طلب، الجداول ${db.recruitReady ? "ظاهرة" : "مش ظاهرة"}` : "مش محمّل"]);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
     box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;
     return;
