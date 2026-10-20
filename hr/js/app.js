@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610241500";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241500";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241500";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241500";
+import * as db from "./db.js?v=202610241700";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241700";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241700";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241700";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,7 +124,7 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610241500";
+const BUILD = "202610241700";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -149,6 +149,7 @@ async function boot() {
   if (!TABS.some(([, , f]) => f(R))) { show("pending"); $("#pendingEmail").textContent = ME.email || ""; return; }
   show("app");
   $("#who").textContent = ME.email || "";
+  await db.ready();
   MONTHS = await db.months().catch(() => []);
   LAST = await db.lastPunchDay().catch(() => "");
   const cur = today().slice(0, 7);
@@ -223,7 +224,9 @@ async function refresh(month = S?.meta.month) {
     if (ME.code && !VIEW && !RETRIED && !S.employees.some((e) => e.code === ME.code)) {
       RETRIED = true;
       const st = await db.client.rpc("hr_my_state").then((r) => r.data ?? r.error?.message).catch((e) => e.message);
-      GLITCH = { at: new Date().toLocaleTimeString("en-GB"), employees: S.employees.length, teams: S.teams.length, punches: Object.keys(S.punches).length, state: st };
+      const again = await db.client.from("employees").select("code").limit(1).then((r) => (r.error ? r.error.message : r.data.length)).catch((e) => e.message);
+      GLITCH = { at: new Date().toLocaleTimeString("en-GB"), employees: S.employees.length, teams: S.teams.length, punches: Object.keys(S.punches).length, again, state: st,
+        trace: db.TRACE.slice(-14).map((x) => `${x.what}:${x.st}:${x.range}:${x.sub}:${x.left}`) };
       try { sessionStorage.setItem("hr-glitch", JSON.stringify(GLITCH)); } catch { /* storage blocked */ }
       await new Promise((r) => setTimeout(r, 800));
       busy = false;
@@ -2032,7 +2035,7 @@ document.addEventListener("click", async (ev) => {
     const box = $("#diagOut"); box.textContent = "جاري الفحص...";
     const rows = await db.diagnose(S.meta.month);
     let g = GLITCH; try { g ||= JSON.parse(sessionStorage.getItem("hr-glitch") || "null"); } catch { /* storage blocked */ }
-    if (g) rows.push(["أول تحميل كان ناقص", JSON.stringify(g).slice(0, 300)]);
+    if (g) rows.push(["أول تحميل كان ناقص", JSON.stringify(g).slice(0, 1500)]);
     rows.push(["التوظيف في الصفحة", REC ? `${REC.apps.length} طلب، الجداول ${db.recruitReady ? "ظاهرة" : "مش ظاهرة"}` : "مش محمّل"]);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
     box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;

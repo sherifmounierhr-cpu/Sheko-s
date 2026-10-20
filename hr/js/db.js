@@ -1,16 +1,36 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241500";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241500";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241700";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241700";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
+
+// Every Data API request skips the browser cache, and the last few are noted
+// (table, status, rows, the sign-in token's subject and minutes left; never
+// the token itself) so the connection check can show what a bad load saw.
+export const TRACE = [];
+const jwtInfo = (h) => {
+  try {
+    const t = String(h || "").replace(/^Bearer /, ""), p = JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return { sub: String(p.sub || "").slice(0, 8), left: p.exp ? Math.round(p.exp - Date.now() / 1000) : null };
+  } catch { return { sub: "", left: null }; }
+};
+async function traced(url, opts = {}) {
+  const res = await fetch(url, { ...opts, cache: "no-store" });
+  try {
+    const h = new Headers(opts.headers), u = new URL(String(url));
+    TRACE.push({ t: new Date().toLocaleTimeString("en-GB"), what: u.pathname.split("/").pop(), st: res.status, range: res.headers.get("content-range") || "", ...jwtInfo(h.get("Authorization")) });
+    if (TRACE.length > 40) TRACE.shift();
+  } catch { /* tracing never breaks a request */ }
+  return res;
+}
 
 const raw = configured
   ? createClient({
       auth: { adapter: SupabaseAuthAdapter(), url: NEON_AUTH_URL },
       // never answer a read from the browser's cache: an answer saved for one
       // sign-in (or none) must not be reused for another
-      dataApi: { url: NEON_DATA_API_URL, options: { global: { fetch: (u, o) => fetch(u, { ...o, cache: "no-store" }) } } },
+      dataApi: { url: NEON_DATA_API_URL, options: { global: { fetch: traced } } },
     })
   : null;
 
@@ -81,6 +101,14 @@ export async function me(user) {
   const st = await client.rpc("hr_my_state").then((r) => (r.error ? null : r.data)).catch(() => null);
   if (st) return { id: user.id, email: user.email, roles: st.roles || [], code: st.code || "", off: !!st.off };
   return { id: user.id, email: user.email, roles: row.roles || [], code: row.employee_code || "" };
+}
+
+// Before the first burst of parallel reads: settle the session and its token
+// with one authenticated read, so every read in the burst carries the same,
+// fresh sign-in.
+export async function ready() {
+  await client.auth.getSession().catch(() => null);
+  await client.rpc("hr_my_state").catch(() => null);
 }
 
 export async function claimAdmin() {
