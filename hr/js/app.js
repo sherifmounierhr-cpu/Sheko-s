@@ -1,14 +1,14 @@
-import * as db from "./db.js?v=202610241800";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241800";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241800";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241800";
+import * as db from "./db.js?v=202610251000";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610251000";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610251000";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor } from "./viewas.js?v=202610251000";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["approveall", "يوافق على الشركة كلها"], ["pay", "المرتبات"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
+const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["approveall", "يوافق على الشركة كلها"], ["pay", "المرتبات"], ["leads_assign", "توزيع الليدز"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -18,6 +18,7 @@ const checkKind = (k) => CHECK_KINDS.find(([v]) => v === k)?.[1] || k;
 // tab id, label, who sees it, icon, nav group, short label for the phone bar
 const TABS = [
   ["home", "لوحتي", (r) => !!r.code, "home", "me", "لوحتي"],
+  ["leads", "عملائي", (r) => !!r.code && (r.crm || r.admin || r.leads_assign), "phone", "me", "عملائي"],
   ["inbox", "الإشعارات", (r) => !!r.code || r.admin || r.manager || r.viewall || r.approveall, "bell", "me", "الإشعارات"],
   ["field", "تواجدي واجتماعاتي", (r) => !!r.code, "map-pin", "me", "تواجدي"],
   ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
@@ -33,6 +34,7 @@ const TABS = [
   ["sum", "ملخص الحضور", (r) => r.admin || r.manager || r.viewall || r.approveall, "list-details", "team", "الملخص"],
   ["weekly", "التقييم الأسبوعي", (r) => r.admin || r.manager || r.viewall || r.approveall || r.evaluator, "star", "team", "التقييم"],
   ["trainees", "المتدربين", (r) => r.admin || r.manager || r.viewall || r.approveall || r.mentor, "school", "team", "المتدربين"],
+  ["crm", "توزيع الليدز", (r) => r.admin || r.leads_assign, "inbox", "team", "التوزيع"],
   ["recruit", "التوظيف", (r) => r.admin || r.recruiter, "user-check", "admin", "التوظيف"],
   ["reports", "التقارير", (r) => r.admin || r.manager || r.viewall || r.approveall || r.recruiter || !!r.code, "file-text", "team", "التقارير"],
   ["upload", "رفع البصمة", (r) => r.uploader, "upload", "admin", "رفع البصمة"],
@@ -119,12 +121,17 @@ function ask(title, text = "", yes = "تأكيد", danger = false) {
   d.returnValue = "";
   return new Promise((res) => { d.addEventListener("close", () => res(d.returnValue === "yes"), { once: true }); d.showModal(); y.focus(); });
 }
-function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
+const CRM_ERR = [[/duplicate:(\d+)/, "الرقم ده موجود كعميل مفتوح بالفعل (رقم $1)."], [/duplicate/, "الرقم ده عميل مفتوح مع زميل تاني. كلم المسؤول عن التوزيع."],
+  [/bad phone/, "رقم الموبايل مش مظبوط."], [/name required/, "اكتب اسم العميل."], [/next within 24h/, "لو العميل مردّش، لازم تحدد المكالمة الجاية خلال 24 ساعة (اللائحة 4.6)."],
+  [/next within 3 days/, "لو العميل بيفكر، لازم تحدد المتابعة الجاية خلال 3 أيام (اللائحة 4.6)."], [/next required/, "حدد ميعاد الخطوة الجاية."],
+  [/note too short/, "اكتب إيه اللي حصل بالتفصيل (10 حروف على الأقل)."], [/reason required/, "اكتب السبب."], [/next in the past/, "ميعاد الخطوة الجاية لازم يكون في المستقبل."],
+  [/lead closed/, "العميل ده اتقفل."], [/no such employee/, "الموظف ده مش موجود أو ساب الشغل."]];
+function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of CRM_ERR) if (re.test(m0)) return m0.replace(new RegExp(".*?" + re.source + ".*", "s"), txt); if (e?.readOnly) return e.message; const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610241800";
+const BUILD = "202610251000";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -177,6 +184,7 @@ function tick() {
   const d = new Date();
   document.querySelectorAll("[data-clock]").forEach((el) => (el.textContent = timeFmt.format(d)));
   document.querySelectorAll("[data-date]").forEach((el) => (el.textContent = clockFmt.format(d)));
+  document.querySelectorAll("[data-due]").forEach((el) => { const left = Number(el.dataset.due) - Date.now(); el.textContent = `${left < 0 ? "متأخر" : "فاضل"} ${hm(left)}`; el.classList.toggle("p-bad", left < 0); el.classList.toggle("p-warn", left >= 0); });
 }
 
 const unread = () => NOTIF.filter((n) => !n.read_at).length;
@@ -236,6 +244,9 @@ async function refresh(month = S?.meta.month) {
     if (VSCOPE) TODO = scopeTodos(TODO, VSCOPE);
     DEV = R.admin || R.uploader ? await db.deviceStatus().catch(() => null) : null;
     E = createEngine(S, LAST);
+    CRM = await db.loadCrm().catch(() => null);
+    if (CRM && VSCOPE) CRM = scopeCrm(CRM, VSCOPE, VIEW);
+    R.crm = !!CRM && db.crmReady && (CRM.leads.some((l) => l.owner === ME.code) || ["sales", "lead"].includes(empBy(ME.code)?.position));
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
     R.mentor = !!TR?.plans.some((p) => p.mentor && p.mentor === ME.code && p.status === "active");
     COMP = null;
@@ -299,7 +310,7 @@ function render() {
   const set = new Set([S.meta.month, ...MONTHS]);
   $("#month").innerHTML = opts([...set].sort().reverse().map((m) => [m, m.split("-").reverse().join(" / ")]), S.meta.month);
   $("#roleChips").innerHTML = (R.admin ? [["admin", "مدير النظام"]] : ROLES.filter(([r]) => ME.roles.includes(r))).map(([, l]) => `<span class="pill p-acc">${l}</span>`).join("") + (ME.code ? `<span class="pill p-mute">${esc(nameOf(ME.code))}</span>` : "");
-  const views = { org, tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
+  const views = { leads, crm, org, tasks, reports, home, inbox, field, live, actions, dash, mine, train, requests, daily, meet, weekly, recruit, upload, sum, trainees, pay, emp, content, set: settings };
   const warn = !db.portalReady && R.admin ? `<div class="banner">${icon("alert-triangle")}جداول بوابة الموظفين لسه مش ظاهرة. شغّل neon/002_portal.sql في Neon SQL Editor، وبعدين حدّث الـ schema cache من صفحة Data API.</div>` : "";
   const staleDev = tab !== "upload" && (R.admin || R.uploader) && DEV?.find(deviceStale);
   const devWarn = staleDev ? `<div class="banner bad">${icon("fingerprint")}<span class="spacer">جهاز البصمة مبعتش بصمات ${ago(staleDev.lastSeen)}. اتأكد إن كمبيوتر المكتب شغال.</span><button class="btn" data-go="upload">التفاصيل</button></div>` : "";
@@ -576,6 +587,7 @@ const CAPS = [
   ["approveall", "يوافق على الشركة كلها", "يوافق على الأذونات والاجتماعات ويقترح الجزاءات لأي حد، ما عدا نفسه"],
   ["manager", "مدير على اللي تحته", "يشوف الوحدات اللي هو رئيسها واللي تحتها، ويوافق على طلباتهم"],
   ["pay", "المرتبات", "المرتبات والحسابات البنكية وكشف الشهر"],
+  ["leads_assign", "توزيع الليدز", "يشوف كل العملاء ويوزعهم على السيلز ويستورد من Excel"],
   ["recruiter", "التوظيف", "طلبات التوظيف والمقابلات والتعيين"],
   ["uploader", "رفع البصمة", "يرفع ملف جهاز البصمة"],
   ["meetings", "اجتماعات العملاء", "يشوف ويراجع اجتماعات الكل"],
@@ -775,9 +787,9 @@ async function stopView() {
 }
 
 // ---------------------------------------------------------------- notifications
-const NOTIF_GO = { todos: "home", eval_weeks: "weekly", requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
+const NOTIF_GO = { crm_leads: "leads", todos: "home", eval_weeks: "weekly", requests: "mine", actions: "home", meetings: "field", checkins: "field", training_plans: "train", applications: "recruit" };
 function inbox() {
-  const goFor = (n) => { if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; if (n.ref_table === "todos" && /خلّص/.test(n.title) && (R.admin || R.manager)) return "tasks"; return NOTIF_GO[n.ref_table]; };
+  const goFor = (n) => { if (n.ref_table === "crm_leads" && /من الإعلانات/.test(n.title) && (R.admin || R.leads_assign)) return "crm"; if (n.ref_table === "actions" && (R.admin || R.manager) && n.kind !== "penalty" && n.kind !== "bonus" && n.kind !== "warning") return "actions"; if (n.ref_table === "requests" && n.kind === "request" && /قرارك/.test(n.title)) return "requests"; if (n.ref_table === "meetings" && /الفريق/.test(n.title)) return "live"; if (n.ref_table === "training_plans" && /مدرب$/.test(n.title)) return "trainees"; if (n.ref_table === "todos" && /خلّص/.test(n.title) && (R.admin || R.manager)) return "tasks"; return NOTIF_GO[n.ref_table]; };
   return `<div class="row"><p class="note spacer">الإشعارات بتتحدث كل دقيقة.</p></div>
   <div class="card">${NOTIF.map((n) => { const g = goFor(n); return `<div class="notif${n.read_at ? "" : " new"}"><div class="row"><b>${esc(n.title)}</b><span class="note">${fmtTs(n.created_at)}</span>
     ${g && TABS.some(([k, , f]) => k === g && f(R)) ? `<button class="btn" data-go="${g}">افتح</button>` : ""}</div>
@@ -1700,6 +1712,170 @@ function appDetail(a) {
   <div class="card answers"><h2>${icon("file-text")}بيانات المتقدم</h2>${SECTIONS.map(sec).join("")}</div>`;
 }
 
+// ---------------------------------------------------------------- CRM (neon/012_crm.sql)
+const SOURCES_CRM = [["whatsapp", "واتساب"], ["call", "مكالمة واردة"], ["walkin", "زيارة للمكتب"], ["referral", "ترشيح"], ["landing", "صفحة إنزال"], ["facebook", "فيسبوك"], ["excel", "ملف Excel"], ["manual", "يدوي"], ["other", "أخرى"]];
+const STAGES = [["new", "جديد"], ["contacted", "اتكلم"], ["qualified", "مهتم"], ["visit", "زار"], ["offer", "عرض"], ["reserved", "حجز"], ["won", "تعاقد"], ["lost", "مقفول"]];
+const STAGE_PILL = { new: "p-info", contacted: "p-mute", qualified: "p-acc", visit: "p-acc", offer: "p-warn", reserved: "p-ok", won: "p-ok", lost: "p-bad" };
+const KINDS_CRM = [["call", "مكالمة"], ["whatsapp", "واتساب"], ["visit", "زيارة"], ["meeting", "اجتماع"], ["offer", "عرض سعر"], ["note", "ملاحظة"]];
+const RESULTS_CRM = [["answered", "رد واتكلمنا"], ["no_answer", "مردّش"], ["busy", "مشغول / مقفول"], ["interested", "مهتم"], ["thinking", "بيفكر"], ["visit_booked", "حدد ميعاد زيارة"],
+  ["visit_done", "الزيارة تمت"], ["offer_sent", "اتبعتله عرض"], ["reserved", "حجز"], ["won", "تعاقد"], ["not_interested", "مش مهتم"], ["wrong_number", "رقم غلط"], ["lost", "اتقفل لسبب تاني"]];
+const SLA_MS = 6 * 3600e3;
+const srcName = (s) => SOURCES_CRM.find(([k]) => k === s)?.[1] || s;
+const stagePill = (s) => `<span class="pill ${STAGE_PILL[s] || "p-mute"}">${esc(STAGES.find(([k]) => k === s)?.[1] || s)}</span>`;
+const projName = (id) => CRM?.projects.find((p) => p.id === id)?.name || "";
+let CRM = null, LEAD = 0, LEAD_LOG = 0, LEAD_ACTS = null, CRM_ADD = false, CRMF = { owner: "", stage: "open", q: "" };
+const isOpen = (l) => l.stage !== "won" && l.stage !== "lost";
+// the 6-hour first-feedback clock (policy 4.2): from assignment until the first follow-up
+function sla(l) {
+  if (!l.owner || !l.assignedAt) return null;
+  const due = Date.parse(l.assignedAt) + SLA_MS;
+  if (l.first) return { done: true, ok: Date.parse(l.first) <= due };
+  return { done: false, due, late: Date.now() > due };
+}
+const hm = (ms) => { const m = Math.max(0, Math.round(Math.abs(ms) / 60000)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+function slaBadge(l) {
+  const s = sla(l); if (!s) return "";
+  if (s.done) return s.ok ? "" : '<span class="pill p-bad">رد متأخر عن 6 ساعات</span>';
+  return `<span class="pill ${s.late ? "p-bad" : "p-warn"}" data-due="${s.due}">${s.late ? "متأخر" : "فاضل"} ${hm(s.due - Date.now())}</span>`;
+}
+function nextBadge(l) {
+  if (!l.next || !isOpen(l)) return "";
+  const t = Date.parse(l.next), late = t < Date.now();
+  return `<span class="pill ${late ? "p-bad" : "p-mute"}">${late ? "المتابعة متأخرة" : "المتابعة"} ${fmtDate(db.cairoDay(l.next))} ${esc(new Date(l.next).toLocaleTimeString("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}</span>`;
+}
+const waNum = (p) => String(p).replace(/^0/, "20").replace(/\D/g, "");
+
+function leadCard(l, mine) {
+  const open = LEAD === l.id, log = LEAD_LOG === l.id;
+  return `<div class="act lead${open ? " sel" : ""}"><div class="row"><b class="spacer">${esc(l.name)}</b>${stagePill(l.stage)}${slaBadge(l)}${nextBadge(l)}</div>
+    <div class="note">${[projName(l.project), srcName(l.source), l.campaign, l.budget && `الميزانية ${l.budget}`].filter(Boolean).map(esc).join(" · ")}${!mine && l.owner ? ` · ${esc(nameOf(l.owner))}` : ""}</div>
+    ${l.notes ? `<div class="note">${esc(l.notes)}</div>` : ""}
+    <div class="row no-print">${l.phone ? `<a class="btn" href="tel:${esc(l.phone)}">${icon("phone")}${esc(l.phone)}</a><a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/${waNum(l.phone)}">${icon("message-circle")}واتساب</a>` : `<span class="note" dir="ltr">***${esc(l.tail)}</span>`}
+      ${mine && isOpen(l) ? `<button class="btn primary" data-leadlog="${l.id}" aria-expanded="${log}">${icon("pencil")}سجّل متابعة</button>` : ""}
+      <button class="btn ghost" data-lead="${l.id}" aria-expanded="${open}">${open ? "إخفاء" : "التفاصيل"}</button></div>
+    ${log ? leadLogForm(l) : ""}${open ? leadTimeline(l) : ""}</div>`;
+}
+function leadLogForm(l) {
+  const at = (h) => { const d = new Date(Date.now() + h * 3600e3); return cairoParts(d.toISOString()); };
+  const chip = (label, h) => { const p = at(h); return `<button type="button" class="btn sm" data-nx="${p.ymd}T${p.hm}">${label}</button>`; };
+  const tom = cairoParts(new Date(Date.now() + 864e5).toISOString()).ymd;
+  return `<form class="add-grid lead-log" id="leadLogForm" data-id="${l.id}">
+    <label class="field">النوع<select name="kind">${opts(KINDS_CRM, "call")}</select></label>
+    <label class="field">النتيجة<select name="result" required>${opts(RESULTS_CRM, "", "اختار")}</select></label>
+    <label class="field wide">إيه اللي حصل؟ (10 حروف على الأقل لو العميل رد)<textarea name="note" rows="2" maxlength="1000"></textarea></label>
+    <label class="field">الخطوة الجاية<input type="datetime-local" name="next"></label>
+    <div class="row field wide">${chip("بعد ساعتين", 2)}<button type="button" class="btn sm" data-nx="${tom}T12:00">بكرة 12</button>${chip("بعد 3 أيام", 72)}</div>
+    <p class="note wide" id="leadRule"></p>
+    <div><button class="btn primary" type="submit">حفظ</button> <button class="btn ghost" type="button" data-leadlog="${l.id}">إلغاء</button></div></form>`;
+}
+function leadTimeline(l) {
+  if (LEAD_ACTS?.id !== l.id) return '<p class="note">جاري التحميل...</p>';
+  const rs = (r) => RESULTS_CRM.find(([k]) => k === r)?.[1] || "", ks = (k) => KINDS_CRM.find(([x]) => x === k)?.[1] || (k === "assign" ? "توزيع" : "");
+  return `<ol class="timeline">${LEAD_ACTS.rows.map((a) => `<li><b>${esc([ks(a.kind), rs(a.result)].filter(Boolean).join(": ") || "")}</b>
+    ${a.verified === false ? '<span class="pill p-warn">من غير تسجيل تواجد</span>' : a.verified ? '<span class="pill p-ok">متأكد بالتواجد</span>' : ""}
+    <span class="note">${fmtDate(db.cairoDay(a.at))} ${esc(new Date(a.at).toLocaleTimeString("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}${a.code ? ` · ${esc(nameOf(a.code))}` : ""}</span>
+    ${a.note ? `<div>${esc(a.note)}</div>` : ""}${a.next_at ? `<div class="note">الخطوة الجاية: ${fmtDate(db.cairoDay(a.next_at))}</div>` : ""}</li>`).join("") || "<li>مفيش حركة لسه.</li>"}</ol>`;
+}
+function leadAddForm(dist) {
+  return `<div class="card"><h2>${icon("plus")}عميل جديد</h2><form class="add" id="leadAddForm">
+    <label>الاسم<input type="text" name="name" required maxlength="120" autocomplete="off"></label>
+    <label>الموبايل<input type="tel" name="phone" required dir="ltr" inputmode="tel" autocomplete="off"></label>
+    <label>المصدر<select name="source">${opts(SOURCES_CRM.filter(([k]) => k !== "excel"), "whatsapp")}</select></label>
+    <label>المشروع<select name="project">${opts(CRM.projects.filter((p) => p.active).map((p) => [p.id, p.name]), "", "مش محدد")}</select></label>
+    ${dist ? `<label>السيلز<select name="owner">${opts(salesPeople().map((e) => [e.code, empName(e)]), "", "يتوزع بعدين")}</select></label>` : ""}
+    <label>الحملة / الإعلان<input type="text" name="campaign" maxlength="120"></label>
+    <label class="wide">ملاحظات<input type="text" name="notes" maxlength="2000"></label>
+    <div><button class="btn primary" type="submit">إضافة</button></div></form></div>`;
+}
+const salesPeople = () => staff().filter((e) => ["sales", "lead"].includes(e.position) || CRM?.leads.some((l) => l.owner === e.code));
+
+function leads() {
+  if (!CRM || !db.crmReady) return `<div class="banner">${icon("alert-triangle")}الـ CRM لسه مش متفعّل. شغّل neon/012_crm.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
+  const mine = CRM.leads.filter((l) => l.owner === ME.code), open = mine.filter(isOpen), now = Date.now(), endDay = Date.parse(`${today()}T23:59:59+03:00`);
+  const fresh = open.filter((l) => !l.first).sort((a, b) => Date.parse(a.assignedAt) - Date.parse(b.assignedAt));
+  const late = open.filter((l) => l.first && l.next && Date.parse(l.next) < now).sort((a, b) => Date.parse(a.next) - Date.parse(b.next));
+  const todayL = open.filter((l) => l.first && l.next && Date.parse(l.next) >= now && Date.parse(l.next) <= endDay);
+  const later = open.filter((l) => l.first && !late.includes(l) && !todayL.includes(l));
+  const closed = mine.filter((l) => !isOpen(l));
+  const team = (R.manager || R.viewall || R.approveall) ? crmTeamTable() : "";
+  const sec = (title, list, empt) => `<div class="card"><h2>${title}${list.length ? ` <span class="badge">${list.length}</span>` : ""}</h2>${list.length ? list.map((l) => leadCard(l, true)).join("") : `<p class="note">${empt}</p>`}</div>`;
+  return `<div class="kpis"><div class="kpi"><span>مفتوحة</span><b>${open.length}</b></div><div class="kpi${fresh.some((l) => sla(l)?.late) ? " bad" : ""}"><span>مستنية أول رد</span><b>${fresh.length}</b></div>
+    <div class="kpi${late.length ? " bad" : ""}"><span>متابعات متأخرة</span><b>${late.length}</b></div><div class="kpi"><span>متابعات النهارده</span><b>${todayL.length}</b></div></div>
+    <div class="row"><button class="btn${CRM_ADD ? "" : " primary"}" id="leadAddToggle" aria-expanded="${CRM_ADD}">${icon(CRM_ADD ? "x" : "plus")}${CRM_ADD ? "قفل" : "عميل جديد"}</button></div>
+    ${CRM_ADD ? leadAddForm(R.admin || R.leads_assign) : ""}
+    ${fresh.length ? sec(`${icon("alert-triangle")}لازم ترد عليهم (خلال 6 ساعات)`, fresh, "") : ""}
+    ${late.length ? sec(`${icon("clock")}متابعات متأخرة`, late, "") : ""}
+    ${sec(`${icon("calendar-event")}متابعات النهارده`, todayL, "مفيش متابعات باقية النهارده.")}
+    ${later.length ? fold("list-details#crmlater", `جاية بعدين (${later.length})`, later.map((l) => leadCard(l, true)).join("")) : ""}
+    ${closed.length ? fold("check#crmclosed", `مقفولة آخر 90 يوم (${closed.length})`, closed.map((l) => leadCard(l, true)).join("")) : ""}
+    ${!mine.length ? empty("user-check", "مفيش عملاء ليك لسه", "أول ما يتوزع عليك عميل هيوصلك إشعار ويظهر هنا. وتقدر تضيف عميل جالك واتساب من زرار (عميل جديد).") : ""}
+    ${team}`;
+}
+// per salesperson in the caller's tree: open, waiting for first reply, late, won this month
+function crmTeamTable() {
+  const people = staff().filter((e) => e.code !== ME.code && manages(e.code) && CRM.leads.some((l) => l.owner === e.code));
+  if (!people.length) return "";
+  const ym = today().slice(0, 7);
+  const row = (e) => { const ls = CRM.leads.filter((l) => l.owner === e.code), o = ls.filter(isOpen);
+    return { e, open: o.length, wait: o.filter((l) => !l.first).length, breach: ls.filter((l) => sla(l)?.late || sla(l)?.ok === false).length,
+      late: o.filter((l) => l.first && l.next && Date.parse(l.next) < Date.now()).length, won: ls.filter((l) => l.stage === "won" && (l.last || "").startsWith(ym)).length }; };
+  return `<div class="card"><h2>${icon("users")}الفريق</h2><div class="tbl flat"><table><thead><tr><th>الاسم</th><th>مفتوحة</th><th>مستنية أول رد</th><th>خرق الـ 6 ساعات</th><th>متابعات متأخرة</th><th>تعاقد الشهر ده</th></tr></thead><tbody>
+    ${people.map(row).map((r) => `<tr><td>${esc(empName(r.e))}</td><td class="num">${r.open}</td><td class="num">${r.wait}</td><td class="num">${r.breach ? `<span class="pill p-bad">${r.breach}</span>` : 0}</td><td class="num">${r.late ? `<span class="pill p-warn">${r.late}</span>` : 0}</td><td class="num">${r.won}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+// distribution: the unassigned inbox with a suggestion per salesperson
+function crmStats(code) {
+  const ls = CRM.leads.filter((l) => l.owner === code), o = ls.filter(isOpen), closed = ls.filter((l) => !isOpen(l));
+  const firsts = ls.filter((l) => l.first && l.assignedAt).map((l) => Date.parse(l.first) - Date.parse(l.assignedAt));
+  const present = (S.punches[code] || []).some((t) => t.startsWith(today()));
+  return { open: o.length, won: ls.filter((l) => l.stage === "won").length, closed: closed.length,
+    conv: closed.length ? Math.round((ls.filter((l) => l.stage === "won").length / closed.length) * 100) : null,
+    speed: firsts.length ? Math.round(firsts.reduce((a, b) => a + b, 0) / firsts.length / 60000) : null, present };
+}
+function suggest() {
+  return salesPeople().map((e) => ({ e, s: crmStats(e.code) })).sort((a, b) => (b.s.present - a.s.present) || (a.s.open - b.s.open) || ((b.s.conv ?? 0) - (a.s.conv ?? 0)));
+}
+function crm() {
+  if (!CRM || !db.crmReady) return leads();
+  const inbox = CRM.leads.filter((l) => !l.owner && isOpen(l)).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const sug = suggest().slice(0, 4), f = CRMF, q = f.q.trim();
+  let list = CRM.leads.filter((l) => l.owner);
+  if (f.stage === "open") list = list.filter(isOpen); else if (f.stage) list = list.filter((l) => l.stage === f.stage);
+  if (f.owner) list = list.filter((l) => l.owner === f.owner);
+  if (q) list = list.filter((l) => l.name.includes(q) || l.phone.includes(q) || (l.campaign || "").includes(q));
+  const breach = CRM.leads.filter((l) => isOpen(l) && sla(l)?.late).length;
+  const ownerOpts = salesPeople().map((e) => [e.code, empName(e)]);
+  return `<div class="kpis"><div class="kpi${inbox.length ? " bad" : ""}"><span>مستنية توزيع</span><b>${inbox.length}</b></div><div class="kpi${breach ? " bad" : ""}"><span>عدّت الـ 6 ساعات من غير رد</span><b>${breach}</b></div>
+    <div class="kpi"><span>مفتوحة مع السيلز</span><b>${CRM.leads.filter((l) => l.owner && isOpen(l)).length}</b></div><div class="kpi"><span>تعاقدات آخر 90 يوم</span><b>${CRM.leads.filter((l) => l.stage === "won").length}</b></div></div>
+    <div class="card"><h2>${icon("bell")}مستنية توزيع <span class="badge">${inbox.length}</span></h2>
+      ${sug.length ? `<p class="note">الترشيح: الحاضر النهارده الأول، وبعدين الأقل في العملاء المفتوحين، وبعدين الأعلى في التحويل.</p>` : '<p class="note">حدد مناصب فرق المبيعات في الهيكل الوظيفي عشان أرشحلك مين ياخد.</p>'}
+      ${inbox.map((l) => `<div class="act lead"><div class="row"><b class="spacer">${esc(l.name)}</b><span class="pill p-warn">مستني من ${ago(l.at)}</span></div>
+        <div class="note">${[l.phone, projName(l.project), srcName(l.source), l.campaign].filter(Boolean).map(esc).join(" · ")}</div>${l.notes ? `<div class="note">${esc(l.notes)}</div>` : ""}
+        <div class="row">${sug.map(({ e, s }) => `<button class="btn sm" data-assign="${l.id}" data-to="${esc(e.code)}">${esc(empName(e))}<small class="note"> ${s.present ? "حاضر · " : ""}${s.open} مفتوح${s.conv != null ? ` · ${s.conv}%` : ""}</small></button>`).join("")}
+          <select data-assignsel="${l.id}" aria-label="توزيع ${esc(l.name)}">${opts(ownerOpts, "", "حد تاني...")}</select>
+          <button class="btn ghost sm" data-leadclose="${l.id}">مكرر / مش مناسب</button></div></div>`).join("") || '<p class="note">مفيش ليدز مستنية. كل حاجة اتوزعت.</p>'}</div>
+    ${leadAddForm(true)}
+    <div class="card"><h2>${icon("list-details")}كل العملاء مع السيلز</h2>
+      <div class="row"><label class="row field-inline">السيلز<select id="crmOwner">${opts(ownerOpts, f.owner, "الكل")}</select></label>
+        <label class="row field-inline">المرحلة<select id="crmStage">${opts([["open", "المفتوحة"], ...STAGES], f.stage, "الكل")}</select></label>
+        <label class="row field-inline">بحث<input type="search" id="crmQ" value="${esc(f.q)}" placeholder="اسم أو موبايل أو حملة"></label></div>
+      <div class="tbl flat"><table><thead><tr><th>العميل</th><th>الموبايل</th><th>المشروع</th><th>السيلز</th><th>المرحلة</th><th>الـ 6 ساعات</th><th>المتابعة</th><th>تحويل</th></tr></thead><tbody>
+      ${list.slice(0, 300).map((l) => `<tr><td>${esc(l.name)}<div class="note">${esc(srcName(l.source))}${l.campaign ? " · " + esc(l.campaign) : ""}</div></td><td dir="ltr">${esc(l.phone)}</td><td>${esc(projName(l.project))}</td><td>${esc(nameOf(l.owner))}</td>
+        <td>${stagePill(l.stage)}</td><td>${slaBadge(l) || (sla(l)?.done ? '<span class="pill p-ok">في الميعاد</span>' : "-")}</td><td>${nextBadge(l) || "-"}</td>
+        <td>${isOpen(l) ? `<select data-assignsel="${l.id}" aria-label="تحويل ${esc(l.name)}">${opts(ownerOpts, l.owner)}</select>` : "-"}</td></tr>`).join("") || `<tr><td colspan="8">${empty("list-details", "مفيش عملاء هنا")}</td></tr>`}</tbody></table></div></div>
+    ${fold("upload#crmimport", "استيراد من Excel", `<p class="note">انسخ الأعمدة من Excel بالترتيب ده والزقها هنا (سطر لكل عميل): <b>الاسم، الموبايل، المصدر، الحملة، المشروع، كود السيلز، ملاحظات</b>. المصدر والحملة والمشروع والكود اختياريين. لو فيه أي غلطة مش هيتضاف ولا سطر، وهيقولك الغلط فين.</p>
+      <form id="leadImportForm"><textarea name="rows" rows="6" dir="auto" style="width:100%" placeholder="أحمد محمد&#9;01012345678&#9;facebook&#9;حملة الساحل&#9;مشروع الساحل&#9;357"></textarea>
+      <div id="importOut"></div><div><button class="btn primary" type="submit">استيراد</button></div></form>`)}
+    ${R.admin ? fold("building#crmprojects", `المشاريع (${CRM.projects.length})`, `<div class="tbl flat"><table><tbody>${CRM.projects.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(p.developer)}</td><td>${esc(p.area)}</td></tr>`).join("")}</tbody></table></div>
+      <form class="add" id="projForm"><label>المشروع<input type="text" name="name" required maxlength="80"></label><label>المطور<input type="text" name="developer" maxlength="80"></label><label>المنطقة<input type="text" name="area" maxlength="60" placeholder="الساحل / الإسكندرية"></label><div><button class="btn" type="submit">${icon("plus")}إضافة</button></div></form>`) : ""}`;
+}
+// "\t"-separated rows pasted from Excel -> import rows
+function parseLeadRows(text) {
+  const src = new Map(SOURCES_CRM.flatMap(([k, l]) => [[k, k], [l, k]]));
+  return text.split(/\r?\n/).map((l) => l.split(/\t|,(?=\S)/).map((x) => x.trim())).filter((c) => c.some(Boolean))
+    .map(([name, phone, source, campaign, project, owner, notes]) => ({ name, phone, source: src.get(source) || (source ? "other" : "excel"), campaign, project, owner, notes }));
+}
+
 // ---------------------------------------------------------------- weekly sales evaluation
 const CATS = [["media", "الميديا"], ["leads", "الليدز"], ["attitude", "الالتزام"], ["development", "التطوير"]];
 const catName = (c) => CATS.find(([k]) => k === c)?.[1] || c;
@@ -1976,6 +2152,16 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.hirecancel) { HIRE = null; render(); return; }
+  if (t.id === "leadAddToggle") { CRM_ADD = !CRM_ADD; render(); if (CRM_ADD) $("#leadAddForm [name=name]")?.focus(); return; }
+  if (d.leadlog) { LEAD_LOG = LEAD_LOG === Number(d.leadlog) ? 0 : Number(d.leadlog); render(); $("#leadLogForm [name=result]")?.focus(); return; }
+  if (d.lead) {
+    const id = Number(d.lead); LEAD = LEAD === id ? 0 : id; render();
+    if (LEAD) { LEAD_ACTS = { id, rows: await db.crmActivities(id).catch(() => []) }; render(); }
+    return;
+  }
+  if (d.nx) { const i = t.closest("form")?.next; if (i) i.value = d.nx; return; }
+  if (d.assign) { act(() => db.crmAssign(Number(d.assign), d.to), `اتوزع على ${nameOf(d.to)}`); return; }
+  if (d.leadclose) { const r = prompt("ليه هتقفل الليد ده؟ (مكرر، رقم غلط، مش مناسب...)"); if (r && r.trim().length >= 3) act(() => db.crmClose(Number(d.leadclose), r.trim()), "اتقفل"); return; }
   if (d.appcv) { downloadCv(d.appcv); return; }
   if (d.rlevel) { RLEVEL = d.rlevel; render(); return; }
   if (t.id === "repPrint") { window.print(); return; }
@@ -2063,6 +2249,14 @@ document.addEventListener("click", async (ev) => {
 document.addEventListener("change", async (ev) => {
   const t = ev.target, d = t.dataset; if (busy && t.id !== "month") return;
   if (t.id === "month") { refresh(t.value); return; }
+  if (d.assignsel && t.value) { const to = t.value; act(() => db.crmAssign(Number(d.assignsel), to), `اتوزع على ${nameOf(to)}`); return; }
+  if (t.id === "crmOwner" || t.id === "crmStage") { CRMF[t.id === "crmOwner" ? "owner" : "stage"] = t.value; render(); return; }
+  if (t.name === "result" && t.form?.id === "leadLogForm") {
+    $("#leadRule").textContent = { no_answer: "لازم تحدد المكالمة الجاية خلال 24 ساعة.", busy: "لازم تحدد المكالمة الجاية خلال 24 ساعة.", thinking: "لازم تحدد المتابعة الجاية خلال 3 أيام.",
+      visit_done: "الزيارة بتتأكد من تسجيل تواجدك (اجتماع أو موقع) في آخر 3 ساعات. سجّل تواجدك الأول لو لسه.", won: "مبروك! العميل هيتقفل كتعاقد.",
+      not_interested: "اكتب السبب.", wrong_number: "اكتب السبب.", lost: "اكتب السبب." }[t.value] || (["answered", "interested", "visit_booked", "offer_sent"].includes(t.value) ? "حدد ميعاد الخطوة الجاية." : "");
+    return;
+  }
   if (d.cap || d.capcat || d.capscope) {
     const key = (d.cap || d.capcat || d.capscope).split("|")[0], p = posOf(key); if (!p) return;
     const f = {};
@@ -2222,6 +2416,31 @@ document.addEventListener("submit", async (ev) => {
     if (!Object.keys(scores).length) { toast("اختار درجة لمعيار واحد على الأقل", true); return; }
     act(() => db.appReview(f.dataset.id, scores, v.date, v.by, v.notes), "اتحفظ تقييم المقابلة"); return;
   }
+  if (f.id === "leadAddForm") {
+    if (!v.name.trim() || !v.phone.trim()) { toast("اكتب الاسم والموبايل", true); return; }
+    act(async () => { await db.crmAdd(v); CRM_ADD = false; }, v.owner ? `اتضاف واتوزع على ${nameOf(v.owner)}` : (R.admin || R.leads_assign) && !v.owner && tab === "crm" ? "اتضاف ومستني التوزيع" : "اتضاف العميل"); return;
+  }
+  if (f.id === "leadLogForm") {
+    const next = v.next ? cairoTime(v.next.slice(0, 10), v.next.slice(11, 16)).toISOString() : null;
+    // on a rule error keep the form as typed: just say what to fix
+    try {
+      busy = true; const r = await db.crmLog(Number(f.dataset.id), v.kind, v.result, v.note.trim(), next); busy = false;
+      LEAD_LOG = 0; if (LEAD === Number(f.dataset.id)) LEAD = 0;
+      toast(r?.verified === false ? "اتسجلت، بس مفيش تسجيل تواجد في وقت الزيارة. مديرك هيوصله تنبيه." : "اتسجلت المتابعة", r?.verified === false);
+      await refresh();
+    } catch (e) { busy = false; toast(errMsg(e), true); }
+    return;
+  }
+  if (f.id === "leadImportForm") {
+    const rows = parseLeadRows(v.rows || ""); if (!rows.length) { toast("الزق صفوف من Excel الأول", true); return; }
+    try {
+      const r = await db.crmImport(rows);
+      if (!r.ok) { $("#importOut").innerHTML = `<div class="banner bad">مفيش حاجة اتضافت. صلّح دول وجرب تاني:<ul>${r.errors.map((x) => `<li>سطر ${x.row}: ${esc(x.msg)}</li>`).join("")}</ul></div>`; return; }
+      toast(`اتضاف ${r.inserted} عميل`); await refresh();
+    } catch (e) { toast(errMsg(e), true); }
+    return;
+  }
+  if (f.id === "projForm") { act(() => db.crmAddProject(v.name.trim(), v.developer.trim(), v.area.trim()), "اتضاف المشروع"); return; }
   if (f.id === "aboutForm") { act(() => db.appAbout(f.dataset.id, v.about, v.match, v.note), "اتحفظت النبذة"); return; }
   if (f.id === "appInviteForm") {
     const at = cairoTime(v.day, v.time);
@@ -2296,6 +2515,7 @@ async function login(v) {
   } finally { btn.disabled = false; btn.textContent = label; }
 }
 document.addEventListener("input", (ev) => {
+  if (ev.target.id === "crmQ") { CRMF.q = ev.target.value; const pos = ev.target.selectionStart; render(); const el = $("#crmQ"); el.focus(); el.setSelectionRange(pos, pos); return; }
   if (ev.target.id === "rfQ") { RF.q = ev.target.value; const pos = ev.target.selectionStart; render(); const el = $("#rfQ"); el.focus(); el.setSelectionRange(pos, pos); return; }
   if (ev.target.name === "mode") {
     const signup = ev.target.value === "signup";

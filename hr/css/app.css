@@ -562,3 +562,11 @@ tr.dirty td, tr.dirty th { background: var(--warn-soft); }
 /* interview invitation preview and hiring profile (neon/011_cv_leavers.sql) */
 .msg-preview { margin-top: 10px; }
 .msg-preview p.wrap, .access p.wrap { white-space: pre-line; background: var(--soft, rgba(127,127,127,.08)); border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; line-height: 1.8; }
+
+/* CRM (neon/012_crm.sql) */
+.act.lead .row { flex-wrap: wrap; }
+.act.lead.sel { outline: 2px solid var(--acc, #0f7e76); outline-offset: -2px; }
+.lead-log { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line, rgba(127,127,127,.3)); }
+.timeline { list-style: none; margin: 10px 0 0; padding: 0 12px 0 0; border-inline-start: 2px solid var(--line, rgba(127,127,127,.3)); }
+.timeline li { padding: 6px 12px 8px 0; position: relative; }
+.timeline li::before { content: ""; position: absolute; inset-inline-start: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--acc, #0f7e76); }

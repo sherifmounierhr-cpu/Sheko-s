@@ -90,3 +90,12 @@ export function scopeLive(L, v) {
   if (!L) return L;
   return { checkins: L.checkins.filter((c) => v.team(c.code)), punches: L.punches.filter((p) => v.has("uploader") || v.team(p.code)), meetings: L.meetings.filter((m) => v.has("meetings") || v.team(m.code)) };
 }
+
+// CRM (neon/012_crm.sql): distributors see every lead; others their own and
+// their tree's. Phone numbers only for the owner and distributors.
+export function scopeCrm(CRM, v, target) {
+  const dist = v.has("leads_assign") || v.has("admin");
+  const leads = CRM.leads.filter((l) => dist || (l.owner && (v.self(l.owner) || v.managed.has(l.owner))))
+    .map((l) => (dist || v.self(l.owner) ? l : { ...l, phone: "", phone2: "" }));
+  return { ...CRM, leads };
+}

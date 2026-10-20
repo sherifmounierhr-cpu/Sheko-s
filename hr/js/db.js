@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241800";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241800";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610251000";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610251000";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -39,7 +39,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -630,3 +630,35 @@ export async function deviceStatus() {
 }
 export async function deviceAdd(serial, name) { check(await client.rpc("hr_device_add", { p_serial: serial, p_name: name || null })); }
 export async function deviceRemove(serial) { check(await client.rpc("hr_device_remove", { p_serial: serial })); }
+
+// ---------------------------------------------------------------- CRM (neon/012_crm.sql)
+
+export let crmReady = true;
+const LEAD_COLS = "id,name,phone_tail,source,campaign,project_id,budget,notes,owner_code,assigned_at,stage,lost_reason,next_action_at,first_action_at,last_action_at,created_at,created_by_code";
+// Open leads plus those closed in the last 90 days; phone numbers only where the caller may see them.
+export async function loadCrm() {
+  const since = new Date(Date.now() - 90 * 864e5).toISOString();
+  const [leads, projects, contacts] = await Promise.all([
+    all(() => client.from("crm_leads").select(LEAD_COLS).or(`stage.not.in.(won,lost),last_action_at.gte.${since},created_at.gte.${since}`).order("created_at", { ascending: false })),
+    get(client.from("crm_projects").select("*").order("sort").order("name")),
+    client.rpc("hr_lead_contacts").then(check),
+  ]).catch((e) => { if (/schema cache|does not exist|PGRST20|hr_lead/i.test(e.message)) { crmReady = false; return [[], [], []]; } throw e; });
+  crmReady = true;
+  const ph = Object.fromEntries((contacts || []).map((c) => [c.id, c]));
+  return {
+    leads: leads.map((l) => ({ id: l.id, name: l.name, tail: l.phone_tail, phone: ph[l.id]?.phone || "", phone2: ph[l.id]?.phone2 || "", source: l.source, campaign: l.campaign || "",
+      project: l.project_id, budget: l.budget || "", notes: l.notes || "", owner: l.owner_code || "", assignedAt: l.assigned_at, stage: l.stage, lost: l.lost_reason || "",
+      next: l.next_action_at, first: l.first_action_at, last: l.last_action_at, at: l.created_at, by: l.created_by_code || "" })),
+    projects: projects.map((p) => ({ id: p.id, name: p.name, developer: p.developer || "", area: p.area || "", active: p.active !== false })),
+  };
+}
+export async function crmActivities(id) { return get(client.from("crm_activities").select("*").eq("lead_id", id).order("at", { ascending: false }).limit(100)); }
+export async function crmAdd(v) {
+  return check(await client.rpc("hr_lead_add", { p_name: v.name, p_phone: v.phone, p_source: v.source || "manual", p_campaign: v.campaign || null,
+    p_project: v.project ? Number(v.project) : null, p_notes: v.notes || null, p_owner: v.owner || null, p_phone2: v.phone2 || null, p_budget: v.budget || null }));
+}
+export async function crmAssign(id, code) { check(await client.rpc("hr_lead_assign", { p_id: id, p_code: code || null })); }
+export async function crmLog(id, kind, result, note, next) { return check(await client.rpc("hr_lead_log", { p_id: id, p_kind: kind, p_result: result || null, p_note: note || null, p_next: next || null })); }
+export async function crmClose(id, reason) { check(await client.rpc("hr_lead_close", { p_id: id, p_reason: reason })); }
+export async function crmImport(rows) { return check(await client.rpc("hr_lead_import", { p_rows: rows })); }
+export async function crmAddProject(name, developer, area) { check(await client.from("crm_projects").insert({ name, developer: developer || null, area: area || null })); }
