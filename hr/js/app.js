@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610241000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241000";
+import * as db from "./db.js?v=202610241200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610241200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610241200";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, decidesFor } from "./viewas.js?v=202610241200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,11 +124,16 @@ function errMsg(e) { if (e?.readOnly) return e.message; const m = String(e?.mess
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610241000";
+const BUILD = "202610241200";
+// A plain reload can come back from the browser's cache (GitHub Pages lets it keep
+// pages for 10 minutes), still on the old build. Asking for the page under a new
+// address skips that cache, so every file comes from the new build.
+function newBuild(v) { const u = new URL(location.href); u.searchParams.set("v", v); location.replace(u.href); }
+if (new URLSearchParams(location.search).has("v")) { const u = new URL(location.href); u.searchParams.delete("v"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
 async function fresh() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
-    if (v && v !== BUILD && sessionStorage.getItem("hr-build") !== v) { sessionStorage.setItem("hr-build", v); location.reload(); return false; }
+    if (v && v !== BUILD && sessionStorage.getItem("hr-build") !== v) { sessionStorage.setItem("hr-build", v); newBuild(v); return false; }
   } catch { /* offline or blocked storage: carry on with this build */ }
   return true;
 }

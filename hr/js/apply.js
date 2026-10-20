@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241000";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241000";
-import { SECTIONS } from "./applyForm.js?v=202610241000";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610241200";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610241200";
+import { SECTIONS } from "./applyForm.js?v=202610241200";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -165,11 +165,16 @@ $("#applyForm").addEventListener("submit", (ev) => {
   submit();
 });
 
-const BUILD = "202610241000";
+// A plain reload can come back from the browser's cache (GitHub Pages lets it keep
+// pages for 10 minutes), still on the old build. Asking for the page under a new
+// address skips that cache, so every file comes from the new build.
+function newBuild(v) { const u = new URL(location.href); u.searchParams.set("v", v); location.replace(u.href); }
+if (new URLSearchParams(location.search).has("v")) { const u = new URL(location.href); u.searchParams.delete("v"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+const BUILD = "202610241200";
 async function boot() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
-    if (v && v !== BUILD && sessionStorage.getItem("apply-build") !== v) { sessionStorage.setItem("apply-build", v); location.reload(); return; }
+    if (v && v !== BUILD && sessionStorage.getItem("apply-build") !== v) { sessionStorage.setItem("apply-build", v); newBuild(v); return; }
   } catch { /* carry on */ }
   if (!client) { $("#formBody").innerHTML = '<p class="note">الفورم مش متاح دلوقتي.</p>'; return; }
   try {
