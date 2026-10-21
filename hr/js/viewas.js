@@ -9,7 +9,7 @@
 export function visibleCodes(target, S, TR, evalTeams = []) {
   const has = (r) => target.roles.includes(r);
   const mine = target.code || "";
-  // hr_manages in neon/010_security.sql: everyone with viewall or approveall; with manager, every unit at or below one they head
+  // hr_manages in neon/013_admin.sql: everyone with viewall or approveall; with manager, everyone they're above
   const managed = has("viewall") || has("approveall") ? new Set(S.employees.map((e) => e.code)) : treeCodes(target, S);
   const evaluated = new Set(S.employees.filter((e) => evalTeams.some((t) => String(t) === String(e.teamId))).map((e) => e.code));
   const plans = TR?.plans || [];
@@ -21,12 +21,28 @@ export function visibleCodes(target, S, TR, evalTeams = []) {
     follows: (c) => managed.has(c) || mentees.has(c) };
 }
 
-// employees in the units `target` heads and everything below them
+// hr_bosses in neon/013_admin.sql: everyone above `code`, through the heads of their
+// unit and every unit above it, and through direct managers (reports_to), up the chain.
+// people: [{ code, unit, reports }], units: [{ id, head, parent }]
+export function bossesOf(code, people, units) {
+  const P = new Map(people.map((p) => [p.code, p])), U = new Map(units.map((u) => [String(u.id), u]));
+  const out = new Set(), seenP = new Set([code]), seenU = new Set(), todo = [code];
+  while (todo.length) {
+    const p = P.get(todo.pop()); if (!p) continue;
+    const ups = p.reports ? [p.reports] : [];
+    for (let u = U.get(String(p.unit ?? "")); u && !seenU.has(String(u.id)); u = U.get(String(u.parent ?? ""))) { seenU.add(String(u.id)); if (u.head) ups.push(u.head); }
+    for (const b of ups) { out.add(b); if (!seenP.has(b)) { seenP.add(b); todo.push(b); } }
+  }
+  return out;
+}
+
+// with the manager role: everyone `target` is above
 function treeCodes(target, S) {
   const mine = target.code || "";
-  const units = new Set(target.roles.includes("manager") && mine ? S.teams.filter((t) => t.manager === mine).map((t) => String(t.id)) : []);
-  for (let grew = true; grew;) { grew = false; for (const t of S.teams) if (t.parent !== "" && t.parent != null && units.has(String(t.parent)) && !units.has(String(t.id))) { units.add(String(t.id)); grew = true; } }
-  return new Set(S.employees.filter((e) => units.has(String(e.teamId))).map((e) => e.code));
+  if (!target.roles.includes("manager") || !mine) return new Set();
+  const people = S.employees.map((e) => ({ code: e.code, unit: e.teamId, reports: e.reportsTo || "" }));
+  const units = S.teams.map((t) => ({ id: t.id, head: t.manager, parent: t.parent }));
+  return new Set(people.filter((p) => bossesOf(p.code, people, units).has(mine)).map((p) => p.code));
 }
 
 // hr_decides in neon/010_security.sql: who `me` may decide for (never themself);

@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610251200";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610251200";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211900";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211900";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -243,6 +243,7 @@ export async function load(ym, R = {}, only = "") {
         teamId: e.team_id ?? "", job: e.job || "", dept: e.dept || "",
         in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false,
         hireDate: e.hire_date || "", experience: e.experience || "", position: e.position || "",
+        reportsTo: e.reports_to || "", plus: e.roles_plus || [], minus: e.roles_minus || [],
         salary: Number(p.salary) || 0, account: p.account || "", pay: p.pay_method || (p.account ? "bank" : "cash"),
       };
     }),
@@ -602,8 +603,8 @@ export async function loadOrg() {
     orgReady = true; orgError = "";
     return {
       units: (chart?.units || []).map((u) => ({ id: u.id, name: u.name, parent: u.parent ?? "", kind: u.kind || "sales", head: u.head || "", sort: u.sort || 0 })),
-      people: (chart?.people || []).map((p) => ({ code: p.code, name: p.name, unit: p.unit ?? "", position: p.position || "", job: p.job || "" })),
-      positions: positions.map((p) => ({ key: p.key, title: p.title, rank: p.rank, roles: p.roles || [], evalCats: p.eval_cats || [], evalScope: p.eval_scope || "none", sort: p.sort })),
+      people: (chart?.people || []).map((p) => ({ code: p.code, name: p.name, unit: p.unit ?? "", position: p.position || "", job: p.job || "", reports: p.reports || "" })),
+      positions: positions.map((p) => ({ key: p.key, title: p.title, rank: p.rank, roles: p.roles || [], evalCats: p.eval_cats || [], evalScope: p.eval_scope || "none", sort: p.sort, track: p.track || "staff" })),
     };
   } catch (e) { orgError = e.message || String(e); orgReady = !missing(e); return null; }
 }
@@ -617,8 +618,14 @@ export async function savePosition(key, fields) {
   if ("evalCats" in fields) row.eval_cats = fields.evalCats;
   if ("evalScope" in fields) row.eval_scope = fields.evalScope;
   if ("title" in fields) row.title = fields.title;
+  if ("track" in fields) row.track = fields.track;
   check(await client.from("org_positions").update(row).eq("key", key));
 }
+// the administration (neon/013_admin.sql): direct manager, personal permissions, new positions
+export async function setReportsTo(code, boss) { check(await client.rpc("hr_set_reports_to", { p_code: code, p_boss: boss || null })); }
+export async function setPersonRoles(code, plus, minus) { return check(await client.rpc("hr_set_person_roles", { p_code: code, p_plus: plus, p_minus: minus })); }
+export async function addOrgPosition(title, track, roles) { return check(await client.rpc("hr_add_position", { p_title: title, p_track: track, p_roles: roles })); }
+export async function dropOrgPosition(key) { check(await client.rpc("hr_drop_position", { p_key: key })); }
 export async function applyTemplate(key) { return check(await client.rpc("hr_apply_template", { p_position: key })); }
 export async function syncEvalAll() { return check(await client.rpc("hr_sync_eval_all")); }
 

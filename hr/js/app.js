@@ -1,7 +1,7 @@
-import * as db from "./db.js?v=202610251200";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610251200";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610251200";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor } from "./viewas.js?v=202610251200";
+import * as db from "./db.js?v=202610211900";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610211900";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610211900";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610211900";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -121,7 +121,9 @@ function ask(title, text = "", yes = "تأكيد", danger = false) {
   d.returnValue = "";
   return new Promise((res) => { d.addEventListener("close", () => res(d.returnValue === "yes"), { once: true }); d.showModal(); y.focus(); });
 }
-const CRM_ERR = [[/duplicate:(\d+)/, "الرقم ده موجود كعميل مفتوح بالفعل (رقم $1)."], [/duplicate/, "الرقم ده عميل مفتوح مع زميل تاني. كلم المسؤول عن التوزيع."],
+const CRM_ERR = [[/manager cycle/, "مينفعش: الشخص ده تحته في الهيكل، فمينفعش يبقى مديره."], [/bad manager/, "المدير ده مبقاش شغال."],
+  [/position in use/, "فيه موظفين في المنصب ده، انقلهم الأول."], [/duplicate title/, "فيه منصب بالاسم ده بالفعل."], [/built-in position/, "ده منصب أساسي ومينفعش يتمسح."],
+  [/duplicate:(\d+)/, "الرقم ده موجود كعميل مفتوح بالفعل (رقم $1)."], [/duplicate/, "الرقم ده عميل مفتوح مع زميل تاني. كلم المسؤول عن التوزيع."],
   [/bad phone/, "رقم الموبايل مش مظبوط."], [/name required/, "اكتب اسم العميل."], [/next within 24h/, "لو العميل مردّش، لازم تحدد المكالمة الجاية خلال 24 ساعة (اللائحة 4.6)."],
   [/next within 3 days/, "لو العميل بيفكر، لازم تحدد المتابعة الجاية خلال 3 أيام (اللائحة 4.6)."], [/next required/, "حدد ميعاد الخطوة الجاية."],
   [/note too short/, "اكتب إيه اللي حصل بالتفصيل (10 حروف على الأقل)."], [/reason required/, "اكتب السبب."], [/next in the past/, "ميعاد الخطوة الجاية لازم يكون في المستقبل."],
@@ -131,7 +133,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610251200";
+const BUILD = "202610211900";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -600,22 +602,38 @@ const normAr = (v) => String(v || "").toLowerCase().replace(/[أإآ]/g, "ا").r
 const unitById = (id) => ORG?.units.find((u) => String(u.id) === String(id));
 const kidsOf = (id) => ORG.units.filter((u) => String(u.parent) === String(id)).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, "ar"));
 function unitsBelow(id) { const out = [String(id)]; for (let i = 0; i < out.length; i++) for (const k of kidsOf(out[i])) if (!out.includes(String(k.id))) out.push(String(k.id)); return out; }
-const isLead = (p) => (posOf(p.position)?.rank ?? 9) <= 2;
-const peopleIn = (ids) => ORG.people.filter((p) => ids.includes(String(p.unit)) && !isLead(p));
+// the administration (neon/013_admin.sql): positions on the admin track sit beside the teams, not in them
+const TRACK = [["admin", "الإدارة"], ["sales", "المبيعات"], ["staff", "عام"]];
+const isAdm = (p) => posOf(p.position)?.track === "admin";
+const peopleIn = (ids) => ORG.people.filter((p) => ids.includes(String(p.unit)) && !isAdm(p));
+const bossesIn = (code) => bossesOf(code, ORG.people, ORG.units);
+const under = (code) => ORG.people.filter((p) => p.code !== code && bossesIn(p.code).has(code));
+// hr_manager_of: the direct manager, else the nearest unit head above
+function managerOf(code) {
+  const p = ORG.people.find((x) => x.code === code); if (!p) return "";
+  if (p.reports && ORG.people.some((x) => x.code === p.reports)) return p.reports;
+  for (let u = unitById(p.unit), n = 0; u && n < 20; u = unitById(u.parent), n++) if (u.head && u.head !== code) return u.head;
+  return "";
+}
+// the roles a person gets: template + their additions - their removals (hr_person_roles)
+function personRoles(code) {
+  const e = empBy(code), tpl = posOf(e?.position)?.roles || [], minus = e?.minus || [];
+  return [...new Set([...tpl, ...(e?.plus || [])])].filter((r) => !minus.includes(r));
+}
 function accState(code) {
   if (!R.admin) return "";
   if (S.users.some((u) => u.code === code)) return "";
   const inv = S.invites.find((i) => i.code === code && !i.usedAt && (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()));
   return inv ? '<span class="pill p-info">مستني يفعّل</span>' : '<span class="pill p-mute">مالوش حساب</span>';
 }
-function pchip(p, head = false) {
+function pchip(p, head = false, sub = "") {
   const pos = posOf(p.position), sel = ORG_SEL === p.code;
-  const inner = `<span class="av r${pos?.rank || 5}" aria-hidden="true">${esc(initials(p.name))}</span><span class="who"><b>${esc(p.name)}</b><small>${esc(pos?.title || p.job || "من غير منصب")}</small></span>${head ? '<span class="pill p-acc">رئيس</span>' : ""}${accState(p.code)}`;
+  const inner = `<span class="av r${pos?.rank || 5}" aria-hidden="true">${esc(initials(p.name))}</span><span class="who"><b>${esc(p.name)}</b><small>${esc(pos?.title || p.job || "من غير منصب")}${sub ? ` · ${esc(sub)}` : ""}</small></span>${head ? '<span class="pill p-acc">رئيس</span>' : ""}${accState(p.code)}`;
   return R.admin ? `<button type="button" class="pchip${head ? " head" : ""}${sel ? " sel" : ""}" data-person="${esc(p.code)}"${sel ? ' aria-pressed="true"' : ""}>${inner}</button>` : `<div class="pchip${head ? " head" : ""}">${inner}</div>`;
 }
 function unitBox(u, depth = 0) {
   const head = ORG.people.find((p) => p.code === u.head);
-  const members = ORG.people.filter((p) => String(p.unit) === String(u.id) && p.code !== u.head && !isLead(p)).sort((a, b) => (posOf(a.position)?.rank ?? 9) - (posOf(b.position)?.rank ?? 9) || a.name.localeCompare(b.name, "ar"));
+  const members = ORG.people.filter((p) => String(p.unit) === String(u.id) && p.code !== u.head && !isAdm(p)).sort((a, b) => (posOf(a.position)?.rank ?? 9) - (posOf(b.position)?.rank ?? 9) || a.name.localeCompare(b.name, "ar"));
   const total = peopleIn(unitsBelow(u.id)).length, kids = kidsOf(u.id);
   const many = members.length > 8;
   const list = `<div class="u-members">${members.map((p) => pchip(p)).join("")}</div>`;
@@ -629,13 +647,13 @@ function unitBox(u, depth = 0) {
 // What a person can see and do, in plain words.
 function accessText(code) {
   const p = ORG.people.find((x) => x.code === code), pos = posOf(p?.position), u = S.users.find((x) => x.code === code);
-  const roles = u ? u.roles : pos?.roles || [], has = (r) => roles.includes(r) || roles.includes("admin");
-  const out = [];
+  const roles = u ? u.roles : personRoles(code), has = (r) => roles.includes(r) || roles.includes("admin");
+  const out = [], boss = managerOf(code);
+  out.push(boss ? `طلباته بتروح لـ ${nameOf(boss)}` : "مالوش مدير فوقه، فطلباته بتروح لصاحب صلاحية (يوافق على الشركة كلها) بس");
   if (has("viewall") || has("approveall")) out.push(`بيشوف الشركة كلها (${ORG.people.length} موظف)`);
   else if (has("manager")) {
-    const heads = ORG.units.filter((x) => x.head === code), ids = [...new Set(heads.flatMap((x) => unitsBelow(x.id)))];
-    const n = peopleIn(ids).filter((x) => x.code !== code).length;
-    out.push(heads.length ? `بيشوف ${ids.length === 1 ? "وحدة واحدة" : `${ids.length} وحدات`} و${n} موظف تحته` : "دور مدير بس مش رئيس أي وحدة لسه، فمش هيشوف حد");
+    const below = under(code), direct = below.filter((x) => x.reports === code).length, heads = ORG.units.filter((x) => x.head === code).length;
+    out.push(below.length ? `بيشوف ${below.length} موظف تحته${heads ? ` (رئيس ${heads === 1 ? "وحدة" : `${heads} وحدات`})` : ""}${direct ? `، منهم ${direct} بيتبعوه مباشرة` : ""}` : "دور مدير بس محدش تحته لسه (مش رئيس وحدة ومحدش بيتبعه)، فمش هيشوف حد");
   } else out.push("بيشوف صفحته بس");
   if (has("approveall")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات لأي حد في الشركة");
   else if (has("manager")) out.push("بيوافق على الأذونات والإجازات ويقترح الجزاءات للي تحته بس");
@@ -670,12 +688,31 @@ function personPanel() {
       <label>المنصب<select name="position">${opts(ORG.positions.map((x) => [x.key, x.title]), p.position, "من غير منصب")}</select></label>
       <label>الوحدة<select name="unit">${opts(ORG.units.map((x) => [x.id, x.name]), p.unit, "من غير وحدة")}</select></label>
       <label class="field-inline"><input type="checkbox" name="head"${unit && unit.head === p.code ? " checked" : ""}> رئيس الوحدة دي</label>
+      <label>مديره المباشر<select name="boss">${bossOpts(p)}</select></label>
       <div><button class="btn primary" type="submit">حفظ</button></div></form>
     <div class="access"><h3>${icon("shield-check")}صلاحياته</h3><ul>${a.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
       ${a.linked ? "" : '<p class="note">لسه مالوش حساب. الصلاحيات دي هتتطبق لوحدها أول ما حسابه يتربط.</p>'}</div>
+    ${rolesBox(p)}
     ${profileBox(p.code)}
     <div class="row">${a.linked ? `<button type="button" class="btn" data-viewas="${esc(a.user.id)}">${icon("eye")}شوف شاشته</button>` : `<button type="button" class="btn" data-go="set">${icon("key")}اعمله كود تفعيل</button>`}
       ${e?.job ? `<span class="note">الوظيفة في الملف: ${esc(e.job)}</span>` : ""}</div></div>`;
+}
+// who can be someone's direct manager: anyone working except themself and the people under them
+function bossOpts(p) {
+  const below = new Set(under(p.code).map((x) => x.code)), ok = ORG.people.filter((x) => x.code !== p.code && !below.has(x.code));
+  const lab = (x) => [x.code, `${x.name}${posOf(x.position) ? ` (${posOf(x.position).title})` : ""}`];
+  const adm = ok.filter(isAdm), rest = ok.filter((x) => !isAdm(x));
+  return `<option value="">${p.reports ? "مفيش (يشيله)" : "مفيش، يمشي على رئيس وحدته"}</option>${adm.length ? `<optgroup label="الإدارة">${opts(adm.map(lab), p.reports)}</optgroup>` : ""}${rest.length ? `<optgroup label="باقي الموظفين">${opts(rest.map(lab), p.reports)}</optgroup>` : ""}`;
+}
+// the person's permissions: the position's template, plus their own additions and removals
+function rolesBox(p) {
+  const e = empBy(p.code); if (!e) return "";
+  const tpl = posOf(p.position)?.roles || [], plus = e.plus || [], minus = e.minus || [];
+  const st = (k) => tpl.includes(k) ? (minus.includes(k) ? ["", "متشالة", "p-bad"] : [" checked", "من القالب", "p-mute"]) : plus.includes(k) ? [" checked", "إضافة", "p-ok"] : ["", "", ""];
+  return `<form class="access" id="rolesForm" data-code="${esc(p.code)}"><h3>${icon("key")}صلاحيات ${esc(p.name)} بالظبط</h3>
+    <p class="note">${posOf(p.position) ? `اللي عليها علامة جاية من قالب (${esc(posOf(p.position).title)}).` : "مالوش منصب، فمفيش قالب."} تقدر تزوّد أو تشيل لـ ${esc(p.name)} بس، ومش هتتمسح لما تطبّق القالب.</p>
+    <div class="caps-list">${CAPS.map(([k, l, h]) => { const [c, tag, cls] = st(k); return `<label class="cap-row" title="${esc(h)}"><input type="checkbox" name="cap_${k}"${c}> <span>${l}</span>${tag ? `<span class="pill ${cls}">${tag}</span>` : ""}</label>`; }).join("")}</div>
+    <div><button class="btn primary" type="submit">${icon("check")}حفظ الصلاحيات</button></div></form>`;
 }
 function unitPanel() {
   const isNew = ORG_UNIT === "new", u = isNew ? { id: "", name: "", parent: "", kind: "sales", head: "", sort: 0 } : unitById(ORG_UNIT); if (!u) return "";
@@ -716,38 +753,61 @@ function orgAlerts() {
   const noPos = ORG.people.filter((p) => !p.position).length;
   if (noPos) out.push(`${noPos} موظف لسه من غير منصب، فمش هياخدوا صلاحيات تلقائي`);
   for (const u of ORG.units.filter((x) => x.head)) { const acc = S.users.find((x) => x.code === u.head); if (acc && !acc.roles.includes("manager") && !acc.roles.includes("viewall") && !acc.roles.includes("approveall") && !acc.roles.includes("admin")) out.push(`${esc(nameOf(u.head))} رئيس ${esc(u.name)} بس حسابه مالوش دور (مدير)، فمش هيشوف فريقه`); }
+  const heads = new Set(ORG.units.map((u) => u.head));
+  for (const b of [...new Set(ORG.people.map((p) => p.reports).filter((c) => c && !heads.has(c)))]) { const acc = S.users.find((x) => x.code === b); if (acc && !["manager", "viewall", "approveall", "admin"].some((r) => acc.roles.includes(r))) out.push(`فيه ناس بيتبعوا ${esc(nameOf(b))} بس حسابه مالوش دور (مدير)، فمش هيشوفهم ولا يوافق على طلباتهم`); }
+  const alone = ORG.people.filter((p) => isAdm(p) && (posOf(p.position)?.rank ?? 9) > 1 && !managerOf(p.code));
+  if (alone.length) out.push(`${alone.map((p) => esc(p.name)).join("، ")}: ${alone.length === 1 ? "مالوش" : "مالهمش"} مدير مباشر، فالطلبات بتروح لصاحب صلاحية (يوافق على الشركة كلها) بس`);
   if (EV) for (const t of ORG.units.filter((x) => x.kind === "sales")) { const miss = CATS.filter(([c]) => !EV.assignments.some((a) => a.team === t.id && a.cat === c)).map(([, l]) => l); if (miss.length) out.push(`${esc(t.name)}: مفيش مقيّم لـ ${miss.join(" و")}`); }
   return out.length ? `<div class="card org-alerts"><h2>${icon("alert-triangle")}محتاج انتباهك <span class="badge">${out.length}</span></h2><ul>${out.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : `<div class="banner ok">${icon("check")}الهيكل متظبط: كل وحدة ليها رئيس، وكل حد ليه منصب.</div>`;
 }
 function templatesCard() {
   const count = (k) => S.employees.filter((e) => e.position === k && S.users.some((u) => u.code === e.code)).length;
-  return fold("shield-check#orgTpl", "قوالب الصلاحيات حسب المنصب", `<p class="note">كل منصب ليه قالب. أي حد يتربط حسابه بموظف في المنصب ده بياخد القالب لوحده. لو عدّلت قالب، دوس (طبّق) عشان يتحدث عند اللي في المنصب دلوقتي.</p>
+  return fold("shield-check#orgTpl", "قوالب الصلاحيات حسب المنصب", `<p class="note">كل منصب ليه قالب. أي حد يتربط حسابه بموظف في المنصب ده بياخد القالب لوحده. لو عدّلت قالب، دوس (طبّق) عشان يتحدث عند اللي في المنصب دلوقتي. مناصب (الإدارة) بتظهر فوق في قسم الإدارة، مش جوه الفرق.</p>
     <div class="tbl flat"><table class="caps"><thead><tr><th>المنصب</th>${CAPS.map(([k, l, h]) => `<th title="${esc(h)}">${l}</th>`).join("")}<th>أعمدة التقييم</th><th></th></tr></thead><tbody>
-    ${ORG.positions.map((p) => `<tr${ORG_DIRTY.has(p.key) ? ' class="dirty"' : ""}><th scope="row">${esc(p.title)}</th>
+    ${TRACK.map(([tk, tl]) => { const ps = ORG.positions.filter((p) => (p.track || "staff") === tk); return ps.length ? `<tr class="grp"><th colspan="${CAPS.length + 3}">${tl}</th></tr>` + ps.map((p) => `<tr${ORG_DIRTY.has(p.key) ? ' class="dirty"' : ""}><th scope="row">${p.key.startsWith("p_") ? `<input type="text" data-postitle="${p.key}" value="${esc(p.title)}" maxlength="60" aria-label="اسم المنصب" style="width:130px">` : esc(p.title)}
+      <div class="row nowrap"><select class="sm" data-captrack="${p.key}" aria-label="${esc(p.title)}: القسم">${opts(TRACK, p.track || "staff")}</select>${p.key.startsWith("p_") && !count(p.key) && !S.employees.some((e) => e.position === p.key) ? `<button type="button" class="btn ghost icon-only" data-posdel="${p.key}" aria-label="امسح ${esc(p.title)}">${icon("trash")}</button>` : ""}</div></th>
       ${CAPS.map(([k, l]) => `<td class="num"><input type="checkbox" data-cap="${p.key}|${k}"${p.roles.includes(k) ? " checked" : ""} aria-label="${esc(p.title)}: ${l}"></td>`).join("")}
       <td>${p.roles.includes("evaluator") ? `<div class="row nowrap">${CATS.map(([c, l]) => `<label class="mini-chk"><input type="checkbox" data-capcat="${p.key}|${c}"${p.evalCats.includes(c) ? " checked" : ""}>${l}</label>`).join("")}
         <select data-capscope="${p.key}" aria-label="${esc(p.title)}: نطاق التقييم">${opts([["below", "فرقه"], ["sales", "كل فرق المبيعات"]], p.evalScope === "none" ? "below" : p.evalScope)}</select></div>` : '<span class="note">-</span>'}</td>
-      <td><button type="button" class="btn${ORG_DIRTY.has(p.key) ? " primary" : ""}" data-apply="${p.key}">طبّق (${count(p.key)})</button></td></tr>`).join("")}
+      <td><button type="button" class="btn${ORG_DIRTY.has(p.key) ? " primary" : ""}" data-apply="${p.key}">طبّق (${count(p.key)})</button></td></tr>`).join("") : ""; }).join("")}
     </tbody></table></div>
+    <form class="row" id="orgPosForm"><input type="text" name="title" placeholder="اسم المنصب الجديد (مثلا: مدير مشتريات)" required maxlength="60" aria-label="اسم المنصب الجديد">
+      <select name="track" aria-label="القسم">${opts(TRACK, "admin")}</select><button class="btn" type="submit">${icon("plus")}منصب جديد</button></form>
     <dl class="cap-help">${CAPS.map(([, l, h]) => `<div><dt>${l}</dt><dd>${h}</dd></div>`).join("")}</dl>`);
 }
 function org() {
   const why = db.orgError ? `<div class="note" dir="ltr">${esc(db.orgError)}</div>` : "";
   if (!ORG && db.orgError && db.orgReady) return R.admin ? `<div class="banner bad">${icon("alert-triangle")}<div>الهيكل الوظيفي مش قادر يتحمّل. ابعت الرسالة دي للدعم الفني:${why}</div></div>` : empty("sitemap", "الهيكل الوظيفي مش متاح دلوقتي");
   if (!ORG) return db.orgReady ? skelHtml() : (R.admin ? `<div class="banner">${icon("alert-triangle")}<div>الهيكل الوظيفي لسه مش متفعل. شغّل neon/008_org.sql في Neon SQL Editor، وبعدين notify pgrst.${why}</div></div>` : empty("sitemap", "الهيكل الوظيفي لسه مش جاهز"));
-  const leads = ORG.people.filter(isLead).sort((a, b) => posOf(a.position).rank - posOf(b.position).rank || a.name.localeCompare(b.name, "ar"));
-  const roots = kidsOf(""), loose = ORG.people.filter((p) => !isLead(p) && (p.unit === "" || !unitById(p.unit)));
+  const roots = kidsOf(""), loose = ORG.people.filter((p) => !isAdm(p) && (p.unit === "" || !unitById(p.unit)));
   const nUnits = ORG.units.length, nPeople = ORG.people.length;
   return `${R.admin ? `${pendingCard()}${orgAlerts()}` : ""}
   <div class="row"><p class="note spacer">${nPeople} موظف في ${nUnits} ${nUnits === 1 ? "وحدة" : "وحدات"}${R.admin ? ". دوس على أي شخص أو وحدة عشان تعدّل." : ""}</p>
     ${R.admin ? `<button type="button" class="btn" id="unitNew">${icon("plus")}وحدة جديدة</button>` : ""}</div>
   ${R.admin && ORG_SEL ? personPanel() : ""}${R.admin && ORG_UNIT ? unitPanel() : ""}
   <div class="org">
-    ${leads.length ? `<section class="org-top" aria-label="القيادة"><h3 class="sr-only">القيادة</h3>${leads.map((p) => pchip(p)).join("")}</section><div class="org-stem" aria-hidden="true"></div>` : ""}
+    ${adminSection()}
     <div class="org-roots">${roots.map((u) => unitBox(u)).join("") || empty("sitemap", "لسه مفيش وحدات")}</div>
     ${loose.length ? `<section class="unit loose" aria-label="من غير وحدة"><header><span class="u-ic">${icon("help")}</span><h3>من غير وحدة</h3><span class="note">${loose.length} شخص</span></header><div class="u-members">${loose.map((p) => pchip(p)).join("")}</div></section>` : ""}
   </div>
   ${R.admin ? templatesCard() : ""}`;
+}
+// الإدارة: owners, the GM, department heads and admin staff, drawn as who reports to whom
+function adminSection() {
+  const adm = ORG.people.filter(isAdm); if (!adm.length) return "";
+  const byRank = (a, b) => (posOf(a.position)?.rank ?? 9) - (posOf(b.position)?.rank ?? 9) || a.name.localeCompare(b.name, "ar");
+  const inAdm = new Set(adm.map((p) => p.code)), seen = new Set();
+  const headOf = (c) => ORG.units.filter((u) => u.head === c).map((u) => u.name).join("، ");
+  const node = (p) => {
+    seen.add(p.code);
+    const kids = adm.filter((x) => x.reports === p.code && !seen.has(x.code)).sort(byRank);
+    const h = headOf(p.code), sub = h ? `رئيس ${h}` : p.reports && !inAdm.has(p.reports) ? `يتبع ${nameOf(p.reports)}` : "";
+    return `<li>${pchip(p, false, sub)}${kids.length ? `<ul>${kids.map(node).join("")}</ul>` : ""}</li>`;
+  };
+  const tops = adm.filter((p) => !p.reports || !inAdm.has(p.reports)).sort(byRank);
+  const tree = tops.map(node).join("") + adm.filter((p) => !seen.has(p.code)).map(node).join("");
+  return `<section class="org-adm" aria-label="الإدارة"><header><span class="u-ic">${icon("building")}</span><h3>الإدارة</h3><span class="note">${adm.length} شخص</span></header>
+    <ul class="adm-tree">${tree}</ul></section><div class="org-stem" aria-hidden="true"></div>`;
 }
 const skelHtml = () => '<div class="skel" aria-hidden="true"><i class="h"></i><i></i><i class="s"></i></div>';
 async function orgAct(fn, msg, full = false) {
@@ -1245,6 +1305,7 @@ function settings() {
   <form class="row" id="teamForm"><input type="text" name="name" placeholder="اسم الفريق الجديد" required><button class="btn" type="submit">إضافة فريق</button></form></div>
 
   <div class="card"><h2>المستخدمين والصلاحيات</h2>
+  <p class="note">الموظفين اللي ليهم منصب: غيّر صلاحياتهم من (الهيكل الوظيفي) بدوسة على اسمهم، عشان (طبّق) القالب مايمسحش التعديل.</p>
   <p class="note">(شوف شاشته) بيفتحلك البوابة زي ما الشخص ده بيشوفها بالظبط، عرض بس من غير ما تقدر تعدّل حاجة باسمه. أي حد يعمل حساب من صفحة الدخول بيظهر هنا من غير صلاحيات. اربطه بكود الموظف بتاعه، وعلّم الأدوار اللي ليه. الموظف العادي مش محتاج أي دور: بيبعت طلباته ويشوف حضوره بس.</p>
   <div class="tbl flat"><table><thead><tr><th>الإيميل</th><th>الاسم</th><th>كود الموظف</th>${ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
   ${S.users.map((u) => `<tr class="${!u.code && !u.roles.length ? "missing-name" : ""}"><td dir="ltr">${esc(u.email)}</td><td>${esc(u.name)}</td>
@@ -1787,7 +1848,8 @@ function leadAddForm(dist) {
     <label class="wide">ملاحظات<input type="text" name="notes" maxlength="2000"></label>
     <div><button class="btn primary" type="submit">إضافة</button></div></form></div>`;
 }
-const salesOnly = () => staff().filter((e) => ["sales", "lead"].includes(e.position) || CRM?.leads.some((l) => l.owner === e.code));
+const isSalesPos = (k) => (ORG?.positions?.length ? posOf(k)?.track === "sales" : ["sales", "lead"].includes(k));
+const salesOnly = () => staff().filter((e) => isSalesPos(e.position) || CRM?.leads.some((l) => l.owner === e.code));
 // suggestions: the sales people; until positions are set, everyone working
 const salesPeople = () => { const s = salesOnly(); return s.length ? s : staff(); };
 // any working employee can receive a lead; sales people listed first
@@ -2137,6 +2199,7 @@ document.addEventListener("click", async (ev) => {
   if (d.unit && !t.closest("form")) { ORG_UNIT = Number(d.unit); ORG_SEL = ""; render(); $("#orgPanel")?.scrollIntoView({ block: "nearest" }); $("#unitForm input")?.focus(); return; }
   if (t.id === "unitNew") { ORG_UNIT = "new"; ORG_SEL = ""; render(); $("#unitForm input")?.focus(); return; }
   if (t.id === "orgClose") { ORG_SEL = ""; ORG_UNIT = 0; render(); return; }
+  if (d.posdel) { const k = d.posdel; if (await ask(`تمسح منصب (${posOf(k)?.title})؟`, "محدش في المنصب ده دلوقتي.", "امسحه", true)) await orgAct(() => db.dropOrgPosition(k), "اتمسح المنصب", true); return; }
   if (d.apply) { const k = d.apply; await orgAct(async () => { const n = await db.applyTemplate(k); ORG_DIRTY.delete(k); toast(`اتطبق قالب (${posOf(k)?.title}) على ${n} ${n === 1 ? "حساب" : "حسابات"}`); }, null, true); return; }
   if (d.devdel) { if (await ask("تشيل الجهاز ده من البوابة؟", d.devdel, "شيله", true)) { try { await db.deviceRemove(d.devdel); DEV = await db.deviceStatus(); toast("اتشال الجهاز"); } catch (e) { toast(errMsg(e), true); } render(); } return; }
   if (d.viewas) { await startView(d.viewas); return; }
@@ -2265,6 +2328,8 @@ document.addEventListener("change", async (ev) => {
       not_interested: "اكتب السبب.", wrong_number: "اكتب السبب.", lost: "اكتب السبب." }[t.value] || (["answered", "interested", "visit_booked", "offer_sent"].includes(t.value) ? "حدد ميعاد الخطوة الجاية." : "");
     return;
   }
+  if (d.captrack) { await orgAct(() => db.savePosition(d.captrack, { track: t.value }), "اتنقل المنصب"); return; }
+  if (d.postitle) { const v = t.value.trim(); if (!v) { render(); return; } await orgAct(() => db.savePosition(d.postitle, { title: v }), "اتغيّر اسم المنصب"); return; }
   if (d.cap || d.capcat || d.capscope) {
     const key = (d.cap || d.capcat || d.capscope).split("|")[0], p = posOf(key); if (!p) return;
     const f = {};
@@ -2360,12 +2425,23 @@ document.addEventListener("submit", async (ev) => {
     return orgAct(async () => {
       if ((v.position || "") !== (p.position || "")) await db.setPosition(code, v.position);
       if (String(v.unit || "") !== String(p.unit ?? "")) await db.updateEmployee(code, "teamId", v.unit);
+      if ((v.boss || "") !== (p.reports || "")) await db.setReportsTo(code, v.boss);
       const unit = unitById(v.unit);
       if (v.head && unit && unit.head !== code) await db.updateTeam(unit.id, { manager: code });
       if (!v.head && oldUnit && oldUnit.head === code) await db.updateTeam(oldUnit.id, { manager: "" });
       if (v.head && oldUnit && String(oldUnit.id) !== String(v.unit) && oldUnit.head === code) await db.updateTeam(oldUnit.id, { manager: "" });
       await db.syncEvalAll().catch(() => 0);
     }, `اتحفظ ${p.name}`, true);
+  }
+  if (f.id === "rolesForm") {
+    const code = f.dataset.code, tpl = posOf(empBy(code)?.position)?.roles || [];
+    const on = CAPS.map(([k]) => k).filter((k) => f.elements["cap_" + k].checked);
+    const plus = on.filter((k) => !tpl.includes(k)), minus = tpl.filter((k) => !on.includes(k));
+    return orgAct(() => db.setPersonRoles(code, plus, minus), `اتحفظت صلاحيات ${nameOf(code)}`, true);
+  }
+  if (f.id === "orgPosForm") {
+    const title = v.title.trim(); if (!title) return;
+    return orgAct(async () => { await db.addOrgPosition(title, v.track, []); }, `اتضاف منصب (${title}). اختار صلاحياته من الجدول`);
   }
   if (f.id === "unitForm") {
     const id = f.dataset.unit;

@@ -570,3 +570,20 @@ tr.dirty td, tr.dirty th { background: var(--warn-soft); }
 .timeline { list-style: none; margin: 10px 0 0; padding: 0 12px 0 0; border-inline-start: 2px solid var(--line, rgba(127,127,127,.3)); }
 .timeline li { padding: 6px 12px 8px 0; position: relative; }
 .timeline li::before { content: ""; position: absolute; inset-inline-start: -7px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--acc, #0f7e76); }
+
+/* ---------------------------------------------------------------- the administration (neon/013_admin.sql) */
+.org-adm { padding: 14px; border-radius: var(--r-card); display: flex; flex-direction: column; gap: 10px;
+  background: linear-gradient(135deg, var(--accent-strong), color-mix(in srgb, var(--accent-strong) 70%, #000)); color: #fff; }
+.org-adm header { display: flex; align-items: center; gap: 8px; }
+.org-adm header h3 { margin: 0; font-size: 15px; flex: 1; }
+.org-adm header .note { color: rgba(255, 255, 255, .8); }
+.org-adm .u-ic { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(255, 255, 255, .16); flex: none; }
+.org-adm .pchip { background: var(--surface); color: var(--text); max-width: 100%; }
+.adm-tree, .adm-tree ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.adm-tree > li { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.adm-tree ul { padding-inline-start: 14px; border-inline-start: 2px solid rgba(255, 255, 255, .35); flex-direction: column; gap: 6px; }
+.adm-tree li { min-width: 0; }
+.caps-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 14px; margin: 6px 0 10px; }
+.cap-row { display: flex; align-items: center; gap: 6px; font-size: 14px; min-height: 32px; }
+table.caps tr.grp th { background: var(--sunken); text-align: start; font-size: 13px; color: var(--muted); }
+select.sm { --ctl-h: 30px; font-size: 12px; padding-block: 0; margin-top: 4px; }

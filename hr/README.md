@@ -208,6 +208,25 @@ upload stays as the fallback. Setup steps in Arabic: `tools/device/README.md`.
   عملائي shows a live countdown, and the team table shows breaches.
 - When an employee leaves, their open leads go back to the unassigned pool.
 
+## The administration (`neon/013_admin.sql`)
+
+- Every position belongs to a track: الإدارة (administration), المبيعات
+  (sales) or عام (general). The owner, the GM, department heads and admin staff
+  (accountant, reception, office, IT) are on the administration track; the
+  org chart draws them in their own الإدارة section by who reports to whom,
+  not inside a team.
+- **Direct manager** (`employees.reports_to`): anyone can have one. That
+  manager, and everyone above them, sees the person and decides on their
+  requests (with the `manager` permission), and requests are sent to them.
+  People without one fall back to their unit's head, as before. A manager
+  can't be someone below the person.
+- **Personal permissions:** a person gets their position's template plus
+  their own additions, minus their own removals (`roles_plus` /
+  `roles_minus`, set from the person's panel). Applying a template keeps them.
+- The admin adds positions from the templates card (`hr_add_position`), can
+  move one to another track, rename an added one, and delete an added one
+  nobody holds.
+
 ## "شوف شاشته" (admin preview)
 
 In الإعدادات, each user has a "شوف شاشته" button. The portal then shows
@@ -225,7 +244,8 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    then `neon/003_training.sql`, `neon/004_recruitment.sql`,
    `neon/005_sales_eval.sql`, `neon/006_weekly_report.sql`,
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
-   `neon/010_security.sql`, `neon/011_cv_leavers.sql` and `neon/012_crm.sql`
+   `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql` and
+   `neon/013_admin.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -271,6 +291,7 @@ neon/009_device.sql    devices, hr_device login: punches from the office sync pr
 neon/010_security.sql  see vs decide (approveall), pay, punches, audit, tighter grants
 neon/011_cv_leavers.sql  CV upload, HR profile, interview invitation, lock out leavers
 neon/012_crm.sql       CRM: leads, distribution, structured follow-up, landing-page capture
+neon/013_admin.sql     the administration: tracks, direct manager, personal permissions
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)
