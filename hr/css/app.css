@@ -606,6 +606,7 @@ select.sm { --ctl-h: 30px; font-size: 12px; padding-block: 0; margin-top: 4px; }
 .sev { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .sev.bad { background: var(--bad); } .sev.warn { background: var(--warn); } .sev.info { background: var(--info); } .sev.gold { background: var(--gold); }
 .com-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+.com-grid > .full { grid-column: 1 / -1; }
 .cbars { display: flex; flex-direction: column; gap: 8px; }
 .cbar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 90px; gap: 8px; align-items: center; font-size: 13px; }
 .cbar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

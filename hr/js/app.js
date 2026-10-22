@@ -1,7 +1,8 @@
-import * as db from "./db.js?v=202610221500";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610221500";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610221500";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610221500";
+import * as db from "./db.js?v=202610221800";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610221800";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610221800";
+import { readSheets } from "./xlsx.js?v=202610221800";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610221800";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -139,7 +140,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610221500";
+const BUILD = "202610221800";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -1058,7 +1059,7 @@ function comSettings() {
       <div class="tbl flat"><table><thead><tr><th>الموظف</th><th>مسؤول العمولات</th><th>يشوف العمولات</th></tr></thead><tbody>
       ${holders.map((p) => `<tr><td>${esc(p.name)}${p.active ? "" : ' <span class="pill p-mute">مش شغال</span>'}</td>
         ${["commissions", "commissions_view"].map((r) => `<td><input type="checkbox" data-comgrant="${esc(p.user)}|${r}"${p.roles.includes(r) ? " checked" : ""}${w && !(r === "commissions" && p.user === ME.id) ? "" : " disabled"} aria-label="${esc(p.name)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
-    <div class="card"><h2>${icon("upload")}نقل الدفتر القديم</h2><p class="note">الخطوة الجاية: هتصدّر Excel من دفتر العمولات القديم وترفعه هنا مرة واحدة، وتشوف معاينة قبل ما أي حاجة تتحفظ.</p></div>
+    ${w ? comImportCard() : ""}
   </div>`;
 }
 function com() {
@@ -1067,6 +1068,117 @@ function com() {
   const views = { dash: comDash, deals: comDeals, claims: comClaims, payouts: comPayouts, set: comSettings };
   return `<div class="com-seg" role="tablist" aria-label="أقسام العمولات">${COM_VIEWS.map(([k, l]) => `<button type="button" role="tab" data-comv="${k}" aria-selected="${COMV === k}">${l}</button>`).join("")}</div>
     ${R.commissions ? "" : '<p class="note">صلاحيتك قراية بس.</p>'}${views[COMV]()}`;
+}
+
+// ---- bringing the old ledger in (neon/015_com_import.sql). Column names follow the old
+// ledger's own export and its import aliases, Arabic and English.
+let COM_IMP = null;
+const COM_ALIASES = {
+  sale: ["date", "التاريخ", "تاريخ البيع"], contract: ["contract date", "تاريخ التعاقد", "تاريخ العقد"], register: ["السجل التجاري", "register", "commercial register"],
+  client: ["client name", "اسم العميل", "العميل", "client"], phone: ["phone", "الموبايل", "التليفون", "رقم الهاتف"], developer: ["developer", "المطور"],
+  project: ["project", "المشروع"], method: ["sales method", "طريقة البيع"], sales: ["sales name", "اسم السيلز", "السيلز"],
+  team: ["team", "تيم ليدر", "التيم ليدر", "team leader"], unit: ["unit code", "كود الوحده", "كود الوحدة"],
+  price: ["total price", "سعر الوحدة", "سعر الوحده", "price"], rate: ["commissin rate", "commission rate", "نسبة العمولة", "نسبه العموله", "النسبة"],
+  resale: ["resale commission", "عمولة إعادة البيع"], status: ["deal status", "حالة الصفقة"], collection: ["collection status", "حالة التحصيل"],
+  commText: ["الكوميشن"], claim: ["موعد و حالة المطالبة", "موعد وحالة المطالبة", "موعد المطالبة"], invoiced: ["الفاتورة الضريبية", "تم الإرسال"],
+  received: ["موعد و استلام الكوميشن", "موعد واستلام الكوميشن"], sent: ["ميعاد ارسال الفاتورة", "ميعاد إرسال الفاتورة", "موعد ارسال الفاتورة", "invoice send date"],
+  notes: ["ملاحظات", "notes"], type: ["نوع العمولة"], wht: ["ض5% في الفاتوره", "ض5% في الفاتورة"], collected: ["collected", "المحصّل", "المحصل"],
+  collectedOn: ["collect date", "تاريخ التحصيل"],
+};
+const COM_ALIAS_IDX = (() => { const m = new Map(); for (const [k, arr] of Object.entries(COM_ALIASES)) for (const a of arr) m.set(normAr(a), k); return m; })();
+function comDateAny(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number" && v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10);
+  const s = String(v); let m = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/(\d{1,2})\s*[\\/\-.]\s*(\d{1,2})\s*[\\/\-.]\s*(\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+}
+const comNum = (v) => { if (v == null || v === "") return ""; const n = Number(String(v).replace(/[^\d.\-]/g, "")); return Number.isFinite(n) ? n : ""; };
+const comYes = (v) => v === true || /^(true|yes|نعم|تم|1|✓)$/i.test(String(v ?? "").trim());
+function comMethod(v) { const s = String(v || "").toLowerCase(); return /nawy|ناوي/.test(s) ? "nawy" : /resale|ريسيل|اعاده|إعادة/.test(s) ? "resale" : /direct|مباشر/.test(s) ? "direct" : s ? (/developer|مطور/.test(s) ? "developer" : "other") : ""; }
+// one sheet's rows -> deals; the header row is the one of the first 8 that matches the most known columns
+function comRowsToDeals(rows) {
+  let best = { i: -1, score: 0, map: {} };
+  for (let i = 0; i < Math.min(8, rows.length); i++) {
+    const map = {}; let score = 0;
+    (rows[i] || []).forEach((h, c) => { const k = COM_ALIAS_IDX.get(normAr(h)); if (k && map[k] == null) { map[k] = c; score++; } });
+    if (score > best.score) best = { i, score, map };
+  }
+  if (best.score < 3 || best.map.client == null) return [];
+  const { map } = best, out = [];
+  for (const r of rows.slice(best.i + 1)) {
+    const g = (k) => (map[k] != null ? r[map[k]] : null), client = String(g("client") ?? "").trim();
+    if (!client || /^-+$/.test(client)) continue;
+    let price = comNum(g("price")), rate = comNum(g("rate"));
+    if (rate !== "" && rate > 1) rate = rate / 100;
+    const ct = g("commText");
+    if (ct != null && ct !== "") { const m = String(ct).match(/([\d,.]+)\s*\(?\s*([\d.]+)\s*%?\s*\)?/); if (m) { const amt = comNum(m[1]), rr = m[2] ? comNum(m[2]) / 100 : ""; if (rate === "" && rr) rate = rr; if (price === "" && amt && rate) price = Math.round(amt / rate); } }
+    const ds = String(g("status") ?? ""), cs = String(g("collection") ?? "");
+    const d = { client, unit: String(g("unit") ?? "").trim(), phone: String(g("phone") ?? "").trim(), project: String(g("project") ?? "").trim(), developer: String(g("developer") ?? "").trim(),
+      register: String(g("register") ?? "").trim(), notes: String(g("notes") ?? "").trim(), sales: String(g("sales") ?? "").trim(), team: String(g("team") ?? "").trim(),
+      method: comMethod(g("method")), price, rate, resale: comNum(g("resale")), sale: comDateAny(g("sale")), contract: comDateAny(g("contract")),
+      status: /contract|تعاقد/i.test(ds) ? "contract" : /reserv|حجز/i.test(ds) ? "reservation" : "",
+      claim: comDateAny(g("claim")), sent: comDateAny(g("sent")), invoiced: comYes(g("invoiced")),
+      collected: comNum(g("collected")), collectedOn: comDateAny(g("collectedOn")) || comDateAny(g("received")), fully: /^collected$|تم التحصيل/i.test(cs.trim()) || comYes(g("received")),
+      type: String(g("type") ?? "").trim().toUpperCase() === "N" ? "N" : "G", wht: g("wht") == null ? true : !!comNum(g("wht")) || comYes(g("wht")) };
+    out.push(d);
+  }
+  return out;
+}
+// rows for the same client and unit (across sheets) become one deal; later rows only fill blanks
+function comMerge(list) {
+  // a row with no unit (like the old claims sheet) joins the same client's deal
+  const key = (d) => normAr(d.client) + "|" + normAr(d.unit), out = new Map();
+  const fill = (m, d) => { for (const [f, v] of Object.entries(d)) if ((m[f] === "" || m[f] == null || m[f] === false) && v !== "" && v != null && v !== false) m[f] = v; };
+  for (const d of [...list.filter((x) => x.unit), ...list.filter((x) => !x.unit)]) {
+    const m = out.get(key(d)) || (!d.unit && [...out.values()].find((x) => normAr(x.client) === normAr(d.client)));
+    if (m) fill(m, d); else out.set(key(d), { ...d });
+  }
+  return [...out.values()].map((d) => {
+    const total = (Number(d.price) || 0) * (Number(d.rate) || 0) + (Number(d.resale) || 0);
+    const collected = d.collected !== "" ? d.collected : d.fully && total ? Math.round(total * 100) / 100 : "";
+    return { client: d.client, unit: d.unit, phone: d.phone, project: d.project, developer: d.developer, register: d.register, notes: d.notes, sales: d.sales, team: d.team,
+      method: d.method, price: d.price, rate: d.rate, resale: d.resale, sale: d.sale, contract: d.contract, status: d.status, claim: d.claim, sent: d.sent,
+      collected, collected_on: d.collectedOn, inv_type: d.type, wht: d.wht };
+  });
+}
+async function comImportFile(file) {
+  COM_IMP = { name: file.name, busy: true }; render();
+  try {
+    const sheets = await readSheets(file);
+    const rows = comMerge(sheets.flatMap((s) => comRowsToDeals(s.rows)));
+    if (!rows.length) { COM_IMP = null; toast("مش لاقي أعمدة معروفة في الملف (زي اسم العميل أو Client Name).", true); render(); return; }
+    const res = await db.comImport(rows, false, true);
+    COM_IMP = { name: file.name, rows, res, paid: true };
+  } catch (e) { COM_IMP = null; toast(/not a zip|bad zip|unsupported/.test(e.message) ? "الملف مش Excel (xlsx) ولا CSV سليم." : errMsg(e), true); }
+  render();
+}
+function comImportCard() {
+  const x = COM_IMP, r = x?.res;
+  return `<div class="card full"><h2>${icon("upload")}نقل الدفتر القديم</h2>
+    <p class="note">صدّر Excel من دفتر العمولات القديم (زرار تصدير) وارفعه هنا. هتشوف معاينة الأول، ومفيش حاجة بتتحفظ غير لما تدوس (استورد). الصفقة اللي موجودة بالفعل (نفس العميل والوحدة) بيتملا فيها الفاضي بس.</p>
+    <label class="btn" for="comImpFile">${icon("upload")}اختار ملف Excel أو CSV</label><input type="file" id="comImpFile" accept=".xlsx,.csv" hidden>
+    ${x?.busy ? `<p class="note">بقرا ${esc(x.name)}...</p>` : ""}
+    ${r ? `<div class="kpis"><div class="kpi"><span>صفقات جديدة</span><b>${r.new}</b></div><div class="kpi"><span>صفقات هيتملا الفاضي فيها</span><b>${r.update}</b></div>
+        <div class="kpi${r.errors.length ? " bad" : ""}"><span>أخطاء</span><b>${r.errors.length}</b></div><div class="kpi"><span>تنبيهات</span><b>${r.warnings.length}</b></div></div>
+      ${r.errors.length ? `<div class="banner bad">${icon("alert-triangle")}<div>صلّح دول في الملف وارفعه تاني (مفيش حاجة اتحفظت):<ul>${r.errors.map((e) => `<li>سطر ${e.row}: ${esc(e.msg)}</li>`).join("")}</ul></div></div>` : ""}
+      ${r.warnings.length ? `<details class="fold"><summary>${icon("alert-triangle")}<span>تنبيهات (${r.warnings.length})</span></summary><div class="body"><ul>${r.warnings.map((e) => `<li>${esc(e.msg)}</li>`).join("")}</ul></div></details>` : ""}
+      <div class="tbl flat" style="max-height:320px;overflow:auto"><table><thead><tr><th>العميل</th><th>الوحدة</th><th>العمولة</th><th>اتحصّل</th><th></th></tr></thead><tbody>
+        ${r.plan.slice(0, 500).map((p) => `<tr><td>${esc(p.client)}</td><td>${esc(p.unit || "-")}</td><td class="num">${money(Number(p.commission))}</td><td class="num">${money(Number(p.collected))}</td>
+          <td>${p.action === "new" ? '<span class="pill p-ok">جديدة</span>' : '<span class="pill p-info">موجودة</span>'}</td></tr>`).join("")}</tbody></table></div>
+      <label class="field-inline"><input type="checkbox" id="comImpPaid"${x.paid ? " checked" : ""}> نصيب الموظفين من الفلوس اللي اتحصّلت قبل كده يتسجل إنه اتصرف</label>
+      <p class="note">لو شلت العلامة، نصيبهم هيظهر عندك في (المستحقات) مستني اعتماد وصرف. في الحالتين مش هيظهر للموظفين غير لما انت تظهره.</p>
+      <div class="row"><button class="btn primary" type="button" data-comimport="apply"${r.errors.length ? " disabled" : ""}>${icon("check")}استورد ${x.rows.length} صفقة</button><button class="btn ghost" type="button" data-comimport="cancel">إلغاء</button></div>` : ""}
+  </div>`;
+}
+// The admin names the first commissions owner, once, while nobody holds it (hr_com_role_guard).
+function comBootCard() {
+  if (!R.admin || VIEW || S.users.some((u) => u.roles.includes("commissions"))) return "";
+  const list = S.users.filter((u) => u.id !== ME.id && u.code);
+  return `<div class="card"><h2>${icon("lock")}مسؤول العمولات</h2>
+    <p class="note">العمولات مقفولة على الكل، حتى على مدير النظام. اختار مرة واحدة مين هيبقى مسؤول العمولات (المحاسب مثلا). بعد كده هو بس اللي يدي الصلاحية لغيره، ومش هتقدر تشوف العمولات ولا تغيّر ده من هنا.</p>
+    <form class="row" id="comBootForm"><select name="user" required aria-label="مسؤول العمولات">${opts(list.map((u) => [u.id, `${nameOf(u.code) || u.name} (${u.email})`]), "", "اختار الموظف")}</select><button class="btn primary" type="submit">اعتمد</button></form></div>`;
 }
 // what an employee sees (hr_my_commissions)
 function mycom() {
@@ -1579,6 +1691,7 @@ function settings() {
   </tbody></table></div>
   <form class="row" id="teamForm"><input type="text" name="name" placeholder="اسم الفريق الجديد" required><button class="btn" type="submit">إضافة فريق</button></form></div>
 
+  ${comBootCard()}
   <div class="card"><h2>المستخدمين والصلاحيات</h2>
   <p class="note">الموظفين اللي ليهم منصب: غيّر صلاحياتهم من (الهيكل الوظيفي) بدوسة على اسمهم، عشان (طبّق) القالب مايمسحش التعديل.</p>
   <p class="note">(شوف شاشته) بيفتحلك البوابة زي ما الشخص ده بيشوفها بالظبط، عرض بس من غير ما تقدر تعدّل حاجة باسمه. أي حد يعمل حساب من صفحة الدخول بيظهر هنا من غير صلاحيات. اربطه بكود الموظف بتاعه، وعلّم الأدوار اللي ليه. الموظف العادي مش محتاج أي دور: بيبعت طلباته ويشوف حضوره بس.</p>
@@ -2474,6 +2587,12 @@ document.addEventListener("click", async (ev) => {
   if (d.unit && !t.closest("form")) { ORG_UNIT = Number(d.unit); ORG_SEL = ""; render(); $("#orgPanel")?.scrollIntoView({ block: "nearest" }); $("#unitForm input")?.focus(); return; }
   if (t.id === "unitNew") { ORG_UNIT = "new"; ORG_SEL = ""; render(); $("#unitForm input")?.focus(); return; }
   if (t.id === "orgClose") { ORG_SEL = ""; ORG_UNIT = 0; render(); return; }
+  if (d.comimport) {
+    if (d.comimport === "cancel") { COM_IMP = null; render(); return; }
+    const x = COM_IMP; if (!x?.rows) return;
+    await comAct(async () => { const r = await db.comImport(x.rows, true, !!x.paid); if (!r.applied) throw new Error(r.errors?.[0]?.msg || "import failed"); COM_IMP = null; }, `اتنقل الدفتر: ${x.res.new} صفقة جديدة و${x.res.update} اتملا فيها الفاضي`);
+    return;
+  }
   if (d.comv) { COMV = d.comv; COM_DEAL = 0; render(); return; }
   if (d.comdeal != null) { COM_DEAL = d.comdeal === "new" ? "new" : Number(d.comdeal); COMV = "deals"; render(); window.scrollTo({ top: 0 }); return; }
   if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast("اتنسخ"); } catch { toast(d.copy); } return; }
@@ -2614,6 +2733,8 @@ document.addEventListener("change", async (ev) => {
   const t = ev.target, d = t.dataset; if (busy && t.id !== "month") return;
   if (t.id === "month") { refresh(t.value); return; }
   if (d.assignsel && t.value) { const to = t.value; act(() => db.crmAssign(Number(d.assignsel), to), `اتوزع على ${nameOf(to)}`); return; }
+  if (t.id === "comImpFile") { const f = t.files[0]; t.value = ""; if (f) await comImportFile(f); return; }
+  if (t.id === "comImpPaid") { if (COM_IMP) COM_IMP.paid = t.checked; return; }
   if (t.id === "comStatus") { COMF.status = t.value; render(); return; }
   if (d.compick) { t.checked ? COM_SEL.add(Number(d.compick)) : COM_SEL.delete(Number(d.compick)); render(); return; }
   if (d.comsharepct) { await comAct(() => db.comSetShare(Number(d.comsharepct), t.value), "اتغيرت النسبة"); return; }
@@ -2737,6 +2858,11 @@ document.addEventListener("submit", async (ev) => {
       if (v.head && oldUnit && String(oldUnit.id) !== String(v.unit) && oldUnit.head === code) await db.updateTeam(oldUnit.id, { manager: "" });
       await db.syncEvalAll().catch(() => 0);
     }, `اتحفظ ${p.name}`, true);
+  }
+  if (f.id === "comBootForm") {
+    const u = S.users.find((x) => x.id === v.user); if (!u) return;
+    if (!(await ask(`تخلّي ${nameOf(u.code) || u.name} مسؤول العمولات؟`, "دي خطوة مرة واحدة. بعدها انت مش هتقدر تغيّرها ولا تشوف العمولات.", "أيوه"))) return;
+    return act(() => db.comGrant(u.id, "commissions", true), `بقى ${nameOf(u.code) || u.name} مسؤول العمولات`);
   }
   if (f.id === "comDealForm") {
     const id = Number(f.dataset.deal) || 0, fields = { ...v, rate: Number(v.rate) / 100, contract: v.contract || (v.status === "contract" ? today() : "") };

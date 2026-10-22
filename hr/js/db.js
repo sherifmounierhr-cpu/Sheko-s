@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221500";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221500";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221800";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221800";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -745,3 +745,4 @@ export async function comFile(id) { return check(await client.rpc("hr_com_file",
 export async function myCommissions() {
   try { return (check(await client.rpc("hr_my_commissions")) || []); } catch (e) { if (missing(e)) return []; throw e; }
 }
+export async function comImport(rows, apply, historyPaid) { return check(await client.rpc("hr_com_import", { p_rows: rows, p_apply: apply, p_history_paid: historyPaid })); }
