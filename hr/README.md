@@ -277,7 +277,8 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/005_sales_eval.sql`, `neon/006_weekly_report.sql`,
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
-   `neon/013_admin.sql`, `neon/014_commissions.sql` and `neon/015_com_import.sql`
+   `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql` and
+   `neon/016_identity.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -326,6 +327,7 @@ neon/012_crm.sql       CRM: leads, distribution, structured follow-up, landing-p
 neon/013_admin.sql     the administration: tracks, direct manager, personal permissions
 neon/014_commissions.sql  commissions: deals, invoices, staff shares, payouts (confidential)
 neon/015_com_import.sql   one-time import of the old commissions ledger from Excel
+neon/016_identity.sql     a signed-in request without its identity fails (and is retried) instead of coming back empty
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)

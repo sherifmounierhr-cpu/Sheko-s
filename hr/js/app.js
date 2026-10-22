@@ -1,8 +1,8 @@
-import * as db from "./db.js?v=202610221800";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610221800";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610221800";
-import { readSheets } from "./xlsx.js?v=202610221800";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610221800";
+import * as db from "./db.js?v=202610230900";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610230900";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610230900";
+import { readSheets } from "./xlsx.js?v=202610230900";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610230900";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -140,7 +140,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610221800";
+const BUILD = "202610230900";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -2704,6 +2704,7 @@ document.addEventListener("click", async (ev) => {
     const rows = await db.diagnose(S.meta.month);
     let g = GLITCH; try { g ||= JSON.parse(sessionStorage.getItem("hr-glitch") || "null"); } catch { /* storage blocked */ }
     if (g) rows.push(["أول تحميل كان ناقص", JSON.stringify(g).slice(0, 1500)]);
+    rows.push(["طلبات وصلت من غير تسجيل الدخول واتعادت", String(db.GLITCH_N)]);
     rows.push(["التوظيف في الصفحة", REC ? `${REC.apps.length} طلب، الجداول ${db.recruitReady ? "ظاهرة" : "مش ظاهرة"}` : "مش محمّل"]);
     rows.push(["محمّل في الصفحة", `موظفين ${S.employees.length}، أكواد ليها بصمات ${Object.keys(S.punches).length}، آخر يوم ${LAST || "-"}، الشهور ${MONTHS.join(",") || "-"}`]);
     box.innerHTML = `<div class="tbl flat"><table><tbody>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="wrap" dir="auto">${esc(v)}</td></tr>`).join("")}</tbody></table></div>`;

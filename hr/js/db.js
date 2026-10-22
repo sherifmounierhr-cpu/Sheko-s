@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221800";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221800";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610230900";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610230900";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -9,14 +9,26 @@ export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 // (table, status, rows, the sign-in token's subject and minutes left; never
 // the token itself) so the connection check can show what a bad load saw.
 export const TRACE = [];
+// how many reads had to be asked again because they arrived without the sign-in (shown in the connection check)
+export let GLITCH_N = 0;
 const jwtInfo = (h) => {
   try {
     const t = String(h || "").replace(/^Bearer /, ""), p = JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
     return { sub: String(p.sub || "").slice(0, 8), left: p.exp ? Math.round(p.exp - Date.now() / 1000) : null };
   } catch { return { sub: "", left: null }; }
 };
+// A signed-in request that reached the database without its identity fails with
+// "no identity" (neon/016_identity.sql) instead of coming back empty. It's a
+// passing glitch of the first burst of requests, so ask again, twice at most.
 async function traced(url, opts = {}) {
-  const res = await fetch(url, { ...opts, cache: "no-store" });
+  let res = await fetch(url, { ...opts, cache: "no-store" });
+  for (let i = 0; i < 2 && res.status >= 400; i++) {
+    const body = await res.clone().text().catch(() => "");
+    if (!/no identity/.test(body)) break;
+    GLITCH_N++;
+    await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    res = await fetch(url, { ...opts, cache: "no-store" });
+  }
   try {
     const h = new Headers(opts.headers), u = new URL(String(url));
     TRACE.push({ t: new Date().toLocaleTimeString("en-GB"), what: u.pathname.split("/").pop(), st: res.status, range: res.headers.get("content-range") || "", ...jwtInfo(h.get("Authorization")) });

@@ -1,8 +1,8 @@
 // Public job application: no account. Talks to the database as the Data API's
 // anonymous role, which can only read open positions and call hr_apply().
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221800";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221800";
-import { SECTIONS } from "./applyForm.js?v=202610221800";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610230900";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610230900";
+import { SECTIONS } from "./applyForm.js?v=202610230900";
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -170,7 +170,7 @@ $("#applyForm").addEventListener("submit", (ev) => {
 // address skips that cache, so every file comes from the new build.
 function newBuild(v) { const u = new URL(location.href); u.searchParams.set("v", v); location.replace(u.href); }
 if (new URLSearchParams(location.search).has("v")) { const u = new URL(location.href); u.searchParams.delete("v"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
-const BUILD = "202610221800";
+const BUILD = "202610230900";
 async function boot() {
   try {
     const { v } = await (await fetch("version.json", { cache: "no-store" })).json();
