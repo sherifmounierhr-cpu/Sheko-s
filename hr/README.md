@@ -227,6 +227,30 @@ upload stays as the fallback. Setup steps in Arabic: `tools/device/README.md`.
   move one to another track, rename an added one, and delete an added one
   nobody holds.
 
+## Commissions (`neon/014_commissions.sql`)
+
+- **Confidential by design.** Only `commissions` (the commissions owner: full
+  access) and `commissions_view` (read-only) see anything. Being system admin
+  doesn't let you in, and neither do `manager`, `viewall` or `approveall`.
+  The admin can name the first owner (never themself) while nobody holds the
+  permission; after that only an owner grants or removes it, and every change
+  notifies the owners. Changes are logged in `com_audit`, not the shared
+  `audit_log`.
+- **Deals** record the client, project, unit, price and the company's rate;
+  the commission is worked out by the database. Each deal names the staff
+  who share in it and their percentage of the commission before VAT (role
+  defaults in settings, editable per deal, never above 100% in total).
+- **Parts** are the claims/invoices to the developer: G (includes VAT) or N
+  (VAT on top), with or without withholding. Marking a part collected creates
+  everyone's share of it (an entitlement); a collected part is locked.
+- **Entitlements** are approved, shown to the employee when the owner chooses
+  (plus a master switch), and marked paid with date and method. Payroll is
+  not involved. A payment recorded by mistake can be undone with a reason.
+- **Cancelling** a deal voids unpaid shares and claws back paid ones as a
+  negative line against the employee's next payment.
+- Employees see only their own published lines in **عمولاتي**
+  (`hr_my_commissions`); their notification never carries an amount.
+
 ## "شوف شاشته" (admin preview)
 
 In الإعدادات, each user has a "شوف شاشته" button. The portal then shows
@@ -244,8 +268,8 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    then `neon/003_training.sql`, `neon/004_recruitment.sql`,
    `neon/005_sales_eval.sql`, `neon/006_weekly_report.sql`,
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
-   `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql` and
-   `neon/013_admin.sql`
+   `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
+   `neon/013_admin.sql` and `neon/014_commissions.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -292,6 +316,7 @@ neon/010_security.sql  see vs decide (approveall), pay, punches, audit, tighter 
 neon/011_cv_leavers.sql  CV upload, HR profile, interview invitation, lock out leavers
 neon/012_crm.sql       CRM: leads, distribution, structured follow-up, landing-page capture
 neon/013_admin.sql     the administration: tracks, direct manager, personal permissions
+neon/014_commissions.sql  commissions: deals, invoices, staff shares, payouts (confidential)
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)

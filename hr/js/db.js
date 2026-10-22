@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610211900";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610211900";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610221500";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610221500";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -39,7 +39,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts", "hr_com_people", "hr_my_commissions", "hr_com_file"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -669,3 +669,79 @@ export async function crmLog(id, kind, result, note, next) { return check(await 
 export async function crmClose(id, reason) { check(await client.rpc("hr_lead_close", { p_id: id, p_reason: reason })); }
 export async function crmImport(rows) { return check(await client.rpc("hr_lead_import", { p_rows: rows })); }
 export async function crmAddProject(name, developer, area) { check(await client.from("crm_projects").insert({ name, developer: developer || null, area: area || null })); }
+
+// ---------------------------------------------------------------- commissions (neon/014_commissions.sql)
+
+export let comReady = true;
+const num = (v) => (v == null || v === "" ? null : Number(v));
+// Everything the commissions owner (or viewer) works with. Anyone else gets empty
+// lists from the database, so this returns null for them.
+export async function loadCom() {
+  try {
+    const [settings, roles, deals, shares, parts, ents, payouts, files, people] = await Promise.all([
+      get(client.from("com_settings").select("*")), get(client.from("com_roles").select("*").order("sort")),
+      get(client.from("com_deals").select("*").order("sale_date", { ascending: false })), get(client.from("com_shares").select("*")),
+      get(client.from("com_parts").select("*").order("id")), get(client.from("com_entitlements").select("*").order("id")),
+      get(client.from("com_payouts").select("*").order("paid_on", { ascending: false })),
+      get(client.from("com_files").select("id,deal_id,slot,name,mime,size,created_at")), client.rpc("hr_com_people").then(check)]);
+    comReady = true;
+    if (!settings.length) return null;
+    const st = settings[0];
+    return {
+      settings: { vat: Number(st.vat), wht: Number(st.wht), show: !!st.show, docs: st.docs || {} },
+      roles: roles.map((r) => ({ key: r.key, title: r.title, pct: Number(r.pct), sort: r.sort, active: r.active !== false })),
+      deals: deals.map((d) => ({ id: d.id, ref: d.ref || "", client: d.client, phone: d.phone || "", projectId: d.project_id ?? "", project: d.project || "", developer: d.developer || "",
+        unit: d.unit || "", price: Number(d.price), rate: Number(d.rate), resale: Number(d.resale_amount), method: d.method, register: d.register || "", status: d.status,
+        sale: d.sale_date, contract: d.contract_date || "", leadId: d.lead_id ?? "", notes: d.notes || "", commission: Number(d.commission), cancelReason: d.cancel_reason || "" })),
+      shares: shares.map((x) => ({ id: x.id, deal: x.deal_id, code: x.code, role: x.role, pct: Number(x.pct) })),
+      parts: parts.map((p) => ({ id: p.id, deal: p.deal_id, amount: Number(p.amount), type: p.inv_type, wht: !!p.wht, ref: p.ref || "", claim: p.claim_date || "", sent: p.sent_date || "",
+        due: p.due_date || "", collected: p.collected_date || "", received: num(p.received), note: p.note || "" })),
+      ents: ents.map((e) => ({ id: e.id, deal: e.deal_id, part: e.part_id, code: e.code, role: e.role, kind: e.kind, pct: Number(e.pct), base: Number(e.base), amount: Number(e.amount),
+        status: e.status, published: e.published_at || "", payout: e.payout_id ?? "", at: e.created_at })),
+      payouts: payouts.map((p) => ({ id: p.id, code: p.code, paidOn: p.paid_on, method: p.method, ref: p.ref || "", amount: Number(p.amount), note: p.note || "", status: p.status })),
+      files: files.map((f) => ({ id: f.id, deal: f.deal_id, slot: f.slot, name: f.name, size: f.size })),
+      people: people || [],
+    };
+  } catch (e) { comReady = !missing(e); if (missing(e)) return null; throw e; }
+}
+const DEAL_COLS = { ref: "ref", client: "client", phone: "phone", projectId: "project_id", project: "project", developer: "developer", unit: "unit", price: "price", rate: "rate",
+  resale: "resale_amount", method: "method", register: "register", status: "status", sale: "sale_date", contract: "contract_date", notes: "notes" };
+const NUMERIC = new Set(["price", "rate", "resale_amount", "project_id"]);
+function dealRow(f) {
+  const row = {};
+  for (const [k, c] of Object.entries(DEAL_COLS)) if (k in f) row[c] = NUMERIC.has(c) ? num(f[k]) : nullIfEmpty(f[k]);
+  return row;
+}
+export async function comSaveDeal(id, fields) {
+  if (id) { check(await client.from("com_deals").update(dealRow(fields)).eq("id", id)); return id; }
+  return check(await client.from("com_deals").insert(dealRow(fields)).select("id"))?.[0]?.id;
+}
+export async function comAddShare(deal, code, role, pct) { check(await client.from("com_shares").insert({ deal_id: deal, code, role, pct: Number(pct) })); }
+export async function comSetShare(id, pct) { check(await client.from("com_shares").update({ pct: Number(pct) }).eq("id", id)); }
+export async function comDropShare(id) { check(await client.from("com_shares").delete().eq("id", id)); }
+export async function comAddPart(deal, f) {
+  check(await client.from("com_parts").insert({ deal_id: deal, amount: Number(f.amount), inv_type: f.type || "G", wht: !!f.wht, ref: nullIfEmpty(f.ref), due_date: nullIfEmpty(f.due) }));
+}
+// one step forward on a part: claimed, invoice sent, collected (dates default to today)
+export async function comPartStep(id, field, date, extra = {}) {
+  const col = { claim: "claim_date", sent: "sent_date", collected: "collected_date", due: "due_date" }[field];
+  check(await client.from("com_parts").update({ [col]: nullIfEmpty(date), ...extra }).eq("id", id));
+}
+export async function comDropPart(id) { check(await client.from("com_parts").delete().eq("id", id)); }
+export async function comCancel(deal, reason) { return check(await client.rpc("hr_com_cancel", { p_deal: deal, p_reason: reason })); }
+export async function comApprove(ids) { return check(await client.rpc("hr_com_approve", { p_ids: ids })); }
+export async function comPublish(ids, on) { return check(await client.rpc("hr_com_publish", { p_ids: ids, p_on: on })); }
+export async function comPay(ids, date, method, ref, note) { return check(await client.rpc("hr_com_pay", { p_ids: ids, p_paid_on: date, p_method: method, p_ref: ref || null, p_note: note || null })); }
+export async function comUnpay(id, reason) { check(await client.rpc("hr_com_unpay", { p_payout: id, p_reason: reason })); }
+export async function comGrant(user, role, on) { check(await client.rpc("hr_com_grant", { p_user: user, p_role: role, p_on: on })); }
+export async function comSaveSettings(f) { check(await client.from("com_settings").update(f).eq("id", 1)); }
+export async function comSaveRole(key, f) { check(await client.from("com_roles").update(f).eq("key", key)); }
+export async function comAddRole(key, title, pct, sort) { check(await client.from("com_roles").insert({ key, title, pct: Number(pct), sort })); }
+export async function comFileAdd(deal, slot, file) {
+  const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
+  return check(await client.rpc("hr_com_file_add", { p_deal: deal, p_slot: slot, p_name: file.name, p_mime: file.type, p_b64: b64 }));
+}
+export async function comFile(id) { return check(await client.rpc("hr_com_file", { p_id: id })); }
+export async function myCommissions() {
+  try { return (check(await client.rpc("hr_my_commissions")) || []); } catch (e) { if (missing(e)) return []; throw e; }
+}
