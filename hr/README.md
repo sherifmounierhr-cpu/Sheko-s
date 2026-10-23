@@ -114,8 +114,10 @@ one the caller heads (with the `manager` role), and for everyone with the new
 structure, positions and templates, from the الهيكل الوظيفي tab, which also
 lists accounts waiting to be linked (with a best-guess employee) and warns
 about units without a head, people without a position and sales teams
-missing an evaluator. Everyone else sees the chart as names and titles only
-(`hr_org_chart`).
+missing an evaluator. Since `neon/018_org_view.sql` the chart itself (names,
+titles and who reports to whom, `hr_org_chart`) is seen only by the admin,
+`viewall`, and anyone given "يشوف الهيكل" (`org_view`); everyone else has no
+الهيكل tab and the function returns nothing.
 
 ## Punches straight from the device (`neon/009_device.sql`, `tools/device/`)
 
@@ -300,7 +302,7 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
    `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql`,
-   `neon/016_identity.sql` and `neon/017_com_deductions.sql`
+   `neon/016_identity.sql`, `neon/017_com_deductions.sql` and `neon/018_org_view.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -351,6 +353,7 @@ neon/014_commissions.sql  commissions: deals, invoices, staff shares, payouts (c
 neon/015_com_import.sql   one-time import of the old commissions ledger from Excel
 neon/016_identity.sql     a signed-in request without its identity fails (and is retried) instead of coming back empty
 neon/017_com_deductions.sql  taxes and admin fee before the staff split; per-person access to shares and parts
+neon/018_org_view.sql        the company structure only for admin, viewall and the new org_view permission
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)

@@ -1859,4 +1859,7 @@ export const EN = {
   "السيلز (عميل جابه بنفسه)": "Sales (own client)",
   "قائد الفريق": "Team leader",
   "مدير التشغيل": "Operations manager",
+  "يشوف الهيكل": "Sees the structure",
+  "يشوف الهيكل الوظيفي كامل (الأسماء والمناصب ومين بيتبع مين) من غير تعديل": "Sees the whole company structure (names, positions and who reports to whom) without editing",
+  "بيشوف الهيكل الوظيفي": "Sees the company structure",
 };

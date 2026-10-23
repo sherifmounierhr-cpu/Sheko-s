@@ -1,16 +1,16 @@
-import * as db from "./db.js?v=202610232000";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610232000";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610232000";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610232000";
-import { readSheets } from "./xlsx.js?v=202610232000";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610232000";
+import * as db from "./db.js?v=202610232200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610232200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610232200";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610232200";
+import { readSheets } from "./xlsx.js?v=202610232200";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610232200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
 const MEET_KINDS = ["اجتماع مع عميل خارج المكتب", "معاينة موقع مع عميل", "اجتماع مع عميل في المكتب", "مأمورية عمل", "معرض / إيفنت"];
 const RESULTS = ["حجز / تعاقد", "مهتم", "متابعة لاحقة", "غير مهتم", "لم يحضر العميل"];
 const SOURCES = ["فيسبوك", "إنستجرام", "جوجل", "تيك توك", "واتساب", "ترشيح (ريفرال)", "مكالمة واردة", "زيارة مباشرة", "معرض"];
-const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["approveall", "يوافق على الشركة كلها"], ["pay", "المرتبات"], ["leads_assign", "توزيع الليدز"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"]];
+const ROLES = [["admin", "مدير النظام"], ["viewall", "يشوف الشركة كلها"], ["approveall", "يوافق على الشركة كلها"], ["pay", "المرتبات"], ["leads_assign", "توزيع الليدز"], ["uploader", "رفع البصمة"], ["meetings", "الاجتماعات"], ["manager", "مدير"], ["recruiter", "التوظيف"], ["evaluator", "التقييم الأسبوعي"], ["org_view", "يشوف الهيكل"]];
 const KIND_AR = { penalty: "جزاء", warning: "إنذار", bonus: "منحة استثنائية" };
 const ACT_ST = { pending: "قيد المراجعة", approved: "معتمد", rejected: "مرفوض", cancelled: "ملغي" };
 const CHECK_KINDS = [["office", "في المكتب"], ["meeting", "اجتماع مع عميل"], ["site", "معاينة / موقع مشروع"], ["other", "مأمورية / أخرى"], ["leave", "مغادرة"]];
@@ -26,7 +26,7 @@ const TABS = [
   ["mine", "طلباتي وحضوري", (r) => !!r.code, "calendar-event", "me", "طلباتي"],
   ["mycom", "عمولاتي", (r) => !!r.code && r.mycom, "cash", "me", "عمولاتي"],
   ["train", "تدريبي", (r) => r.trainee, "school", "me", "تدريبي"],
-  ["org", "الهيكل الوظيفي", (r) => !!r.code || r.admin, "sitemap", "team", "الهيكل"],
+  ["org", "الهيكل الوظيفي", (r) => r.admin || r.viewall || r.org_view, "sitemap", "team", "الهيكل"],
   ["live", "الفريق مباشر", (r) => r.admin || r.manager || r.viewall || r.approveall, "broadcast", "team", "مباشر"],
   ["dash", "لوحة المتابعة", (r) => r.admin || r.manager || r.viewall || r.approveall || r.uploader, "chart-bar", "team", "المتابعة"],
   ["requests", "الأذونات والإجازات", (r) => r.admin || r.manager || r.viewall || r.approveall, "clipboard-check", "team", "الطلبات"],
@@ -142,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610232000";
+const BUILD = "202610232200";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -611,6 +611,7 @@ const CAPS = [
   ["uploader", "رفع البصمة", "يرفع ملف جهاز البصمة"],
   ["meetings", "اجتماعات العملاء", "يشوف ويراجع اجتماعات الكل"],
   ["evaluator", "التقييم الأسبوعي", "يقيّم الأعمدة اللي تحت"],
+  ["org_view", "يشوف الهيكل", "يشوف الهيكل الوظيفي كامل (الأسماء والمناصب ومين بيتبع مين) من غير تعديل"],
 ];
 async function orgLoad() { try { ORG = await db.loadOrg(); } catch (e) { ORG = null; toast(errMsg(e), true); } }
 const posOf = (k) => ORG?.positions.find((p) => p.key === k);
@@ -679,6 +680,7 @@ function accessText(code) {
   if (has("recruiter")) out.push("بيدير التوظيف");
   if (has("uploader")) out.push("بيرفع ملف البصمة");
   if (has("meetings")) out.push("بيراجع اجتماعات العملاء كلها");
+  if (has("org_view") && !has("viewall")) out.push("بيشوف الهيكل الوظيفي");
   if (has("evaluator")) { const a = u && EV ? EV.assignments.filter((x) => x.user === u.id) : []; out.push(a.length ? `بيقيّم: ${[...new Set(a.map((x) => catName(x.cat)))].join("، ")} لـ ${new Set(a.map((x) => x.team)).size} فريق` : "بيقيّم أسبوعيًا (لسه متعيّنلوش فرق)"); }
   return { lines: out, linked: !!u, user: u };
 }
