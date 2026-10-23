@@ -1,9 +1,9 @@
-import * as db from "./db.js?v=202610232200";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610232200";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610232200";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610232200";
-import { readSheets } from "./xlsx.js?v=202610232200";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610232200";
+import * as db from "./db.js?v=202610240100";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610240100";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610240100";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610240100";
+import { readSheets } from "./xlsx.js?v=202610240100";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610240100";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -58,7 +58,7 @@ let TR = null, QUIZ = null, PREVIEW = null, HIRE = null, REC = null, APP = null,
 let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, INVITE = null;
 // to-do lists; "شوف شاشته" keeps the admin's own identity in REAL while VIEW is someone else
 let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = null;
-let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set(), DEV = null;
+let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set(), DEV = null, NOPUNCH = null;
 
 const $ = (s) => document.querySelector(s);
 // links stored by an admin open only when they are plain https
@@ -142,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610232200";
+const BUILD = "202610240100";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -287,7 +287,7 @@ async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
   if (tab === "org") { await orgLoad(); if (R.admin) await evalLoad(); }
-  if (tab === "upload") DEV = await db.deviceStatus().catch(() => null);
+  if (tab === "upload") { DEV = await db.deviceStatus().catch(() => null); if (R.admin) NOPUNCH = await db.noPunch().catch(() => null); }
   if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread() && !VIEW) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
@@ -1575,7 +1575,20 @@ function upload() {
   return `${deviceCard()}<div class="card"><h2>رفع كشف البصمة</h2>
     <p class="note">ارفع ملف التصدير من جهاز البصمة (.xls زي ملف سبتمبر، أو CSV). البصمات المتكررة مش بتتضاف مرتين.${R.admin ? " الأكواد الجديدة بتتضاف للموظفين." : " لو فيه أكواد جديدة، مدير النظام هيضيفهم للموظفين."}</p>
     <div class="row"><input type="file" id="imp" accept=".xls,.csv,.txt" aria-label="ملف البصمة"><span class="note" id="impMsg"></span></div></div>
-  <div class="card"><h2>بصمات الشهر ده</h2><p class="note">${counts.reduce((a, [, n]) => a + n, 0)} بصمة لـ ${counts.length} كود. آخر يوم فيه بصمات: ${LAST || "-"}.</p></div>`;
+  <div class="card"><h2>بصمات الشهر ده</h2><p class="note">${counts.reduce((a, [, n]) => a + n, 0)} بصمة لـ ${counts.length} كود. آخر يوم فيه بصمات: ${LAST || "-"}.</p></div>
+  ${R.admin ? noPunchCard() : ""}`;
+}
+// working people with no punch in the last 14 days of device data, and what to do with each (neon/019_no_punch.sql)
+function noPunchCard() {
+  if (!NOPUNCH) return "";
+  if (!NOPUNCH.length) return `<div class="card"><h2>${icon("user-check")}مين مبيبصمش</h2><p class="note">كل الموظفين الشغالين ليهم بصمات في آخر 14 يوم.</p></div>`;
+  return `<div class="card"><h2>${icon("fingerprint")}مبصموش من 14 يوم (${NOPUNCH.length})</h2>
+    <p class="note">مفيش ولا بصمة ليهم في آخر 14 يوم من بيانات الجهاز، وبيتحسبوا غياب. اختار لكل واحد: (ساب الشغل) بيقفل حسابه ويشيله من الحضور، ومن المرتبات من الشهر الجاي، وبياناته بتفضل، (فريلانس) بيشيله من الحضور والمرتبات وحسابه يفضل شغال، (معفى من البصمة) بيفضل في المرتبات من غير حضور.</p>
+    <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>آخر بصمة</th><th></th></tr></thead><tbody>
+    ${NOPUNCH.map((x) => `<tr><td>${esc(x.code)}</td><td>${esc(x.name)}${x.job ? `<div class="note">${esc(x.job)}</div>` : ""}</td><td>${esc(S.teams.find((t) => String(t.id) === String(x.team_id))?.name || "-")}</td>
+      <td>${x.last_punch ? fmtDate(x.last_punch) : '<span class="pill p-mute">ولا بصمة خالص</span>'}</td>
+      <td><div class="row nowrap"><button type="button" class="btn sm danger" data-nopunch="${esc(x.code)}|left">ساب الشغل</button><button type="button" class="btn sm" data-nopunch="${esc(x.code)}|freelance">فريلانس</button><button type="button" class="btn sm" data-nopunch="${esc(x.code)}|exempt">معفى من البصمة</button></div></td></tr>`).join("")}
+    </tbody></table></div></div>`;
 }
 
 function sum(ym) {
@@ -1591,7 +1604,9 @@ function sum(ym) {
   </tbody></table></div>`;
 }
 
-const payRows = (ym) => S.employees.filter((e) => N0(e.salary) > 0 || S.payroll?.[ym]?.[e.code]).map((e) => E.payRow(e, ym));
+// freelancers are never paid here; someone marked as having left is paid up to the month they left
+const payRows = (ym) => S.employees.filter((e) => !e.freelance && !(e.active === false && e.leftOn && e.leftOn.slice(0, 7) < ym && !S.payroll?.[ym]?.[e.code])
+  && (N0(e.salary) > 0 || S.payroll?.[ym]?.[e.code])).map((e) => E.payRow(e, ym));
 function pay(ym) {
   const all = payRows(ym);
   let rows = all;
@@ -1632,10 +1647,12 @@ function emp() {
   if (empFilter === "nameless") list = list.filter((e) => !e.name?.trim());
   if (empFilter === "exempt") list = list.filter((e) => e.exempt);
   if (empFilter === "noteam") list = list.filter((e) => !has(e.teamId));
+  if (empFilter === "freelance") list = list.filter((e) => e.freelance);
+  if (empFilter === "left") list = list.filter((e) => e.active === false);
   const teamOpts = (sel) => opts(S.teams.map((t) => [t.id, t.name]), sel, "بدون فريق");
-  return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"]], empFilter, "كل الموظفين")}</select></label>
+  return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"], ["freelance", "فريلانس"], ["left", "سابوا الشغل"]], empFilter, "كل الموظفين")}</select></label>
   <p class="note">أي تعديل بيتحفظ على طول. الفرق ومديرينها بتتعدل من (الإعدادات والفرق).</p></div>
-  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>نوع الشغل</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
   ${list.map((e) => { const c = esc(e.code); return `<tr class="${!e.name?.trim() ? "missing-name" : ""}${e.active === false ? " off" : ""}"><td>${c}</td>
     <td><input type="text" data-e="${c}" data-f="name" value="${esc(e.name)}" style="width:160px"></td>
     <td><select data-e="${c}" data-f="teamId">${teamOpts(e.teamId)}</select></td>
@@ -1643,7 +1660,8 @@ function emp() {
     <td><input type="time" data-e="${c}" data-f="in" value="${esc(e.in)}"></td><td><input type="time" data-e="${c}" data-f="out" value="${esc(e.out)}"></td>
     <td><select data-e="${c}" data-f="off">${opts(DAYS.map((d, i) => [i, d]), e.off, "لا يوجد")}</select></td>
     <td class="num"><input type="checkbox" data-e="${c}" data-f="exempt"${e.exempt ? " checked" : ""} aria-label="مرفوع عنه البصمة"></td>
-    <td class="num"><input type="checkbox" data-e="${c}" data-f="active"${e.active !== false ? " checked" : ""} aria-label="شغال"></td>
+    <td class="num"><input type="checkbox" data-e="${c}" data-f="active"${e.active !== false ? " checked" : ""} aria-label="شغال">${e.active === false && e.leftOn ? `<div class="note">من ${fmtDate(e.leftOn)}</div>` : ""}</td>
+    <td><select data-e="${c}" data-f="workType" aria-label="نوع الشغل">${opts([["staff", "موظف"], ["freelance", "فريلانس"]], e.workType)}</select></td>
     <td><input type="date" data-e="${c}" data-f="hireDate" value="${esc(e.hireDate)}"></td>
     <td><select data-e="${c}" data-f="experience">${opts([["experienced", "خبرة"], ["fresh", "بدون خبرة"]], e.experience, "-")}</select></td>
     <td><input type="text" data-e="${c}" data-f="fullName" value="${esc(e.fullName)}" style="width:190px"></td>
@@ -2649,6 +2667,15 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.posdel) { const k = d.posdel; if (await ask(`تمسح منصب (${posOf(k)?.title})؟`, "محدش في المنصب ده دلوقتي.", "امسحه", true)) await orgAct(() => db.dropOrgPosition(k), "اتمسح المنصب", true); return; }
   if (d.apply) { const k = d.apply; await orgAct(async () => { const n = await db.applyTemplate(k); ORG_DIRTY.delete(k); toast(`اتطبق قالب (${posOf(k)?.title}) على ${n} ${n === 1 ? "حساب" : "حسابات"}`); }, null, true); return; }
+  if (d.nopunch) {
+    const [code, choice] = d.nopunch.split("|"), who = empName(empBy(code)) || code;
+    const Q = { left: [`${who} ساب الشغل؟`, "حسابه هيتقفل على طول ومش هيتحسب في الحضور. مرتب الشهر ده بيفضل، ومن الشهر الجاي مش هيظهر في المرتبات. بياناته بتفضل، ولو رجع علّمه (شغال) تاني من صفحة الموظفين.", "أيوه ساب", true],
+      freelance: [`${who} فريلانس؟`, "هيتشال من الحضور والغياب والمرتبات، وحسابه يفضل شغال: يستلم ليدز ويشوف عمولاته ومهامه.", "أيوه فريلانس", false],
+      exempt: [`${who} معفى من البصمة؟`, "مش هيتحسب عليه غياب ولا تأخير، وبيفضل في المرتبات عادي.", "أيوه معفى", false] }[choice];
+    if (!Q || !(await ask(...Q))) return;
+    act(async () => { await db.markNoPunch(code, choice); NOPUNCH = await db.noPunch().catch(() => null); }, { left: "اتعلّم إنه ساب الشغل", freelance: "اتعلّم فريلانس", exempt: "اتعلّم معفى من البصمة" }[choice], true);
+    return;
+  }
   if (d.devdel) { if (await ask("تشيل الجهاز ده من البوابة؟", d.devdel, "شيله", true)) { try { await db.deviceRemove(d.devdel); DEV = await db.deviceStatus(); toast("اتشال الجهاز"); } catch (e) { toast(errMsg(e), true); } render(); } return; }
   if (d.viewas) { await startView(d.viewas); return; }
   if (t.id === "viewExit") { await stopView(); return; }

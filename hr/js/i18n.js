@@ -4,7 +4,7 @@
 // title, toasts and dialogs) is swapped for its English line from en.js as it appears.
 // A text with no English line yet stays Arabic, so nothing ever breaks.
 // Data people typed (names, notes, inputs) is never touched.
-import { EN } from "./en.js?v=202610232200";
+import { EN } from "./en.js?v=202610240100";
 
 const KEY = "hr-lang";
 export const LANG = (() => { try { return localStorage.getItem(KEY) === "en" ? "en" : "ar"; } catch { return "ar"; } })();

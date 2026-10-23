@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610232200";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610232200";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610240100";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610240100";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -51,7 +51,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts", "hr_com_people", "hr_my_commissions", "hr_com_file"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts", "hr_com_people", "hr_my_commissions", "hr_com_file", "hr_no_punch"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -253,7 +253,7 @@ export async function load(ym, R = {}, only = "") {
       return {
         code: e.code, name: e.name || "", fullName: e.full_name || "", device: e.device_name || "",
         teamId: e.team_id ?? "", job: e.job || "", dept: e.dept || "",
-        in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false,
+        in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false, workType: e.work_type || "staff", freelance: e.work_type === "freelance", leftOn: e.left_on || "",
         hireDate: e.hire_date || "", experience: e.experience || "", position: e.position || "",
         reportsTo: e.reports_to || "", plus: e.roles_plus || [], minus: e.roles_minus || [],
         salary: Number(p.salary) || 0, account: p.account || "", pay: p.pay_method || (p.account ? "bank" : "cash"),
@@ -291,8 +291,20 @@ export async function load(ym, R = {}, only = "") {
 // ---------------------------------------------------------------- writes
 
 const EMP_COLS = { name: "name", fullName: "full_name", device: "device_name", teamId: "team_id", job: "job", dept: "dept",
-  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active", hireDate: "hire_date", experience: "experience" };
+  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active", hireDate: "hire_date", experience: "experience", workType: "work_type" };
 const PAY_COLS = { salary: "salary", account: "account", pay: "pay_method" };
+
+// People with no punch in the last 14 days of device data (neon/019_no_punch.sql, admin only).
+// null when the SQL file hasn't been run yet.
+export async function noPunch(days = 14) {
+  try { return check(await client.rpc("hr_no_punch", { p_days: days })) || []; } catch (e) { if (missing(e)) return null; throw e; }
+}
+// One of the three choices for someone who stopped punching, in a single update.
+const NO_PUNCH = { left: () => ({ active: false, left_on: new Date().toISOString().slice(0, 10) }), freelance: () => ({ work_type: "freelance", exempt: true }), exempt: () => ({ exempt: true }) };
+export async function markNoPunch(code, choice) {
+  if (!NO_PUNCH[choice]) throw new Error("bad choice");
+  check(await client.from("employees").update(NO_PUNCH[choice]()).eq("code", code));
+}
 
 export async function updateEmployee(code, field, value) {
   if (EMP_COLS[field]) {

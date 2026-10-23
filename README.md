@@ -7,7 +7,7 @@ row-level security on every table).
 
 - Portal: `hr/` (see `hr/README.md`)
 - Public job application form: `hr/apply.html`
-- Database, in order: `neon/schema.sql`, then `neon/002_*.sql` through `neon/018_org_view.sql`
+- Database, in order: `neon/schema.sql`, then `neon/002_*.sql` through `neon/019_no_punch.sql`
 - Fingerprint device sync for the office PC: `tools/device/`
 - Weekly email report: `tools/report/` and `.github/workflows/hr-weekly.yml`
 

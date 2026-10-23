@@ -283,6 +283,15 @@ When a whole text has no line, a list joined with " · " or Arabic commas, and a
 "label: value" text, are translated piece by piece. The public apply form
 (`apply.html`) and the messages sent to applicants and new staff stay Arabic.
 
+## People who stopped punching (`neon/019_no_punch.sql`)
+
+On رفع البصمة the admin sees everyone working with no punch in the 14 days
+before the last day the device sent (new hires and exempt people left out),
+with three choices: ساب الشغل (locked out, `left_on` set, paid through that
+month), فريلانس (`work_type = freelance`: out of attendance and payroll, the
+account keeps working) and معفى من البصمة. The employees table shows the work
+type, so a choice can be undone there.
+
 ## "شوف شاشته" (admin preview)
 
 In الإعدادات, each user has a "شوف شاشته" button. The portal then shows
@@ -302,7 +311,7 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
    `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql`,
-   `neon/016_identity.sql`, `neon/017_com_deductions.sql` and `neon/018_org_view.sql`
+   `neon/016_identity.sql`, `neon/017_com_deductions.sql`, `neon/018_org_view.sql` and `neon/019_no_punch.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -354,6 +363,7 @@ neon/015_com_import.sql   one-time import of the old commissions ledger from Exc
 neon/016_identity.sql     a signed-in request without its identity fails (and is retried) instead of coming back empty
 neon/017_com_deductions.sql  taxes and admin fee before the staff split; per-person access to shares and parts
 neon/018_org_view.sql        the company structure only for admin, viewall and the new org_view permission
+neon/019_no_punch.sql        people with no punch in 14 days: left / freelance / exempt, chosen by the admin on the upload page
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)
