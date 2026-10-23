@@ -277,6 +277,9 @@ reads left to right. A key is the Arabic exactly as shown; `{}` stands for a
 part that varies and `{#}` for a number, time or date. Text without an
 English line stays Arabic, and data people typed (names, notes) is never
 touched. The WhatsApp invitation to applicants always stays Arabic.
+When a whole text has no line, a list joined with " · " or Arabic commas, and a
+"label: value" text, are translated piece by piece. The public apply form
+(`apply.html`) and the messages sent to applicants and new staff stay Arabic.
 
 ## "شوف شاشته" (admin preview)
 

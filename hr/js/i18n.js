@@ -4,7 +4,7 @@
 // title, toasts and dialogs) is swapped for its English line from en.js as it appears.
 // A text with no English line yet stays Arabic, so nothing ever breaks.
 // Data people typed (names, notes, inputs) is never touched.
-import { EN } from "./en.js?v=202610231700";
+import { EN } from "./en.js?v=202610232000";
 
 const KEY = "hr-lang";
 export const LANG = (() => { try { return localStorage.getItem(KEY) === "en" ? "en" : "ar"; } catch { return "ar"; } })();
@@ -39,7 +39,7 @@ for (const [ar, en] of Object.entries(EN)) {
 }
 PATTERNS.sort((a, b) => b.len - a.len);
 
-const NUM = /^[\d.,:/\-+% ]+$/;
+const NUM = /^[\d.,:/\-+% ]+(?:[AP]M)?$/i;
 // how well a pattern fits a text: every way of filling the slots is tried, and the one
 // leaving the fewest Arabic parts without an English line wins
 function fit(parts, s) {
@@ -76,6 +76,8 @@ export function tr(text) {
   return out;
 }
 function translate(k) {
+  // a list with Arabic commas, only when every piece has its English line
+  if (k.includes("، ")) { const parts = k.split("، ").map(tr); if (!parts.some((x) => AR.test(x))) return parts.join(", "); }
   for (const p of PATTERNS) {
     if (p.first && !k.startsWith(p.first)) continue;
     const m = fit(p.parts, k); if (!m) continue;
@@ -84,6 +86,11 @@ function translate(k) {
     let i = 0;
     return p.en.replace(/\{(\d*)\}/g, (_, n) => (n ? vals[Number(n) - 1] : vals[i++]) ?? "");
   }
+  // a list joined with dots (project · source · campaign): each piece on its own
+  if (k.includes(" · ")) return k.split(" · ").map(tr).join(" · ");
+  // "label: value" (tooltips like "Salary: 345 name"): each side on its own
+  const c = k.indexOf(": ");
+  if (c > 0) { const a = tr(k.slice(0, c)), b = tr(k.slice(c + 2)); if (a !== k.slice(0, c) || b !== k.slice(c + 2)) return `${a}: ${b}`; }
   return k;
 }
 

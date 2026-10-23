@@ -1,9 +1,9 @@
-import * as db from "./db.js?v=202610231700";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231700";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231700";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610231700";
-import { readSheets } from "./xlsx.js?v=202610231700";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231700";
+import * as db from "./db.js?v=202610232000";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610232000";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610232000";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610232000";
+import { readSheets } from "./xlsx.js?v=202610232000";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610232000";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -142,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610231700";
+const BUILD = "202610232000";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -774,7 +774,7 @@ function orgAlerts() {
   for (const b of [...new Set(ORG.people.map((p) => p.reports).filter((c) => c && !heads.has(c)))]) { const acc = S.users.find((x) => x.code === b); if (acc && !["manager", "viewall", "approveall", "admin"].some((r) => acc.roles.includes(r))) out.push(`فيه ناس بيتبعوا ${esc(nameOf(b))} بس حسابه مالوش دور (مدير)، فمش هيشوفهم ولا يوافق على طلباتهم`); }
   const alone = ORG.people.filter((p) => isAdm(p) && (posOf(p.position)?.rank ?? 9) > 1 && !managerOf(p.code));
   if (alone.length) out.push(`${alone.map((p) => esc(p.name)).join("، ")}: ${alone.length === 1 ? "مالوش" : "مالهمش"} مدير مباشر، فالطلبات بتروح لصاحب صلاحية (يوافق على الشركة كلها) بس`);
-  if (EV) for (const t of ORG.units.filter((x) => x.kind === "sales")) { const miss = CATS.filter(([c]) => !EV.assignments.some((a) => a.team === t.id && a.cat === c)).map(([, l]) => l); if (miss.length) out.push(`${esc(t.name)}: مفيش مقيّم لـ ${miss.join(" و")}`); }
+  if (EV) for (const t of ORG.units.filter((x) => x.kind === "sales")) { const miss = CATS.filter(([c]) => !EV.assignments.some((a) => a.team === t.id && a.cat === c)).map(([, l]) => l); if (miss.length) out.push(`${esc(t.name)}: مفيش مقيّم لـ ${miss.map(tr).join(LANG === "en" ? ", " : " و")}`); }
   return out.length ? `<div class="card org-alerts"><h2>${icon("alert-triangle")}محتاج انتباهك <span class="badge">${out.length}</span></h2><ul>${out.map((x) => `<li>${x}</li>`).join("")}</ul></div>` : `<div class="banner ok">${icon("check")}الهيكل متظبط: كل وحدة ليها رئيس، وكل حد ليه منصب.</div>`;
 }
 function templatesCard() {
@@ -799,7 +799,7 @@ function org() {
   const roots = kidsOf(""), loose = ORG.people.filter((p) => !isAdm(p) && (p.unit === "" || !unitById(p.unit)));
   const nUnits = ORG.units.length, nPeople = ORG.people.length;
   return `${R.admin ? `${pendingCard()}${orgAlerts()}` : ""}
-  <div class="row"><p class="note spacer">${nPeople} موظف في ${nUnits} ${nUnits === 1 ? "وحدة" : "وحدات"}${R.admin ? ". دوس على أي شخص أو وحدة عشان تعدّل." : ""}</p>
+  <div class="row"><p class="note spacer">${nPeople} موظف في ${nUnits} ${nUnits === 1 ? "وحدة" : "وحدات"}${R.admin ? "<span>. دوس على أي شخص أو وحدة عشان تعدّل.</span>" : ""}</p>
     ${R.admin ? `<button type="button" class="btn" id="unitNew">${icon("plus")}وحدة جديدة</button>` : ""}</div>
   ${R.admin && ORG_SEL ? personPanel() : ""}${R.admin && ORG_UNIT ? unitPanel() : ""}
   <div class="org">
@@ -882,7 +882,7 @@ function comActions() {
       else if (p.sent && !p.collected && p.due && p.due < today()) out.push(["bad", `${d.client}${tag}: الفاتورة متأخرة ${dayDiff(p.due, today())} يوم عن ميعاد التحصيل`, d.id]);
       else if (!p.claim && d.status === "contract") out.push(["warn", `${d.client}${tag}: لسه ما اتطالبش`, d.id]);
     });
-    if (d.status === "contract") { const have = new Set(COM.files.filter((f) => f.deal === d.id).map((f) => f.slot)); const miss = ["contract", "id"].filter((s) => !have.has(s)); if (miss.length) out.push(["info", `${d.client}: ناقص ${miss.map((s) => COM_SLOTS.find(([k]) => k === s)[1]).join(" و")}`, d.id]); }
+    if (d.status === "contract") { const have = new Set(COM.files.filter((f) => f.deal === d.id).map((f) => f.slot)); const miss = ["contract", "id"].filter((s) => !have.has(s)); if (miss.length) out.push(["info", `${d.client}: ناقص ${miss.map((s) => COM_SLOTS.find(([k]) => k === s)[1]).map(tr).join(LANG === "en" ? ", " : " و")}`, d.id]); }
   }
   const due = COM.ents.filter((e) => e.status === "due" && e.kind === "share"), appr = COM.ents.filter((e) => e.status === "approved");
   if (due.length) out.push(["gold", `${money(due.reduce((a, e) => a + e.amount, 0))} ج اتحصّلت ومستنية اعتمادك (${new Set(due.map((e) => e.code)).size} موظف)`, "payouts"]);
@@ -2223,7 +2223,7 @@ function slaBadge(l) {
 function nextBadge(l) {
   if (!l.next || !isOpen(l)) return "";
   const t = Date.parse(l.next), late = t < Date.now();
-  return `<span class="pill ${late ? "p-bad" : "p-mute"}">${late ? "المتابعة متأخرة" : "المتابعة"} ${fmtDate(db.cairoDay(l.next))} ${esc(new Date(l.next).toLocaleTimeString("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}</span>`;
+  return `<span class="pill ${late ? "p-bad" : "p-mute"}">${late ? "المتابعة متأخرة" : "المتابعة"} ${fmtDate(db.cairoDay(l.next))} ${esc(new Date(l.next).toLocaleTimeString(LOCALE, { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}</span>`;
 }
 const waNum = (p) => String(p).replace(/^0/, "20").replace(/\D/g, "");
 
@@ -2255,7 +2255,7 @@ function leadTimeline(l) {
   const rs = (r) => RESULTS_CRM.find(([k]) => k === r)?.[1] || "", ks = (k) => KINDS_CRM.find(([x]) => x === k)?.[1] || (k === "assign" ? "توزيع" : "");
   return `<ol class="timeline">${LEAD_ACTS.rows.map((a) => `<li><b>${esc([ks(a.kind), rs(a.result)].filter(Boolean).join(": ") || "")}</b>
     ${a.verified === false ? '<span class="pill p-warn">من غير تسجيل تواجد</span>' : a.verified ? '<span class="pill p-ok">متأكد بالتواجد</span>' : ""}
-    <span class="note">${fmtDate(db.cairoDay(a.at))} ${esc(new Date(a.at).toLocaleTimeString("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}${a.code ? ` · ${esc(nameOf(a.code))}` : ""}</span>
+    <span class="note">${fmtDate(db.cairoDay(a.at))} ${esc(new Date(a.at).toLocaleTimeString(LOCALE, { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit" }))}${a.code ? ` · ${esc(nameOf(a.code))}` : ""}</span>
     ${a.note ? `<div>${esc(a.note)}</div>` : ""}${a.next_at ? `<div class="note">الخطوة الجاية: ${fmtDate(db.cairoDay(a.next_at))}</div>` : ""}</li>`).join("") || "<li>مفيش حركة لسه.</li>"}</ol>`;
 }
 function leadAddForm(dist) {
@@ -2340,7 +2340,7 @@ function crm() {
     <div class="kpi"><span>مفتوحة مع السيلز</span><b>${CRM.leads.filter((l) => l.owner && isOpen(l)).length}</b></div><div class="kpi"><span>تعاقدات آخر 90 يوم</span><b>${CRM.leads.filter((l) => l.stage === "won").length}</b></div></div>
     <div class="card"><h2>${icon("bell")}مستنية توزيع <span class="badge">${inbox.length}</span></h2>
       <p class="note">${salesOnly().length ? "الترشيح: الحاضر النهارده الأول، وبعدين الأقل في العملاء المفتوحين، وبعدين الأعلى في التحويل." : "لحد ما تحدد مناصب فرق المبيعات في الهيكل الوظيفي، الترشيح بيبقى من كل الموظفين الحاضرين."}</p>
-      ${inbox.map((l) => `<div class="act lead"><div class="row"><b class="spacer">${esc(l.name)}</b><span class="pill p-warn">مستني من ${ago(l.at)}</span></div>
+      ${inbox.map((l) => `<div class="act lead"><div class="row"><b class="spacer">${esc(l.name)}</b><span class="pill p-warn">مستني ${ago(l.at)}</span></div>
         <div class="note">${[l.phone, projName(l.project), srcName(l.source), l.campaign].filter(Boolean).map(esc).join(" · ")}</div>${l.notes ? `<div class="note">${esc(l.notes)}</div>` : ""}
         <div class="row">${sug.map(({ e, s }) => `<button class="btn sm" data-assign="${l.id}" data-to="${esc(e.code)}">${esc(empName(e))}<small class="note"> ${s.present ? "حاضر · " : ""}${s.open} مفتوح${s.conv != null ? ` · ${s.conv}%` : ""}</small></button>`).join("")}
           <select data-assignsel="${l.id}" aria-label="توزيع ${esc(l.name)}">${ownerOptions("", "حد تاني...")}</select>
