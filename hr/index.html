@@ -19,8 +19,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/app.css?v=202610231200">
-<script src="js/theme.js?v=202610231200"></script>
+<link rel="stylesheet" href="css/app.css?v=202610231500">
+<script src="js/theme.js?v=202610231500"></script>
 </head>
 <body>
 <a class="skip" href="#main">انتقل للمحتوى</a>
@@ -78,6 +78,10 @@
         <div class="seg" role="group" aria-label="المظهر">
           <button class="btn sm" data-theme-set="auto">تلقائي</button><button class="btn sm" data-theme-set="light">فاتح</button><button class="btn sm" data-theme-set="dark">غامق</button>
         </div>
+        <div class="lab">اللغة</div>
+        <div class="seg" role="group" aria-label="اللغة">
+          <button class="btn sm" data-lang-set="ar" lang="ar">عربي</button><button class="btn sm" data-lang-set="en" lang="en" data-noi18n>English</button>
+        </div>
         <button class="btn" id="refresh"><svg class="ic" aria-hidden="true"><use href="icons.svg#refresh"/></svg>تحديث البيانات</button>
         <button class="btn" id="logout"><svg class="ic" aria-hidden="true"><use href="icons.svg#logout"/></svg>خروج</button>
       </div>
@@ -98,6 +102,6 @@
 
 <div class="toasts" id="toasts"></div>
 <div class="sr-only" aria-live="polite" id="announce"></div>
-<script type="module" src="js/app.js?v=202610231200"></script>
+<script type="module" src="js/app.js?v=202610231500"></script>
 </body>
 </html>

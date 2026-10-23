@@ -1,8 +1,9 @@
-import * as db from "./db.js?v=202610231200";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231200";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231200";
-import { readSheets } from "./xlsx.js?v=202610231200";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231200";
+import * as db from "./db.js?v=202610231500";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231500";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231500";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610231500";
+import { readSheets } from "./xlsx.js?v=202610231500";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231500";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -141,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610231200";
+const BUILD = "202610231500";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -190,8 +191,8 @@ function rolesFor(me) {
 const loadR = () => (VIEW ? REAL.R : R);
 
 // live clock in Cairo time, updated in place
-const clockFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const timeFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit", second: "2-digit" });
+const clockFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { timeZone: "Africa/Cairo", hour: "numeric", minute: "2-digit", second: "2-digit" });
 function tick() {
   const d = new Date();
   document.querySelectorAll("[data-clock]").forEach((el) => (el.textContent = timeFmt.format(d)));
@@ -2174,7 +2175,7 @@ function appDetail(a) {
       ${a.interviewAt ? `<p class="note">الميعاد: ${esc(cairoParts(a.interviewAt).day)} الساعة ${esc(cairoParts(a.interviewAt).time)} · ${esc(a.interviewPlace)}</p>
       <div class="row no-print"><a class="btn ok" target="_blank" rel="noopener noreferrer" href="${waLink(a.mobile)}?text=${encodeURIComponent(interviewMsg(a))}">${icon("message-circle")}ابعت الدعوة واتساب</a>
         ${a.email ? `<a class="btn" href="mailto:${esc(a.email)}?subject=${encodeURIComponent("دعوة لمقابلة شخصية - Everest Real Estate")}&body=${encodeURIComponent(interviewMsg(a))}">ابعتها إيميل</a>` : '<span class="note">مفيش إيميل متسجل.</span>'}</div>
-      <details class="msg-preview"><summary>شوف الرسالة</summary><p class="wrap">${esc(interviewMsg(a))}</p></details>` : '<p class="note">حدد اليوم والساعة والمكان، وبعدها هيظهرلك زرار يبعت الدعوة جاهزة على واتساب أو إيميل.</p>'}</div></div>
+      <details class="msg-preview"><summary>شوف الرسالة</summary><p class="wrap" data-noi18n lang="ar" dir="rtl">${esc(interviewMsg(a))}</p></details>` : '<p class="note">حدد اليوم والساعة والمكان، وبعدها هيظهرلك زرار يبعت الدعوة جاهزة على واتساب أو إيميل.</p>'}</div></div>
   <div class="grid2 even">
     <div class="card"><h2>${icon("clipboard-check")}تقييم المقابلة</h2>
       <form id="intForm" data-id="${a.id}" class="int"><div class="tbl flat"><table><thead><tr><th>المعيار</th><th>الدرجة من 10</th></tr></thead><tbody>
@@ -2653,6 +2654,7 @@ document.addEventListener("click", async (ev) => {
   if (t.id === "moreBtn") { $("#moreSheet").showModal(); $("#moreSheet .nav-item")?.focus(); return; }
   if (t.id === "menuBtn") { toggleMenu(); return; }
   if (d.themeSet) { setTheme(d.themeSet); return; }
+  if (d.langSet) { if (d.langSet !== LANG) setLang(d.langSet); return; }
   if (d.tip != null) { const box = $("#calTip"); if (box) box.textContent = d.tip; return; }
   if (t.id === "pwToggle") { const i = $("#loginForm [name=password]"), on = i.type === "password"; i.type = on ? "text" : "password"; $("#loginForm [name=password2]").type = i.type; t.setAttribute("aria-pressed", String(on)); t.setAttribute("aria-label", on ? "إخفاء الباسورد" : "إظهار الباسورد"); t.innerHTML = icon(on ? "eye-off" : "eye"); return; }
   if (t.id === "loadComp") { t.disabled = true; t.textContent = "جاري التحميل..."; try { await loadComparison(); } catch (e) { toast(errMsg(e), true); COMP = null; } render(); return; }
@@ -3117,7 +3119,7 @@ function setTheme(t) {
   if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
   syncTheme();
 }
-function syncTheme() { const cur = document.documentElement.dataset.theme || "auto"; document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === cur))); }
+function syncTheme() { const cur = document.documentElement.dataset.theme || "auto"; document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === cur))); document.querySelectorAll("[data-lang-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.langSet === LANG))); }
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("#menuPop").hidden) { toggleMenu(false); $("#menuBtn").focus(); } });
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu")) closeMenu(); });
 $("#moreSheet").addEventListener("click", (ev) => { if (ev.target === ev.currentTarget) ev.currentTarget.close(); });
@@ -3142,4 +3144,5 @@ async function importFile(file) {
   } catch (e) { busy = false; msg.textContent = errMsg(e); }
 }
 
+startTranslation();
 boot();

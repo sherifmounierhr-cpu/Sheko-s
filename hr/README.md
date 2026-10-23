@@ -267,6 +267,17 @@ upload stays as the fallback. Setup steps in Arabic: `tools/device/README.md`.
 - **The first owner:** while nobody holds `commissions`, the admin sees a card in
   الإعدادات to name one (never themself). It disappears after that.
 
+## English
+
+Each person picks عربي or English in the menu; the choice is kept on their
+device. The portal is written in Arabic: with English on, `hr/js/i18n.js`
+swaps every Arabic text the page shows (text, placeholders, labels, tooltips,
+toasts, dialogs, the tab title) for its line in `hr/js/en.js`, and the page
+reads left to right. A key is the Arabic exactly as shown; `{}` stands for a
+part that varies and `{#}` for a number, time or date. Text without an
+English line stays Arabic, and data people typed (names, notes) is never
+touched. The WhatsApp invitation to applicants always stays Arabic.
+
 ## "شوف شاشته" (admin preview)
 
 In الإعدادات, each user has a "شوف شاشته" button. The portal then shows
