@@ -632,3 +632,11 @@ select.sm { --ctl-h: 30px; font-size: 12px; padding-block: 0; margin-top: 4px; }
 .com-hero span { opacity: .9; font-size: 13px; }
 .neg { color: var(--bad); }
 @media (max-width: 520px) { .cbar { grid-template-columns: 84px minmax(0, 1fr) 76px; } .com-bulk { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); } }
+.com-ded { border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.com-ded legend { font-size: 13px; color: var(--muted); padding: 0 6px; }
+.com-net { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--sunken); }
+.com-net > div { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.com-net .total { border-top: 1px solid var(--line-strong); padding-top: 6px; font-weight: 600; }
+.com-net .total b { font-family: var(--display); font-size: 18px; color: var(--accent-strong); }
+form.add .com-ded label.field-inline { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); }
+form.add .com-ded .row { gap: 6px 18px; }

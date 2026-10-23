@@ -1,8 +1,8 @@
-import * as db from "./db.js?v=202610230900";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610230900";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610230900";
-import { readSheets } from "./xlsx.js?v=202610230900";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610230900";
+import * as db from "./db.js?v=202610231200";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231200";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231200";
+import { readSheets } from "./xlsx.js?v=202610231200";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231200";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -124,7 +124,8 @@ function ask(title, text = "", yes = "تأكيد", danger = false) {
   d.returnValue = "";
   return new Promise((res) => { d.addEventListener("close", () => res(d.returnValue === "yes"), { once: true }); d.showModal(); y.focus(); });
 }
-const CRM_ERR = [[/shares over 100/, "مجموع نسب الموظفين في الصفقة دي هيعدّي 100%."], [/collected part locked/, "الدفعة دي اتحصّلت، فمبلغها ونوعها مقفولين."],
+const CRM_ERR = [[/section hidden/, "الجزء ده مقفول عليك. المسؤول الأساسي للعمولات هو اللي يفتحه."], [/bad fee/, "مصاريف الإدارة والتحصيل لازم تكون واحدة من اللي في الإعدادات."], [/only the primary commissions owner/, "المسؤول الأساسي للعمولات بس هو اللي يغيّر ده."],
+  [/shares over 100/, "مجموع نسب الموظفين في الصفقة دي هيعدّي 100%."], [/collected part locked/, "الدفعة دي اتحصّلت، فمبلغها ونوعها مقفولين."],
   [/already paid/, "فيه عمولة من الدفعة دي اتصرفت بالفعل. لو التسجيل غلط، ألغي الصرفية الأول من (سجل الصرف)."], [/deal cancelled/, "الصفقة دي اتلغت، فمفيش تعديل عليها."],
   [/not approved/, "لازم البنود تكون معتمدة الأول."], [/one employee per payment/, "سجّل الصرف لموظف واحد في المرة."], [/share has entitlements/, "الموظف ده ليه مستحقات من الصفقة دي، فمينفعش يتشال. عدّل النسبة بدل كده."],
   [/commissions permission is managed/, "صلاحيات العمولات بيديها مسؤول العمولات بس."], [/bad file/, "الملف لازم يكون PDF أو صورة JPG أو PNG."], [/too big/, "الملف أكبر من المسموح."],
@@ -140,7 +141,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610230900";
+const BUILD = "202610231200";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -259,6 +260,7 @@ async function refresh(month = S?.meta.month) {
     if (CRM && VSCOPE) CRM = scopeCrm(CRM, VSCOPE, VIEW);
     R.crm = !!CRM && db.crmReady && (CRM.leads.some((l) => l.owner === ME.code) || ["sales", "lead"].includes(empBy(ME.code)?.position));
     COM = !VIEW && (R.commissions || R.commissions_view) ? await db.loadCom().catch(() => null) : null;
+    if (COM) comMe();
     MYCOM = !VIEW && ME.code ? await db.myCommissions().catch(() => []) : [];
     R.mycom = MYCOM.length > 0;
     R.trainee = !!TR?.plans.some((p) => p.code === ME.code);
@@ -831,7 +833,7 @@ async function orgAct(fn, msg, full = false) {
 // Only the commissions owner (`commissions`) and viewers (`commissions_view`) load any
 // of this; the admin is not let in by being admin. Employees get their own published
 // lines through hr_my_commissions().
-let COM = null, MYCOM = [], COMV = "dash", COM_DEAL = 0, COM_SEL = new Set(), COM_PERSON = "";
+let COM = null, MYCOM = [], COMV = "dash", COM_DTAB = "deal", COM_DEAL = 0, COM_SEL = new Set(), COM_PERSON = "";
 const COMF = { status: "open", q: "" };
 const COM_VIEWS = [["dash", "لوحة العمولات"], ["deals", "الصفقات"], ["claims", "المطالبات والفواتير"], ["payouts", "المستحقات والصرف"], ["set", "الإعدادات"]];
 const COM_METHOD = [["developer", "مطور"], ["direct", "مباشر"], ["nawy", "ناوي"], ["resale", "ريسيل"], ["other", "أخرى"]];
@@ -846,6 +848,15 @@ const comShares = (id) => COM.shares.filter((s) => s.deal === id);
 const comName = (code) => COM?.people.find((p) => p.code === code)?.name || nameOf(code) || code;
 const comRole = (k) => COM.roles.find((r) => r.key === k);
 const comLive = () => COM.deals.filter((d) => d.status !== "cancelled");
+// the part of a deal's commission left for staff shares: after taxes, then the admin/collection fee
+const comFactor = (d) => (d.taxOn ? 1 - COM.settings.taxRate : 1) * (1 - d.adminFee);
+function comNetBox(d) {
+  const st = COM.settings, tax = d.taxOn ? d.commission * st.taxRate : 0, fee = (d.commission - tax) * d.adminFee;
+  return `<div class="com-net"><div><span>عمولة الشركة</span><b class="num">${money(d.commission)}</b></div>
+    ${d.taxOn ? `<div><span>الضرائب ${n2(st.taxRate * 100)}%</span><b class="num neg">- ${money(tax)}</b></div>` : ""}
+    ${d.adminFee ? `<div><span>مصاريف إدارة وتحصيل ${n2(d.adminFee * 100)}%</span><b class="num neg">- ${money(fee)}</b></div>` : ""}
+    <div class="total"><span>صافي العمولة للتقسيم</span><b class="num">${money(d.commission - tax - fee)} ج</b></div></div>`;
+}
 // a part's invoice: G includes VAT, N gets VAT on top; withholding is on the amount before VAT
 function comInv(p) {
   const { vat, wht } = COM.settings, base = p.type === "G" ? p.amount / (1 + vat) : p.amount;
@@ -859,6 +870,7 @@ function comActions() {
   const out = [];
   for (const d of comLive()) {
     if (d.status === "reservation") out.push(["warn", `${d.client} (${d.project || "-"}) لسه حجز من ${dayDiff(d.sale, today())} يوم`, d.id]);
+    if (!COM.me.parts) continue;
     const ps = comParts(d.id);
     if (d.status === "contract" && !ps.length) out.push(["bad", `${d.client}: متعاقد ومفيش مطالبة متسجلة`, d.id]);
     ps.forEach((p, i) => {
@@ -891,16 +903,16 @@ function comDash() {
   const months = [...new Set(live.map((d) => d.sale.slice(0, 7)))].sort().reverse().slice(0, 6);
   return `<div class="pipe">
     <div><span>عمولات مسجلة</span><b>${money(booked)}</b><small>منها ${money(resv)} لسه حجز</small></div>
-    <div><span>اتطالب بيها</span><b>${money(claimed)}</b><small>${booked ? Math.round((claimed / booked) * 100) : 0}% من المسجل</small></div>
+    ${COM.me.parts ? `<div><span>اتطالب بيها</span><b>${money(claimed)}</b><small>${booked ? Math.round((claimed / booked) * 100) : 0}% من المسجل</small></div>
     <div><span>فواتير اتبعتت</span><b>${money(sent)}</b><small>شامل الضريبة</small></div>
-    <div><span>اتحصّل</span><b>${money(coll)}</b><small>صافي بعد خصم المنبع</small></div>
-    <div class="staff"><span>مستحق للموظفين</span><b>${money(owed)}</b><small>لسه ما اتصرفش</small></div>
-    <div class="staff"><span>اتصرف للموظفين</span><b>${money(paid)}</b><small>كل الفترة</small></div></div>
+    <div><span>اتحصّل</span><b>${money(coll)}</b><small>صافي بعد خصم المنبع</small></div>` : ""}
+    ${COM.me.shares ? `<div class="staff"><span>مستحق للموظفين</span><b>${money(owed)}</b><small>لسه ما اتصرفش</small></div>
+    <div class="staff"><span>اتصرف للموظفين</span><b>${money(paid)}</b><small>كل الفترة</small></div>` : ""}</div>
   <div class="card"><h2>${icon("alert-triangle")}محتاج إجراء <span class="badge">${acts.length}</span></h2>
     ${acts.length ? `<ul class="com-acts">${acts.map(([s, t, go]) => `<li><span class="sev ${s}" aria-hidden="true"></span><span class="spacer">${esc(t)}</span><button class="btn sm" type="button" ${typeof go === "number" ? `data-comdeal="${go}"` : `data-comv="${go}"`}>افتح</button></li>`).join("")}</ul>` : '<p class="note">مفيش حاجة متأخرة.</p>'}</div>
   <div class="com-grid">
     <div class="card"><h2>${icon("chart-bar")}حسب المطور (عقود)</h2><div class="cbars">${bars(byDev, (k) => k)}</div></div>
-    <div class="card"><h2>${icon("users")}حسب السيلز (عقود)</h2><div class="cbars">${bars(bySales, comName)}</div></div>
+    ${COM.me.shares ? `<div class="card"><h2>${icon("users")}حسب السيلز (عقود)</h2><div class="cbars">${bars(bySales, comName)}</div></div>` : ""}
     <div class="card"><h2>${icon("calendar-event")}آخر الشهور</h2><div class="tbl flat"><table><thead><tr><th>الشهر</th><th>صفقات</th><th>مسجل</th><th>اتحصّل</th></tr></thead><tbody>
       ${months.map((m) => { const ds = live.filter((d) => d.sale.startsWith(m)); const c = parts.filter((p) => p.collected.startsWith(m)).reduce((a, p) => a + comInv(p).net, 0);
         return `<tr><td>${m.split("-").reverse().join("/")}</td><td class="num">${ds.length}</td><td class="num">${money(ds.reduce((a, d) => a + d.commission, 0))}</td><td class="num">${money(c)}</td></tr>`; }).join("") || '<tr><td colspan="4" class="note">لسه مفيش صفقات.</td></tr>'}</tbody></table></div></div>
@@ -923,22 +935,24 @@ function comDeals() {
     ${list.map((d) => { const s = comShares(d.id).find((x) => x.role === "sales" || x.role === "self") || comShares(d.id)[0];
       return `<tr><td class="num">${d.id}</td><td><button class="btn ghost sm" type="button" data-comdeal="${d.id}">${esc(d.client)}</button></td><td>${esc(d.project || "-")}<div class="note">${esc([d.unit, d.developer].filter(Boolean).join(" · "))}</div></td>
         <td>${s ? esc(comName(s.code)) : '<span class="pill p-warn">مفيش</span>'}</td><td class="num">${money(d.price)}</td><td class="num">${n2(d.rate * 100)}%</td><td class="num"><b>${money(d.commission)}</b></td>
-        <td>${comStages(d)}</td><td><span class="pill ${COM_STATUS[d.status][1]}">${COM_STATUS[d.status][0]}</span></td></tr>`; }).join("") || `<tr><td colspan="9">${empty("briefcase", "مفيش صفقات هنا", comW() ? "دوس (صفقة جديدة) عشان تسجل أول صفقة." : "")}</td></tr>`}
+        <td>${COM.me.parts ? comStages(d) : '<span class="note">-</span>'}</td><td><span class="pill ${COM_STATUS[d.status][1]}">${COM_STATUS[d.status][0]}</span></td></tr>`; }).join("") || `<tr><td colspan="9">${empty("briefcase", "مفيش صفقات هنا", comW() ? "دوس (صفقة جديدة) عشان تسجل أول صفقة." : "")}</td></tr>`}
     </tbody>${list.length ? `<tfoot><tr><td colspan="6">الإجمالي (من غير الملغي)</td><td class="num">${money(tot)}</td><td colspan="2"></td></tr></tfoot>` : ""}</table></div></div>`;
 }
 function comDealPanel(d) {
   const w = comW() && (!d || d.status !== "cancelled"), dis = w ? "" : " disabled";
   const projects = (CRM?.projects || []).filter((p) => p.active);
   const v = d || { client: "", phone: "", project: "", developer: "", unit: "", price: "", rate: "", resale: 0, method: "developer", status: "reservation", sale: today(), contract: "", register: "", notes: "", ref: "" };
-  const base = d ? d.commission / (1 + COM.settings.vat) : 0;
+  const st = COM.settings, base = d ? d.commission * comFactor(d) : 0;
+  const tabs = [["deal", "الصفقة والوحدة"], ...(d && COM.me.shares ? [["shares", "نصيب الموظفين"]] : []), ...(d && COM.me.parts ? [["parts", "المطالبة والدفعات"], ["docs", "المستندات"]] : [])];
+  const tab = tabs.some(([k]) => k === COM_DTAB) ? COM_DTAB : "deal";
   const shares = d ? comShares(d.id) : [], tot = shares.reduce((a, s) => a + s.pct, 0), parts = d ? comParts(d.id) : [], files = d ? COM.files.filter((f) => f.deal === d.id) : [];
   const partsSum = parts.reduce((a, p) => a + p.amount, 0);
   const active = (COM.people || []).filter((p) => p.active);
   return `<div class="card org-panel"><div class="row"><h2 class="spacer">${icon("briefcase")}${d ? `${esc(d.client)} <span class="note">#${d.id}</span>` : "صفقة جديدة"}</h2>
       ${d ? `<span class="pill ${COM_STATUS[d.status][1]}">${COM_STATUS[d.status][0]}</span>` : ""}<button class="btn ghost icon-only" type="button" data-comdeal="0" aria-label="رجوع للصفقات">${icon("x")}</button></div>
+    ${tabs.length > 1 ? `<div class="com-seg" role="tablist" aria-label="أجزاء الصفقة">${tabs.map(([k, l]) => `<button type="button" role="tab" data-comdtab="${k}" aria-selected="${tab === k}">${l}</button>`).join("")}</div>` : ""}
     ${d?.status === "cancelled" ? `<div class="banner bad">${icon("alert-triangle")}الصفقة اتلغت: ${esc(d.cancelReason)}</div>` : ""}
-    <h3 class="com-h"><span class="k">1</span>الصفقة والوحدة</h3>
-    <form class="add" id="comDealForm" data-deal="${d?.id || ""}">
+    ${tab === "deal" ? `    <form class="add" id="comDealForm" data-deal="${d?.id || ""}">
       <label>العميل<input type="text" name="client" value="${esc(v.client)}" required maxlength="120"${dis}></label>
       <label>الموبايل<input type="tel" name="phone" value="${esc(v.phone)}" dir="ltr" maxlength="20"${dis}></label>
       <label>المشروع<input type="text" name="project" value="${esc(v.project)}" list="comProjects" maxlength="80"${dis}></label>
@@ -952,12 +966,19 @@ function comDealPanel(d) {
       <label>تاريخ البيع<input type="date" name="sale" value="${esc(v.sale)}" required${dis}></label>
       <label>تاريخ التعاقد<input type="date" name="contract" value="${esc(v.contract)}"${dis}></label>
       <label>السجل التجاري<input type="text" name="register" value="${esc(v.register)}" maxlength="40"${dis}></label>
+      <fieldset class="wide com-ded"><legend>الخصومات قبل التقسيم على الموظفين</legend>
+        <label class="field-inline"><input type="checkbox" name="taxOn"${(d ? d.taxOn : true) ? " checked" : ""}${dis}> الضرائب ${n2(st.taxRate * 100)}% (بتتخصم من العمولة)</label>
+        <div class="row">${[[0, "من غير مصاريف"], [st.feeLow, `مصاريف إدارة وتحصيل ${n2(st.feeLow * 100)}%`], [st.feeHigh, `مصاريف إدارة وتحصيل ${n2(st.feeHigh * 100)}%`]].map(([fv, fl]) =>
+          `<label class="field-inline"><input type="radio" name="fee" value="${fv}"${Math.abs((d ? d.adminFee : 0) - fv) < 1e-9 ? " checked" : ""}${dis}> ${fl}</label>`).join("")}</div></fieldset>
       <label class="wide">ملاحظات<input type="text" name="notes" value="${esc(v.notes)}" maxlength="2000"${dis}></label>
       ${w ? `<div><button class="btn primary" type="submit">${icon("check")}${d ? "حفظ" : "سجّل الصفقة"}</button></div>` : ""}</form>
     <datalist id="comProjects">${projects.map((p) => `<option value="${esc(p.name)}">${esc(p.developer)}</option>`).join("")}</datalist>
-    ${d ? `<div class="com-sum"><span>عمولة الشركة</span><b class="num">${money(d.commission)} ج</b><span class="note">قبل الضريبة تقريبًا ${money(base)} ج</span></div>
-    <h3 class="com-h"><span class="k">2</span>نصيب الموظفين</h3>
-    <p class="note">النسبة من عمولة الشركة قبل الضريبة، وبتتحسب على كل دفعة تتحصّل.</p>
+    ${d ? comNetBox(d) : ""}
+    ${w && d && COM.me.shares && COM.me.parts ? fold("alert-triangle#comCancel", "إلغاء الصفقة", `<p class="note">الإلغاء بيلغي المستحقات اللي ما اتصرفتش، واللي اتصرف بيتعمله استرداد بيتخصم من صرف الموظف الجاي. مفيش رجوع بعده.</p>
+      <form class="row" id="comCancelForm" data-deal="${d.id}"><input type="text" name="reason" required maxlength="500" placeholder="سبب الإلغاء" aria-label="سبب الإلغاء"><button class="btn danger" type="submit">ألغي الصفقة</button></form>`) : ""}
+    ` : ""}
+    ${tab === "shares" ? `${comNetBox(d)}
+    <p class="note">النسبة من صافي العمولة بعد الضرايب ومصاريف الإدارة والتحصيل، وبتتحسب على كل دفعة تتحصّل.</p>
     <div class="tbl flat"><table><thead><tr><th>الموظف</th><th>الدور</th><th>النسبة</th><th>تقريبًا من الصفقة كلها</th><th></th></tr></thead><tbody>
       ${shares.map((s) => `<tr><td>${esc(comName(s.code))}</td><td>${esc(comRole(s.role)?.title || s.role)}</td>
         <td>${w ? `<input type="number" data-comsharepct="${s.id}" value="${s.pct}" min="0.5" max="100" step="0.5" style="width:80px" aria-label="نسبة ${esc(comName(s.code))}">` : `${s.pct}%`}</td>
@@ -965,9 +986,8 @@ function comDealPanel(d) {
     </tbody><tfoot><tr><td colspan="2">للموظفين ${n2(tot)}% · للشركة ${n2(100 - tot)}%</td><td></td><td class="num">${money((base * tot) / 100)}</td><td></td></tr></tfoot></table></div>
     ${w ? `<form class="row" id="comShareForm" data-deal="${d.id}"><select name="code" required aria-label="الموظف">${opts(active.map((p) => [p.code, p.name]), "", "اختار الموظف")}</select>
       <select name="role" required aria-label="الدور">${opts(COM.roles.filter((r) => r.active).map((r) => [r.key, `${r.title} (${r.pct}%)`]), "")}</select>
-      <input type="number" name="pct" min="0.5" max="100" step="0.5" placeholder="النسبة" style="width:90px" aria-label="النسبة (فاضي = نسبة الدور)"><button class="btn" type="submit">${icon("plus")}ضيف</button></form>` : ""}
-    <h3 class="com-h"><span class="k">3</span>المطالبة والدفعات</h3>
-    ${parts.length ? `<div class="tbl flat"><table><thead><tr><th>الدفعة</th><th>المبلغ</th><th>النوع</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead><tbody>
+      <input type="number" name="pct" min="0.5" max="100" step="0.5" placeholder="النسبة" style="width:90px" aria-label="النسبة (فاضي = نسبة الدور)"><button class="btn" type="submit">${icon("plus")}ضيف</button></form>` : ""}` : ""}
+    ${tab === "parts" ? `    ${parts.length ? `<div class="tbl flat"><table><thead><tr><th>الدفعة</th><th>المبلغ</th><th>النوع</th><th>الصافي</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${parts.map((p, i) => { const iv = comInv(p), [st, cls] = comStage(p); return `<tr><td>${i + 1}${p.ref ? `<div class="note">${esc(p.ref)}</div>` : ""}</td><td class="num">${money(p.amount)}</td>
         <td>${p.type === "G" ? "شامل الضريبة" : "صافي + ضريبة"}${p.wht ? '<div class="note">خصم منبع</div>' : ""}</td><td class="num">${money(iv.net)}</td><td><span class="pill ${cls}">${st}</span></td>
         <td><div class="row nowrap">${comStepBtn(p)}<button class="btn sm" type="button" data-copy="${esc(comDesc(d, i))}">${icon("copy")}وصف الفاتورة</button>${w && !p.collected ? `<button class="btn ghost icon-only" type="button" data-compartdel="${p.id}" aria-label="امسح الدفعة">${icon("trash")}</button>` : ""}</div></td></tr>`; }).join("")}
@@ -977,15 +997,12 @@ function comDealPanel(d) {
       <label>النوع<select name="type">${opts([["G", "شامل الضريبة"], ["N", "صافي والضريبة بتتضاف"]], "G")}</select></label>
       <label class="field-inline"><input type="checkbox" name="wht" checked> خصم من المنبع ${Math.round(COM.settings.wht * 100)}%</label>
       <label>ميعاد التحصيل المتوقع<input type="date" name="due"></label><label>رقم المرجع<input type="text" name="ref" maxlength="60"></label>
-      <div><button class="btn" type="submit">${icon("plus")}ضيف دفعة</button></div></form>` : ""}
-    <h3 class="com-h"><span class="k">4</span>المستندات</h3>
-    <div class="row">${COM_SLOTS.slice(0, 5).map(([k, l]) => `<span class="pill ${files.some((f) => f.slot === k) ? "p-ok" : "p-mute"}">${l}</span>`).join("")}</div>
+      <div><button class="btn" type="submit">${icon("plus")}ضيف دفعة</button></div></form>` : ""}` : ""}
+    ${tab === "docs" ? `    <div class="row">${COM_SLOTS.slice(0, 5).map(([k, l]) => `<span class="pill ${files.some((f) => f.slot === k) ? "p-ok" : "p-mute"}">${l}</span>`).join("")}</div>
     ${files.length ? `<div class="row">${files.map((f) => `<button class="btn sm" type="button" data-comfile="${f.id}">${icon("file-text")}${esc(f.name)}</button>`).join("")}</div>` : ""}
     ${w ? `<form class="row" id="comFileForm" data-deal="${d.id}"><select name="slot" aria-label="نوع المستند">${opts(COM_SLOTS, "contract")}</select>
       <input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required aria-label="الملف"><button class="btn" type="submit">${icon("upload")}ارفع</button></form>
-    <p class="note">PDF أو صورة، لحد 5 ميجا.</p>` : ""}
-    ${w ? fold("alert-triangle#comCancel", "إلغاء الصفقة", `<p class="note">الإلغاء بيلغي المستحقات اللي ما اتصرفتش، واللي اتصرف بيتعمله استرداد بيتخصم من صرف الموظف الجاي. مفيش رجوع بعده.</p>
-      <form class="row" id="comCancelForm" data-deal="${d.id}"><input type="text" name="reason" required maxlength="500" placeholder="سبب الإلغاء" aria-label="سبب الإلغاء"><button class="btn danger" type="submit">ألغي الصفقة</button></form>`) : ""}` : ""}
+    <p class="note">PDF أو صورة، لحد 5 ميجا.</p>` : ""}` : ""}
   </div>`;
 }
 // the next step on a part, one button: claimed, invoice sent, collected
@@ -1052,13 +1069,18 @@ function comSettings() {
     <div class="card"><h2>${icon("receipt")}الضرايب</h2>
       <form class="add" id="comSetForm"><label>ضريبة القيمة المضافة %<input type="number" name="vat" value="${n2(st.vat * 100)}" min="0" max="50" step="0.5"${dis}></label>
         <label>الخصم من المنبع %<input type="number" name="wht" value="${n2(st.wht * 100)}" min="0" max="50" step="0.5"${dis}></label>
+        <label>الضرائب على العمولة %<input type="number" name="taxRate" value="${n2(st.taxRate * 100)}" min="0" max="50" step="0.5"${dis}></label>
+        <label>مصاريف إدارة وتحصيل (الأقل) %<input type="number" name="feeLow" value="${n2(st.feeLow * 100)}" min="0" max="90" step="0.5"${dis}></label>
+        <label>مصاريف إدارة وتحصيل (الأعلى) %<input type="number" name="feeHigh" value="${n2(st.feeHigh * 100)}" min="0" max="90" step="0.5"${dis}></label>
         ${w ? `<div><button class="btn primary" type="submit">حفظ</button></div>` : ""}</form>
       <p class="note">الضريبة اللي هنا بتتطبق على الدفعات اللي هتتحصّل من النهارده. اللي اتحسب قبل كده بيفضل زي ما هو.</p></div>
     <div class="card"><h2>${icon("lock")}مين يشوف العمولات</h2>
       <p class="note">مسؤول العمولات بيسجل ويعدل كل حاجة، و(يشوف العمولات) بيقرا بس. أي حد تاني، حتى المديرين ومدير النظام، مش بيشوف حاجة. والموظف بيشوف عمولته هو بس، ولما انت تظهرها له. أي تغيير هنا بيوصل إشعار لكل مسؤولين العمولات.</p>
-      <div class="tbl flat"><table><thead><tr><th>الموظف</th><th>مسؤول العمولات</th><th>يشوف العمولات</th></tr></thead><tbody>
-      ${holders.map((p) => `<tr><td>${esc(p.name)}${p.active ? "" : ' <span class="pill p-mute">مش شغال</span>'}</td>
-        ${["commissions", "commissions_view"].map((r) => `<td><input type="checkbox" data-comgrant="${esc(p.user)}|${r}"${p.roles.includes(r) ? " checked" : ""}${w && !(r === "commissions" && p.user === ME.id) ? "" : " disabled"} aria-label="${esc(p.name)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
+      <p class="note">${COM.me.primary ? "انت المسؤول الأساسي: انت بس اللي بتدي الصلاحيات وبتحدد كل واحد يشوف (نصيب الموظفين) و(المطالبة والدفعات) ولا لأ. أي حد جديد بيبتدي بالصفقة بس." : "المسؤول الأساسي بس هو اللي بيغيّر الصلاحيات واللي يشوفه كل واحد."}</p>
+      <div class="tbl flat"><table><thead><tr><th>الموظف</th><th>مسؤول العمولات</th><th>يشوف العمولات</th><th>نصيب الموظفين</th><th>المطالبة والدفعات</th></tr></thead><tbody>
+      ${holders.filter((p) => p.roles.length || COM.me.primary).map((p) => `<tr><td>${esc(p.name)}${p.primary ? ' <span class="pill p-acc">المسؤول الأساسي</span>' : ""}${p.active ? "" : ' <span class="pill p-mute">مش شغال</span>'}</td>
+        ${["commissions", "commissions_view"].map((r) => `<td><input type="checkbox" data-comgrant="${esc(p.user)}|${r}"${p.roles.includes(r) ? " checked" : ""}${w && COM.me.primary && p.user !== ME.id ? "" : " disabled"} aria-label="${esc(p.name)}"></td>`).join("")}
+        ${["shares", "parts"].map((k) => `<td>${p.primary ? '<span class="note">كله</span>' : !p.roles.length ? "" : COM.me.primary && p.user !== ME.id ? `<input type="checkbox" data-comaccess="${esc(p.user)}|${k}"${p[k] ? " checked" : ""} aria-label="${esc(p.name)}">` : p[k] == null ? '<span class="note">-</span>' : p[k] ? "✓" : "✗"}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>
     ${w ? comImportCard() : ""}
   </div>`;
 }
@@ -1066,7 +1088,9 @@ function com() {
   if (!db.comReady) return `<div class="banner">${icon("alert-triangle")}جداول العمولات لسه مش ظاهرة. شغّل neon/014_commissions.sql في Neon SQL Editor، وبعدين notify pgrst.</div>`;
   if (!COM) return empty("lock", "العمولات مش متاحة لحسابك", "الصلاحية دي بيديها مسؤول العمولات بس.");
   const views = { dash: comDash, deals: comDeals, claims: comClaims, payouts: comPayouts, set: comSettings };
-  return `<div class="com-seg" role="tablist" aria-label="أقسام العمولات">${COM_VIEWS.map(([k, l]) => `<button type="button" role="tab" data-comv="${k}" aria-selected="${COMV === k}">${l}</button>`).join("")}</div>
+  const shown = COM_VIEWS.filter(([k]) => (k !== "claims" || COM.me.parts) && (k !== "payouts" || COM.me.shares));
+  if (!shown.some(([k]) => k === COMV)) COMV = "dash";
+  return `<div class="com-seg" role="tablist" aria-label="أقسام العمولات">${shown.map(([k, l]) => `<button type="button" role="tab" data-comv="${k}" aria-selected="${COMV === k}">${l}</button>`).join("")}</div>
     ${R.commissions ? "" : '<p class="note">صلاحيتك قراية بس.</p>'}${views[COMV]()}`;
 }
 
@@ -1189,8 +1213,14 @@ function mycom() {
     <div class="row note"><span class="spacer">${esc(x.unit || "")}${x.parts > 1 ? ` · دفعة ${x.part} من ${x.parts}` : ""} · ${esc(x.role || "")}</span><b class="num${Number(x.amount) < 0 ? " neg" : ""}">${money(Number(x.amount))} ج</b></div>
     ${x.paid_on ? `<div class="note">اتصرفت ${fmtDate(x.paid_on)} · ${esc(PAY_M.find(([k]) => k === x.method)?.[1] || "")}</div>` : ""}</div>`; }).join("") || empty("cash", "مفيش عمولات ظاهرة لك دلوقتي")}</div>`;
 }
+// which parts of a deal this person sees (neon/017_com_deductions.sql): the primary owner everything,
+// anyone else what the primary owner opened for them
+function comMe() {
+  const primary = R.commissions && (COM.settings.owner ? COM.settings.owner === ME.id : true), a = COM.access.find((x) => x.user === ME.id);
+  COM.me = { primary, shares: primary || !!a?.shares, parts: primary || !!a?.parts };
+}
 async function comAct(fn, msg) {
-  try { await fn(); if (msg) toast(msg); COM = await db.loadCom(); render(); }
+  try { await fn(); if (msg) toast(msg); COM = await db.loadCom(); if (COM) comMe(); render(); }
   catch (e) { toast(errMsg(e), true); render(); }
 }
 async function comOpenFile(id) {
@@ -2594,7 +2624,8 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   if (d.comv) { COMV = d.comv; COM_DEAL = 0; render(); return; }
-  if (d.comdeal != null) { COM_DEAL = d.comdeal === "new" ? "new" : Number(d.comdeal); COMV = "deals"; render(); window.scrollTo({ top: 0 }); return; }
+  if (d.comdtab) { COM_DTAB = d.comdtab; render(); return; }
+  if (d.comdeal != null) { COM_DTAB = "deal"; COM_DEAL = d.comdeal === "new" ? "new" : Number(d.comdeal); COMV = "deals"; render(); window.scrollTo({ top: 0 }); return; }
   if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast("اتنسخ"); } catch { toast(d.copy); } return; }
   if (d.comfile) { comOpenFile(Number(d.comfile)); return; }
   if (d.comperson != null) { COM_PERSON = COM_PERSON === d.comperson ? "" : d.comperson; render(); return; }
@@ -2743,6 +2774,11 @@ document.addEventListener("change", async (ev) => {
   if (d.comroletitle) { if (t.value.trim()) await comAct(() => db.comSaveRole(d.comroletitle, { title: t.value.trim() }), "اتحفظ"); return; }
   if (d.comrolepct) { await comAct(() => db.comSaveRole(d.comrolepct, { pct: Number(t.value) }), "اتحفظت النسبة. بتتطبق على اللي هيتضافوا من دلوقتي"); return; }
   if (d.comroleon) { await comAct(() => db.comSaveRole(d.comroleon, { active: t.checked }), "اتحفظ"); return; }
+  if (d.comaccess) {
+    const [uid, k] = d.comaccess.split("|"), p = COM.people.find((x) => x.user === uid); if (!p) return;
+    const next = { shares: !!p.shares, parts: !!p.parts, [k]: t.checked };
+    await comAct(() => db.comAccess(uid, next.shares, next.parts), t.checked ? `${p.name} بقى يشوف ${k === "shares" ? "نصيب الموظفين" : "المطالبة والدفعات"}` : `اتقفل على ${p.name}`); return;
+  }
   if (d.comgrant) {
     const [uid, r] = d.comgrant.split("|"), on = t.checked, who = COM.people.find((p) => p.user === uid)?.name || "";
     if (on && !(await ask(`تدي ${who} صلاحية (${r === "commissions" ? "مسؤول العمولات" : "يشوف العمولات"})؟`, r === "commissions" ? "هيقدر يشوف ويعدل كل العمولات ويدي الصلاحية لغيره." : "هيقدر يشوف كل العمولات من غير تعديل.", "أيوه"))) { render(); return; }
@@ -2866,12 +2902,13 @@ document.addEventListener("submit", async (ev) => {
     return act(() => db.comGrant(u.id, "commissions", true), `بقى ${nameOf(u.code) || u.name} مسؤول العمولات`);
   }
   if (f.id === "comDealForm") {
-    const id = Number(f.dataset.deal) || 0, fields = { ...v, rate: Number(v.rate) / 100, contract: v.contract || (v.status === "contract" ? today() : "") };
+    const id = Number(f.dataset.deal) || 0, fields = { ...v, rate: Number(v.rate) / 100, contract: v.contract || (v.status === "contract" ? today() : ""), taxOn: !!v.taxOn, adminFee: Number(v.fee || 0) };
+    delete fields.fee;
     const proj = (CRM?.projects || []).find((p) => p.name === v.project.trim());
     if (proj) { fields.projectId = proj.id; if (!v.developer) fields.developer = proj.developer; } else fields.projectId = "";
     let nid = id;
     await comAct(async () => { nid = await db.comSaveDeal(id, fields); }, id ? "اتحفظت الصفقة" : "اتسجلت الصفقة. ضيف الموظفين والدفعات تحت");
-    if (!id && nid) { COM_DEAL = nid; render(); }
+    if (!id && nid) { COM_DEAL = nid; COM_DTAB = COM.me.shares ? "shares" : "deal"; render(); }
     return;
   }
   if (f.id === "comShareForm") {
@@ -2886,7 +2923,7 @@ document.addEventListener("submit", async (ev) => {
     return comAct(async () => { await db.comPay(ids, v.date, v.method, v.ref.trim()); COM_SEL.clear(); }, "اتسجل الصرف، والموظف هيشوفها اتصرفت لو ظاهرة له");
   }
   if (f.id === "comUnpayForm") { if (!(await ask("تلغي تسجيل الصرفية دي؟", "البنود هترجع معتمدة ومستنية صرف.", "ألغي التسجيل", true))) return; return comAct(() => db.comUnpay(Number(v.id), v.reason.trim()), "اتلغى التسجيل"); }
-  if (f.id === "comSetForm") return comAct(() => db.comSaveSettings({ vat: Number(v.vat) / 100, wht: Number(v.wht) / 100 }), "اتحفظت الضرايب");
+  if (f.id === "comSetForm") return comAct(() => db.comSaveSettings({ vat: Number(v.vat) / 100, wht: Number(v.wht) / 100, tax_rate: Number(v.taxRate) / 100, fee_low: Number(v.feeLow) / 100, fee_high: Number(v.feeHigh) / 100 }), "اتحفظت الضرايب والمصاريف");
   if (f.id === "comRoleForm") {
     const key = "r_" + Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 8).padEnd(4, "x");
     return comAct(() => db.comAddRole(key, v.title.trim(), v.pct, COM.roles.length + 1), "اتضاف الدور");

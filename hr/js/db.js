@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610230900";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610230900";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610231200";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610231200";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -696,15 +696,20 @@ export async function loadCom() {
       get(client.from("com_parts").select("*").order("id")), get(client.from("com_entitlements").select("*").order("id")),
       get(client.from("com_payouts").select("*").order("paid_on", { ascending: false })),
       get(client.from("com_files").select("id,deal_id,slot,name,mime,size,created_at")), client.rpc("hr_com_people").then(check)]);
+    // which parts of a deal this person sees (neon/017_com_deductions.sql); the primary owner sees everything
+    const access = await get(client.from("com_access").select("*")).catch(() => []);
     comReady = true;
     if (!settings.length) return null;
     const st = settings[0];
     return {
-      settings: { vat: Number(st.vat), wht: Number(st.wht), show: !!st.show, docs: st.docs || {} },
+      settings: { vat: Number(st.vat), wht: Number(st.wht), show: !!st.show, docs: st.docs || {}, taxRate: Number(st.tax_rate ?? 0.14),
+        feeLow: Number(st.fee_low ?? 0.11), feeHigh: Number(st.fee_high ?? 0.21), owner: st.owner_user || "" },
+      access: access.map((a) => ({ user: a.user_id, shares: !!a.shares, parts: !!a.parts })),
       roles: roles.map((r) => ({ key: r.key, title: r.title, pct: Number(r.pct), sort: r.sort, active: r.active !== false })),
       deals: deals.map((d) => ({ id: d.id, ref: d.ref || "", client: d.client, phone: d.phone || "", projectId: d.project_id ?? "", project: d.project || "", developer: d.developer || "",
         unit: d.unit || "", price: Number(d.price), rate: Number(d.rate), resale: Number(d.resale_amount), method: d.method, register: d.register || "", status: d.status,
-        sale: d.sale_date, contract: d.contract_date || "", leadId: d.lead_id ?? "", notes: d.notes || "", commission: Number(d.commission), cancelReason: d.cancel_reason || "" })),
+        sale: d.sale_date, contract: d.contract_date || "", leadId: d.lead_id ?? "", notes: d.notes || "", commission: Number(d.commission), cancelReason: d.cancel_reason || "",
+        taxOn: d.tax_on !== false, adminFee: Number(d.admin_fee || 0) })),
       shares: shares.map((x) => ({ id: x.id, deal: x.deal_id, code: x.code, role: x.role, pct: Number(x.pct) })),
       parts: parts.map((p) => ({ id: p.id, deal: p.deal_id, amount: Number(p.amount), type: p.inv_type, wht: !!p.wht, ref: p.ref || "", claim: p.claim_date || "", sent: p.sent_date || "",
         due: p.due_date || "", collected: p.collected_date || "", received: num(p.received), note: p.note || "" })),
@@ -717,11 +722,12 @@ export async function loadCom() {
   } catch (e) { comReady = !missing(e); if (missing(e)) return null; throw e; }
 }
 const DEAL_COLS = { ref: "ref", client: "client", phone: "phone", projectId: "project_id", project: "project", developer: "developer", unit: "unit", price: "price", rate: "rate",
-  resale: "resale_amount", method: "method", register: "register", status: "status", sale: "sale_date", contract: "contract_date", notes: "notes" };
-const NUMERIC = new Set(["price", "rate", "resale_amount", "project_id"]);
+  resale: "resale_amount", method: "method", register: "register", status: "status", sale: "sale_date", contract: "contract_date", notes: "notes",
+  taxOn: "tax_on", adminFee: "admin_fee" };
+const NUMERIC = new Set(["price", "rate", "resale_amount", "project_id", "admin_fee"]);
 function dealRow(f) {
   const row = {};
-  for (const [k, c] of Object.entries(DEAL_COLS)) if (k in f) row[c] = NUMERIC.has(c) ? num(f[k]) : nullIfEmpty(f[k]);
+  for (const [k, c] of Object.entries(DEAL_COLS)) if (k in f) row[c] = typeof f[k] === "boolean" ? f[k] : NUMERIC.has(c) ? num(f[k]) : nullIfEmpty(f[k]);
   return row;
 }
 export async function comSaveDeal(id, fields) {
@@ -745,6 +751,7 @@ export async function comApprove(ids) { return check(await client.rpc("hr_com_ap
 export async function comPublish(ids, on) { return check(await client.rpc("hr_com_publish", { p_ids: ids, p_on: on })); }
 export async function comPay(ids, date, method, ref, note) { return check(await client.rpc("hr_com_pay", { p_ids: ids, p_paid_on: date, p_method: method, p_ref: ref || null, p_note: note || null })); }
 export async function comUnpay(id, reason) { check(await client.rpc("hr_com_unpay", { p_payout: id, p_reason: reason })); }
+export async function comAccess(user, shares, parts) { check(await client.rpc("hr_com_access", { p_user: user, p_shares: shares, p_parts: parts })); }
 export async function comGrant(user, role, on) { check(await client.rpc("hr_com_grant", { p_user: user, p_role: role, p_on: on })); }
 export async function comSaveSettings(f) { check(await client.from("com_settings").update(f).eq("id", 1)); }
 export async function comSaveRole(key, f) { check(await client.from("com_roles").update(f).eq("key", key)); }

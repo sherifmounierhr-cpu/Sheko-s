@@ -256,6 +256,14 @@ upload stays as the fallback. Setup steps in Arabic: `tools/device/README.md`.
   unmatched names; then everything is imported or nothing. Money already
   collected becomes a collected part whose staff shares are marked paid
   (optional) and never shown to staff by the import.
+- **Deductions before the split** (`neon/017_com_deductions.sql`): each deal
+  can deduct taxes (14%, on by default) straight from the commission, then an
+  admin/collection fee of 11% or 21% from what's left. Staff shares come from
+  that net. The rates are in settings; the fee is stored on the deal.
+- **Who sees which part of a deal:** the owner named first is the primary
+  owner. Only they grant or remove the commissions permissions, and they open
+  "نصيب الموظفين" and "المطالبة والدفعات" person by person; everyone else,
+  other owners included, starts with the deal only. The database enforces it.
 - **The first owner:** while nobody holds `commissions`, the admin sees a card in
   الإعدادات to name one (never themself). It disappears after that.
 
@@ -277,8 +285,8 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/005_sales_eval.sql`, `neon/006_weekly_report.sql`,
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
-   `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql` and
-   `neon/016_identity.sql`
+   `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql`,
+   `neon/016_identity.sql` and `neon/017_com_deductions.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -328,6 +336,7 @@ neon/013_admin.sql     the administration: tracks, direct manager, personal perm
 neon/014_commissions.sql  commissions: deals, invoices, staff shares, payouts (confidential)
 neon/015_com_import.sql   one-time import of the old commissions ledger from Excel
 neon/016_identity.sql     a signed-in request without its identity fails (and is retried) instead of coming back empty
+neon/017_com_deductions.sql  taxes and admin fee before the staff split; per-person access to shares and parts
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)

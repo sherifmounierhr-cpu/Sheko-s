@@ -39,6 +39,8 @@ declare
   sd date; cd date; cod date; st text; meth text; typ text;
 begin
   if not hr_com('commissions') then raise exception 'not allowed'; end if;
+  -- needs the staff shares and the parts sections too (neon/017_com_deductions.sql); run 015 and 017 together
+  if not (hr_com_sees('shares') and hr_com_sees('parts')) then raise exception 'section hidden'; end if;
   if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 3000 then raise exception 'bad rows'; end if;
 
   -- pass 1: check every row and say what would happen
