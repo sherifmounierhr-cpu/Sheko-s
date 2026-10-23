@@ -1,9 +1,9 @@
-import * as db from "./db.js?v=202610231500";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231500";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231500";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610231500";
-import { readSheets } from "./xlsx.js?v=202610231500";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231500";
+import * as db from "./db.js?v=202610231700";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610231700";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610231700";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610231700";
+import { readSheets } from "./xlsx.js?v=202610231700";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610231700";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -142,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610231500";
+const BUILD = "202610231700";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -377,7 +377,9 @@ function monthCal(e, ym) {
   const blanks = Array.from({ length: first }, () => '<span class="d blank" aria-hidden="true"></span>').join("");
   const cells = rows.map((r) => {
     const t = r.type !== "يوم عمل" ? "" : r.future ? "" : tone(r.status);
-    const tip = `${DAYS[r.w]} ${fmtDate(r.d)}: ${r.status}${r.pin != null ? `، دخول ${to12(r.pin)}` : ""}${r.pout != null ? `، خروج ${to12(r.pout)}` : ""}${r.fin ? `، خصم ${n2(r.fin)} يوم` : ""}`;
+    // built in pieces so each one finds its English line
+    const tip = [`${DAYS[r.w]} ${fmtDate(r.d)}: ${r.status}`, r.pin != null && `دخول ${to12(r.pin)}`, r.pout != null && `خروج ${to12(r.pout)}`, r.fin && `خصم ${n2(r.fin)} يوم`]
+      .filter(Boolean).map(tr).join(LANG === "en" ? ", " : "، ");
     return `<button type="button" class="d ${t}${r.d === td ? " today" : ""}" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${Number(r.d.slice(8))}</button>`;
   }).join("");
   return `<div class="cal" role="group" aria-label="حضور الشهر يوم بيوم">${head}${blanks}${cells}</div>
@@ -2435,7 +2437,7 @@ function weekly() {
     return `<div class="card"><div class="row"><h2 class="spacer">${icon("users")}${esc(s.team.name)}</h2>${!s.edit ? '<span class="pill p-mute">متابعة بس</span>' : ""}</div>
     ${ms.length ? `<div class="tbl flat"><table class="eval"><thead><tr><th>الموظف</th>${s.cats.map((c) => `<th>${catName(c)}</th>`).join("")}</tr></thead><tbody>
       ${ms.map((m) => `<tr><th scope="row">${esc(empName(m))}</th>${s.cats.map((c) => { const x = entryOf(m.code, w.id, c);
-        return `<td>${can ? `<div class="rate" role="radiogroup" aria-label="${esc(empName(m))}: ${catName(c)}">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="${x?.rating === n}" data-rate="${esc(m.code)}|${c}|${n}" title="${RATE_TXT[n]}">${n}</button>`).join("")}</div>
+        return `<td>${can ? `<div class="rate" role="radiogroup" aria-label="تقييم ${esc(empName(m))}: ${catName(c)}">${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="${x?.rating === n}" data-rate="${esc(m.code)}|${c}|${n}" title="${RATE_TXT[n]}">${n}</button>`).join("")}</div>
           <input type="text" class="enote" maxlength="500" placeholder="ملاحظة" value="${esc(x?.note || "")}" data-enote="${esc(m.code)}|${c}" aria-label="ملاحظة ${esc(empName(m))}: ${catName(c)}"${x ? "" : " disabled"}>`
           : `${ratePill(x?.rating)}${x?.note ? `<div class="note wrap">${esc(x.note)}</div>` : ""}`}</td>`; }).join("")}</tr>`).join("")}
     </tbody></table></div>` : '<p class="note">مفيش موظفين في الفريق ده.</p>'}</div>`; }).join("")}

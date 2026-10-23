@@ -4,7 +4,7 @@
 // title, toasts and dialogs) is swapped for its English line from en.js as it appears.
 // A text with no English line yet stays Arabic, so nothing ever breaks.
 // Data people typed (names, notes, inputs) is never touched.
-import { EN } from "./en.js?v=202610231500";
+import { EN } from "./en.js?v=202610231700";
 
 const KEY = "hr-lang";
 export const LANG = (() => { try { return localStorage.getItem(KEY) === "en" ? "en" : "ar"; } catch { return "ar"; } })();
@@ -33,7 +33,7 @@ function add(k, en) {
 for (const [ar, en] of Object.entries(EN)) {
   let k = norm(ar), e = en;
   // "{}" stuck to the start of a text is an icon drawn before it, not text
-  if (/^\{\}\S/.test(k) && e.startsWith("{}")) { k = k.slice(2); e = e.slice(2); }
+  if (/^\{\}[؀-ۿ]/.test(k) && e.startsWith("{}")) { k = k.slice(2); e = e.slice(2); }
   add(k, e);
   if (/\S\{\}$/.test(k) && e.endsWith("{}")) add(k.slice(0, -2).trim(), e.slice(0, -2).trim());
 }
