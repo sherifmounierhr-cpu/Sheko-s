@@ -1,9 +1,9 @@
-import * as db from "./db.js?v=202610240100";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202610240100";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202610240100";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202610240100";
-import { readSheets } from "./xlsx.js?v=202610240100";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202610240100";
+import * as db from "./db.js?v=202611050100";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202611050100";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202611050100";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202611050100";
+import { readSheets } from "./xlsx.js?v=202611050100";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202611050100";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -142,7 +142,7 @@ function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202610240100";
+const BUILD = "202611050100";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -853,14 +853,22 @@ const comShares = (id) => COM.shares.filter((s) => s.deal === id);
 const comName = (code) => COM?.people.find((p) => p.code === code)?.name || nameOf(code) || code;
 const comRole = (k) => COM.roles.find((r) => r.key === k);
 const comLive = () => COM.deals.filter((d) => d.status !== "cancelled");
-// the part of a deal's commission left for staff shares: after taxes, then the admin/collection fee
-const comFactor = (d) => (d.taxOn ? 1 - COM.settings.taxRate : 1) * (1 - d.adminFee);
+// the part of a deal's commission left for staff shares, as in the accounts sheet: VAT taken out
+// when the commission includes it (÷ 1.14), minus the 5% withheld at source, then the admin/collection fee
+const comFactor = (d) => (d.vatIncl ? 1 / (1 + COM.settings.vat) : 1) * (1 - (d.whtOn ? COM.settings.wht : 0)) * (1 - d.adminFee);
+function comBreak(d) {
+  const { vat, wht } = COM.settings, c = d.commission, base = d.vatIncl ? c / (1 + vat) : c, v = base * vat, w = d.whtOn ? base * wht : 0, fee = (base - w) * d.adminFee;
+  return { c, base, vat: v, wht: w, fee, net: base - w - fee, invoice: (d.vatIncl ? c : c + v) - w };
+}
 function comNetBox(d) {
-  const st = COM.settings, tax = d.taxOn ? d.commission * st.taxRate : 0, fee = (d.commission - tax) * d.adminFee;
-  return `<div class="com-net"><div><span>عمولة الشركة</span><b class="num">${money(d.commission)}</b></div>
-    ${d.taxOn ? `<div><span>الضرائب ${n2(st.taxRate * 100)}%</span><b class="num neg">- ${money(tax)}</b></div>` : ""}
-    ${d.adminFee ? `<div><span>مصاريف إدارة وتحصيل ${n2(d.adminFee * 100)}%</span><b class="num neg">- ${money(fee)}</b></div>` : ""}
-    <div class="total"><span>صافي العمولة للتقسيم</span><b class="num">${money(d.commission - tax - fee)} ج</b></div></div>`;
+  const st = COM.settings, b = comBreak(d), pc = (x) => n2(x * 100);
+  return `<div class="com-net"><div><span>عمولة الشركة</span><b class="num">${money(b.c)}</b></div>
+    ${d.vatIncl ? `<div><span>منها ضريبة القيمة المضافة ${pc(st.vat)}%</span><b class="num neg">- ${money(b.vat)}</b></div>
+    <div><span>العمولة قبل الضريبة</span><b class="num">${money(b.base)}</b></div>` : `<div class="note"><span>ضريبة القيمة المضافة ${pc(st.vat)}% بتتضاف على الفاتورة</span><b class="num">+ ${money(b.vat)}</b></div>`}
+    ${d.whtOn ? `<div><span>خصم من المنبع ${pc(st.wht)}%</span><b class="num neg">- ${money(b.wht)}</b></div>` : ""}
+    ${d.adminFee ? `<div><span>مصاريف إدارة وتحصيل ${pc(d.adminFee)}%</span><b class="num neg">- ${money(b.fee)}</b></div>` : ""}
+    <div class="total"><span>صافي العمولة للتقسيم</span><b class="num">${money(b.net)} ج</b></div>
+    <div class="note"><span>صافي الفاتورة اللي هيتحصّل</span><b class="num">${money(b.invoice)}</b></div></div>`;
 }
 // a part's invoice: G includes VAT, N gets VAT on top; withholding is on the amount before VAT
 function comInv(p) {
@@ -972,7 +980,8 @@ function comDealPanel(d) {
       <label>تاريخ التعاقد<input type="date" name="contract" value="${esc(v.contract)}"${dis}></label>
       <label>السجل التجاري<input type="text" name="register" value="${esc(v.register)}" maxlength="40"${dis}></label>
       <fieldset class="wide com-ded"><legend>الخصومات قبل التقسيم على الموظفين</legend>
-        <label class="field-inline"><input type="checkbox" name="taxOn"${(d ? d.taxOn : true) ? " checked" : ""}${dis}> الضرائب ${n2(st.taxRate * 100)}% (بتتخصم من العمولة)</label>
+        <label class="field-inline"><input type="checkbox" name="vatIncl"${(d ? d.vatIncl : true) ? " checked" : ""}${dis}> العمولة شاملة ضريبة القيمة المضافة ${n2(st.vat * 100)}%</label>
+        <label class="field-inline"><input type="checkbox" name="whtOn"${(d ? d.whtOn : true) ? " checked" : ""}${dis}> عليها خصم من المنبع ${n2(st.wht * 100)}%</label>
         <div class="row">${[[0, "من غير مصاريف"], [st.feeLow, `مصاريف إدارة وتحصيل ${n2(st.feeLow * 100)}%`], [st.feeHigh, `مصاريف إدارة وتحصيل ${n2(st.feeHigh * 100)}%`]].map(([fv, fl]) =>
           `<label class="field-inline"><input type="radio" name="fee" value="${fv}"${Math.abs((d ? d.adminFee : 0) - fv) < 1e-9 ? " checked" : ""}${dis}> ${fl}</label>`).join("")}</div></fieldset>
       <label class="wide">ملاحظات<input type="text" name="notes" value="${esc(v.notes)}" maxlength="2000"${dis}></label>
@@ -983,7 +992,7 @@ function comDealPanel(d) {
       <form class="row" id="comCancelForm" data-deal="${d.id}"><input type="text" name="reason" required maxlength="500" placeholder="سبب الإلغاء" aria-label="سبب الإلغاء"><button class="btn danger" type="submit">ألغي الصفقة</button></form>`) : ""}
     ` : ""}
     ${tab === "shares" ? `${comNetBox(d)}
-    <p class="note">النسبة من صافي العمولة بعد الضرايب ومصاريف الإدارة والتحصيل، وبتتحسب على كل دفعة تتحصّل.</p>
+    <p class="note">النسبة من صافي العمولة بعد ضريبة القيمة المضافة والخصم من المنبع ومصاريف الإدارة والتحصيل، وبتتحسب على كل دفعة تتحصّل.</p>
     <div class="tbl flat"><table><thead><tr><th>الموظف</th><th>الدور</th><th>النسبة</th><th>تقريبًا من الصفقة كلها</th><th></th></tr></thead><tbody>
       ${shares.map((s) => `<tr><td>${esc(comName(s.code))}</td><td>${esc(comRole(s.role)?.title || s.role)}</td>
         <td>${w ? `<input type="number" data-comsharepct="${s.id}" value="${s.pct}" min="0.5" max="100" step="0.5" style="width:80px" aria-label="نسبة ${esc(comName(s.code))}">` : `${s.pct}%`}</td>
@@ -999,8 +1008,7 @@ function comDealPanel(d) {
     </tbody></table></div>
     ${Math.abs(partsSum - d.commission) > 1 && d.status === "contract" ? `<p class="note warn-txt">${icon("alert-triangle")}مجموع الدفعات ${money(partsSum)} وعمولة الصفقة ${money(d.commission)}.</p>` : ""}` : `<p class="note">${d.status === "reservation" ? "لسه حجز. أول ما يتعاقد ضيف المطالبة." : "مفيش دفعات لسه."}</p>`}
     ${w ? `<form class="add" id="comPartForm" data-deal="${d.id}"><label>مبلغ الدفعة<input type="number" name="amount" min="1" step="1" value="${parts.length ? "" : Math.round(d.commission)}" required></label>
-      <label>النوع<select name="type">${opts([["G", "شامل الضريبة"], ["N", "صافي والضريبة بتتضاف"]], "G")}</select></label>
-      <label class="field-inline"><input type="checkbox" name="wht" checked> خصم من المنبع ${Math.round(COM.settings.wht * 100)}%</label>
+      <p class="note wide">${d.vatIncl ? "شامل الضريبة" : "صافي والضريبة بتتضاف"}${d.whtOn ? ` · خصم من المنبع ${n2(COM.settings.wht * 100)}%` : ""}، زي الصفقة. بيتغيّر من تابة الصفقة.</p>
       <label>ميعاد التحصيل المتوقع<input type="date" name="due"></label><label>رقم المرجع<input type="text" name="ref" maxlength="60"></label>
       <div><button class="btn" type="submit">${icon("plus")}ضيف دفعة</button></div></form>` : ""}` : ""}
     ${tab === "docs" ? `    <div class="row">${COM_SLOTS.slice(0, 5).map(([k, l]) => `<span class="pill ${files.some((f) => f.slot === k) ? "p-ok" : "p-mute"}">${l}</span>`).join("")}</div>
@@ -1074,7 +1082,6 @@ function comSettings() {
     <div class="card"><h2>${icon("receipt")}الضرايب</h2>
       <form class="add" id="comSetForm"><label>ضريبة القيمة المضافة %<input type="number" name="vat" value="${n2(st.vat * 100)}" min="0" max="50" step="0.5"${dis}></label>
         <label>الخصم من المنبع %<input type="number" name="wht" value="${n2(st.wht * 100)}" min="0" max="50" step="0.5"${dis}></label>
-        <label>الضرائب على العمولة %<input type="number" name="taxRate" value="${n2(st.taxRate * 100)}" min="0" max="50" step="0.5"${dis}></label>
         <label>مصاريف إدارة وتحصيل (الأقل) %<input type="number" name="feeLow" value="${n2(st.feeLow * 100)}" min="0" max="90" step="0.5"${dis}></label>
         <label>مصاريف إدارة وتحصيل (الأعلى) %<input type="number" name="feeHigh" value="${n2(st.feeHigh * 100)}" min="0" max="90" step="0.5"${dis}></label>
         ${w ? `<div><button class="btn primary" type="submit">حفظ</button></div>` : ""}</form>
@@ -2935,7 +2942,7 @@ document.addEventListener("submit", async (ev) => {
     return act(() => db.comGrant(u.id, "commissions", true), `بقى ${nameOf(u.code) || u.name} مسؤول العمولات`);
   }
   if (f.id === "comDealForm") {
-    const id = Number(f.dataset.deal) || 0, fields = { ...v, rate: Number(v.rate) / 100, contract: v.contract || (v.status === "contract" ? today() : ""), taxOn: !!v.taxOn, adminFee: Number(v.fee || 0) };
+    const id = Number(f.dataset.deal) || 0, fields = { ...v, rate: Number(v.rate) / 100, contract: v.contract || (v.status === "contract" ? today() : ""), vatIncl: !!v.vatIncl, whtOn: !!v.whtOn, adminFee: Number(v.fee || 0) };
     delete fields.fee;
     const proj = (CRM?.projects || []).find((p) => p.name === v.project.trim());
     if (proj) { fields.projectId = proj.id; if (!v.developer) fields.developer = proj.developer; } else fields.projectId = "";
@@ -2948,7 +2955,7 @@ document.addEventListener("submit", async (ev) => {
     const pct = v.pct || COM.roles.find((r) => r.key === v.role)?.pct;
     return comAct(() => db.comAddShare(Number(f.dataset.deal), v.code, v.role, pct), `اتضاف ${comName(v.code)}`);
   }
-  if (f.id === "comPartForm") return comAct(() => db.comAddPart(Number(f.dataset.deal), { ...v, wht: !!v.wht }), "اتضافت الدفعة");
+  if (f.id === "comPartForm") { const dd = comDeal(f.dataset.deal); return comAct(() => db.comAddPart(Number(f.dataset.deal), { ...v, type: dd.vatIncl ? "G" : "N", wht: dd.whtOn }), "اتضافت الدفعة"); }
   if (f.id === "comFileForm") { if (!v.file?.size) return; if (v.file.size > 5242880) { toast("الملف أكبر من 5 ميجا", true); return; } return comAct(() => db.comFileAdd(Number(f.dataset.deal), v.slot, v.file), "اترفع المستند"); }
   if (f.id === "comCancelForm") { if (!(await ask("تلغي الصفقة دي؟", "مفيش رجوع بعد الإلغاء.", "ألغيها", true))) return; return comAct(() => db.comCancel(Number(f.dataset.deal), v.reason.trim()), "الصفقة اتلغت"); }
   if (f.id === "comPayForm") {
@@ -2956,7 +2963,7 @@ document.addEventListener("submit", async (ev) => {
     return comAct(async () => { await db.comPay(ids, v.date, v.method, v.ref.trim()); COM_SEL.clear(); }, "اتسجل الصرف، والموظف هيشوفها اتصرفت لو ظاهرة له");
   }
   if (f.id === "comUnpayForm") { if (!(await ask("تلغي تسجيل الصرفية دي؟", "البنود هترجع معتمدة ومستنية صرف.", "ألغي التسجيل", true))) return; return comAct(() => db.comUnpay(Number(v.id), v.reason.trim()), "اتلغى التسجيل"); }
-  if (f.id === "comSetForm") return comAct(() => db.comSaveSettings({ vat: Number(v.vat) / 100, wht: Number(v.wht) / 100, tax_rate: Number(v.taxRate) / 100, fee_low: Number(v.feeLow) / 100, fee_high: Number(v.feeHigh) / 100 }), "اتحفظت الضرايب والمصاريف");
+  if (f.id === "comSetForm") return comAct(() => db.comSaveSettings({ vat: Number(v.vat) / 100, wht: Number(v.wht) / 100, fee_low: Number(v.feeLow) / 100, fee_high: Number(v.feeHigh) / 100 }), "اتحفظت الضرايب والمصاريف");
   if (f.id === "comRoleForm") {
     const key = "r_" + Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 8).padEnd(4, "x");
     return comAct(() => db.comAddRole(key, v.title.trim(), v.pct, COM.roles.length + 1), "اتضاف الدور");

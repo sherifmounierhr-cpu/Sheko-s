@@ -1887,4 +1887,16 @@ export const EN = {
   "نوع الشغل": "Work type",
   "سابوا الشغل": "Left the company",
   "من {#}": "since {}",
+  // VAT included and 5% withheld (neon/020_com_vat.sql)
+  "العمولة شاملة ضريبة القيمة المضافة {#}%": "The commission includes {}% VAT",
+  "عليها خصم من المنبع {#}%": "{}% withheld at source",
+  "منها ضريبة القيمة المضافة {#}%": "Of which VAT {}%",
+  "العمولة قبل الضريبة": "Commission before VAT",
+  "ضريبة القيمة المضافة {#}% بتتضاف على الفاتورة": "VAT {}% added on the invoice",
+  "خصم من المنبع {#}%": "Withholding {}%",
+  "صافي الفاتورة اللي هيتحصّل": "Invoice net to be collected",
+  "شامل الضريبة": "Includes VAT",
+  "صافي والضريبة بتتضاف": "Net, VAT added on top",
+  "{}، زي الصفقة. بيتغيّر من تابة الصفقة.": "{}, as on the deal. Change it on the deal tab.",
+  "النسبة من صافي العمولة بعد ضريبة القيمة المضافة والخصم من المنبع ومصاريف الإدارة والتحصيل، وبتتحسب على كل دفعة تتحصّل.": "The rate is of the net commission after VAT, withholding and the admin & collection fee, and it's worked out on each part as it's collected.",
 };

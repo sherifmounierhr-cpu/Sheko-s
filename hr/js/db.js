@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202610240100";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202610240100";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202611050100";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202611050100";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -721,7 +721,7 @@ export async function loadCom() {
       deals: deals.map((d) => ({ id: d.id, ref: d.ref || "", client: d.client, phone: d.phone || "", projectId: d.project_id ?? "", project: d.project || "", developer: d.developer || "",
         unit: d.unit || "", price: Number(d.price), rate: Number(d.rate), resale: Number(d.resale_amount), method: d.method, register: d.register || "", status: d.status,
         sale: d.sale_date, contract: d.contract_date || "", leadId: d.lead_id ?? "", notes: d.notes || "", commission: Number(d.commission), cancelReason: d.cancel_reason || "",
-        taxOn: d.tax_on !== false, adminFee: Number(d.admin_fee || 0) })),
+        vatIncl: d.vat_incl ?? d.tax_on !== false, whtOn: d.wht_on !== false, adminFee: Number(d.admin_fee || 0) })),
       shares: shares.map((x) => ({ id: x.id, deal: x.deal_id, code: x.code, role: x.role, pct: Number(x.pct) })),
       parts: parts.map((p) => ({ id: p.id, deal: p.deal_id, amount: Number(p.amount), type: p.inv_type, wht: !!p.wht, ref: p.ref || "", claim: p.claim_date || "", sent: p.sent_date || "",
         due: p.due_date || "", collected: p.collected_date || "", received: num(p.received), note: p.note || "" })),
@@ -735,7 +735,7 @@ export async function loadCom() {
 }
 const DEAL_COLS = { ref: "ref", client: "client", phone: "phone", projectId: "project_id", project: "project", developer: "developer", unit: "unit", price: "price", rate: "rate",
   resale: "resale_amount", method: "method", register: "register", status: "status", sale: "sale_date", contract: "contract_date", notes: "notes",
-  taxOn: "tax_on", adminFee: "admin_fee" };
+  vatIncl: "vat_incl", whtOn: "wht_on", adminFee: "admin_fee" };
 const NUMERIC = new Set(["price", "rate", "resale_amount", "project_id", "admin_fee"]);
 function dealRow(f) {
   const row = {};

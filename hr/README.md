@@ -258,10 +258,13 @@ upload stays as the fallback. Setup steps in Arabic: `tools/device/README.md`.
   unmatched names; then everything is imported or nothing. Money already
   collected becomes a collected part whose staff shares are marked paid
   (optional) and never shown to staff by the import.
-- **Deductions before the split** (`neon/017_com_deductions.sql`): each deal
-  can deduct taxes (14%, on by default) straight from the commission, then an
-  admin/collection fee of 11% or 21% from what's left. Staff shares come from
-  that net. The rates are in settings; the fee is stored on the deal.
+- **Deductions before the split** (`neon/017_com_deductions.sql`, then
+  `neon/020_com_vat.sql`): each deal says whether its commission includes the
+  14% VAT (taken out by ÷ 1.14, as in the accounts sheet's type G) and whether
+  5% is withheld at source (taken off the amount before VAT); then an
+  admin/collection fee of 11% or 21% comes off what's left. Staff shares come
+  from that net. The deal shows each amount on its own, and the invoice net.
+  Parts not collected yet follow the deal's two ticks.
 - **Who sees which part of a deal:** the owner named first is the primary
   owner. Only they grant or remove the commissions permissions, and they open
   "نصيب الموظفين" and "المطالبة والدفعات" person by person; everyone else,
@@ -311,7 +314,7 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
    `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql`,
-   `neon/016_identity.sql`, `neon/017_com_deductions.sql`, `neon/018_org_view.sql` and `neon/019_no_punch.sql`
+   `neon/016_identity.sql`, `neon/017_com_deductions.sql`, `neon/018_org_view.sql`, `neon/019_no_punch.sql` and `neon/020_com_vat.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -364,6 +367,7 @@ neon/016_identity.sql     a signed-in request without its identity fails (and is
 neon/017_com_deductions.sql  taxes and admin fee before the staff split; per-person access to shares and parts
 neon/018_org_view.sql        the company structure only for admin, viewall and the new org_view permission
 neon/019_no_punch.sql        people with no punch in 14 days: left / freelance / exempt, chosen by the admin on the upload page
+neon/020_com_vat.sql         each deal: commission includes VAT (÷ 1.14) and 5% withheld, as in the accounts sheet
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)
