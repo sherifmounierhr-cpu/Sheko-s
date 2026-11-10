@@ -295,6 +295,34 @@ month), فريلانس (`work_type = freelance`: out of attendance and payroll, 
 account keeps working) and معفى من البصمة. The employees table shows the work
 type, so a choice can be undone there.
 
+## Punching from the phone (`neon/021_mobile_punch.sql`)
+
+For employees the admin ticks "بصمة موبايل" on the employees page. The
+fingerprint device keeps working for everyone.
+
+- **Once:** the employee accepts the selfie notice and registers their phone
+  from their home page (a passkey, so the phone's own Face ID / fingerprint).
+  The admin approves the phone on رفع البصمة. One phone per employee:
+  approving a new one stops the old one.
+- **Each punch:** one tap on "ابصم دلوقتي". The phone asks for the face or
+  finger, a selfie frame and the location are taken, and the database accepts
+  the punch only if the phone's signature over a fresh challenge verifies with
+  its "user verified" flag set, the location is inside the office radius
+  (accuracy 100 m or better), and the selfie is a small JPEG. It then lands in
+  `punches` with `source = 'mobile'`.
+- **Review:** الحضور اليومي lists the month's phone punches with the distance
+  and, on demand, the selfie, for the admin and the managers above the person.
+  Selfies are deleted after 90 days.
+- **No face data is stored:** the phone checks the face; `hr_p256_verify`
+  checks its ES256 signature in SQL, so no server was added.
+- **Limits:** on Android the phone may use a fingerprint or screen lock, not
+  the face. A mock-location app can fake the location, and a technical person
+  could register a software key; the selfie is the check against both. The
+  passkey is tied to the site address (`punch_config`): after a move to a
+  custom domain, update that row and everyone registers again.
+- A home-screen shortcut (`manifest.webmanifest`, "بصمة") opens the portal on
+  the punch button.
+
 ## "شوف شاشته" (admin preview)
 
 In الإعدادات, each user has a "شوف شاشته" button. The portal then shows
@@ -314,7 +342,7 @@ policy changes). The person's inbox comes from `hr_peek_notifications`
    `neon/007_todos.sql`, `neon/008_org.sql`, `neon/009_device.sql` and
    `neon/010_security.sql`, `neon/011_cv_leavers.sql`, `neon/012_crm.sql`,
    `neon/013_admin.sql`, `neon/014_commissions.sql`, `neon/015_com_import.sql`,
-   `neon/016_identity.sql`, `neon/017_com_deductions.sql`, `neon/018_org_view.sql`, `neon/019_no_punch.sql` and `neon/020_com_vat.sql`
+   `neon/016_identity.sql`, `neon/017_com_deductions.sql`, `neon/018_org_view.sql`, `neon/019_no_punch.sql`, `neon/020_com_vat.sql` and `neon/021_mobile_punch.sql`
    (all safe to re-run).
    For the public application form, allow anonymous access in the Data API
    settings so the `anonymous` role exists, then re-run 004.
@@ -368,6 +396,7 @@ neon/017_com_deductions.sql  taxes and admin fee before the staff split; per-per
 neon/018_org_view.sql        the company structure only for admin, viewall and the new org_view permission
 neon/019_no_punch.sql        people with no punch in 14 days: left / freelance / exempt, chosen by the admin on the upload page
 neon/020_com_vat.sql         each deal: commission includes VAT (÷ 1.14) and 5% withheld, as in the accounts sheet
+neon/021_mobile_punch.sql    punching from the phone: passkey (Face ID / fingerprint), office location, selfie
 tools/device/          office PC program that reads the fingerprint device (pyzk)
 tools/report/weekly.mjs     builds and sends the Thursday emails
 hr/apply.html        public job application (no login)

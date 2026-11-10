@@ -1,0 +1,17 @@
+{
+  "name": "Everest Eco System",
+  "short_name": "Everest",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f6",
+  "theme_color": "#0f7e76",
+  "icons": [
+    { "src": "img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "بصمة الموبايل", "short_name": "بصمة", "url": "./?punch=1", "icons": [{ "src": "img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }] }
+  ]
+}

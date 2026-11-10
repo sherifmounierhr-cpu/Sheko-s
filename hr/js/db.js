@@ -1,7 +1,7 @@
 // Neon Auth + Neon Data API. Every read and write goes through row level
 // security in neon/schema.sql; the UI only hides what the database refuses.
-import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202611050100";
-import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202611050100";
+import { createClient, SupabaseAuthAdapter } from "./vendor/neon.js?v=202611101500";
+import { NEON_AUTH_URL, NEON_DATA_API_URL } from "./config.js?v=202611101500";
 
 export const configured = Boolean(NEON_AUTH_URL && NEON_DATA_API_URL);
 
@@ -51,7 +51,7 @@ const raw = configured
 // read) still go through, with the admin's own permissions.
 let readOnly = false;
 export const READ_ONLY_MSG = "وضع العرض فقط: مينفعش تعدّل وانت شايف شاشة حد تاني";
-const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts", "hr_com_people", "hr_my_commissions", "hr_com_file", "hr_no_punch"]);
+const READ_RPCS = new Set(["hr_device_status", "hr_org_chart", "hr_punch_months", "hr_last_punch_day", "hr_my_pay", "hr_quiz_list", "hr_eval_week", "hr_eval_open", "hr_roles", "hr_peek_notifications", "hr_my_state", "hr_emp_profile", "hr_app_cv", "hr_lead_contacts", "hr_com_people", "hr_my_commissions", "hr_com_file", "hr_no_punch", "hr_punch_state", "hr_punch_devices", "hr_punch_list", "hr_punch_photo"]);
 const refuse = () => { throw Object.assign(new Error(READ_ONLY_MSG), { readOnly: true }); };
 export function setReadOnly(on) { readOnly = !!on; }
 export const isReadOnly = () => readOnly;
@@ -253,7 +253,7 @@ export async function load(ym, R = {}, only = "") {
       return {
         code: e.code, name: e.name || "", fullName: e.full_name || "", device: e.device_name || "",
         teamId: e.team_id ?? "", job: e.job || "", dept: e.dept || "",
-        in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false, workType: e.work_type || "staff", freelance: e.work_type === "freelance", leftOn: e.left_on || "",
+        in: hhmm(e.shift_in), out: hhmm(e.shift_out), off: e.off_day ?? "", exempt: !!e.exempt, active: e.active !== false, mobilePunch: !!e.mobile_punch, workType: e.work_type || "staff", freelance: e.work_type === "freelance", leftOn: e.left_on || "",
         hireDate: e.hire_date || "", experience: e.experience || "", position: e.position || "",
         reportsTo: e.reports_to || "", plus: e.roles_plus || [], minus: e.roles_minus || [],
         salary: Number(p.salary) || 0, account: p.account || "", pay: p.pay_method || (p.account ? "bank" : "cash"),
@@ -291,8 +291,28 @@ export async function load(ym, R = {}, only = "") {
 // ---------------------------------------------------------------- writes
 
 const EMP_COLS = { name: "name", fullName: "full_name", device: "device_name", teamId: "team_id", job: "job", dept: "dept",
-  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active", hireDate: "hire_date", experience: "experience", workType: "work_type" };
+  in: "shift_in", out: "shift_out", off: "off_day", exempt: "exempt", active: "active", hireDate: "hire_date", experience: "experience", workType: "work_type", mobilePunch: "mobile_punch" };
 const PAY_COLS = { salary: "salary", account: "account", pay: "pay_method" };
+
+// ---------------------------------------------------------------- punching from the phone (neon/021_mobile_punch.sql)
+// null when the SQL file hasn't been run yet
+export async function punchState() {
+  try { return check(await client.rpc("hr_punch_state")); } catch (e) { if (missing(e)) return null; throw e; }
+}
+export async function punchConsent() { check(await client.rpc("hr_punch_consent")); }
+export async function punchRegister(k) { return check(await client.rpc("hr_punch_register", { p_cred: k.cred, p_x: k.x, p_y: k.y, p_label: k.label })); }
+export async function punchChallenge() { return check(await client.rpc("hr_punch_challenge")); }
+export async function punchMobile(a, pos, photo) {
+  return check(await client.rpc("hr_punch_mobile", { p_auth: a.auth, p_client: a.client, p_sig: a.sig, p_lat: pos.lat, p_lng: pos.lng, p_accuracy: pos.accuracy, p_photo: photo }));
+}
+export async function punchDevices() {
+  try { return check(await client.rpc("hr_punch_devices")) || []; } catch (e) { if (missing(e)) return null; throw e; }
+}
+export async function punchDeviceSet(id, status) { check(await client.rpc("hr_punch_device_set", { p_id: id, p_status: status })); }
+export async function punchList(month) {
+  try { return check(await client.rpc("hr_punch_list", { p_month: month })) || []; } catch (e) { if (missing(e)) return null; throw e; }
+}
+export async function punchPhoto(id) { return check(await client.rpc("hr_punch_photo", { p_id: id })); }
 
 // People with no punch in the last 14 days of device data (neon/019_no_punch.sql, admin only).
 // null when the SQL file hasn't been run yet.

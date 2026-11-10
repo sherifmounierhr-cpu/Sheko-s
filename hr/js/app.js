@@ -1,9 +1,10 @@
-import * as db from "./db.js?v=202611050100";
-import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202611050100";
-import { SECTIONS, CRITERIA } from "./applyForm.js?v=202611050100";
-import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202611050100";
-import { readSheets } from "./xlsx.js?v=202611050100";
-import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202611050100";
+import * as db from "./db.js?v=202611101500";
+import { DAYS, toMin, dur, monthDays, createEngine, readExport } from "./engine.js?v=202611101500";
+import { SECTIONS, CRITERIA } from "./applyForm.js?v=202611101500";
+import { LANG, LOCALE, setLang, startTranslation, tr } from "./i18n.js?v=202611101500";
+import { readSheets } from "./xlsx.js?v=202611101500";
+import * as P from "./punch.js?v=202611101500";
+import { scopeAs, scopeEval, scopeTodos, scopeLive, scopeCrm, decidesFor, bossesOf } from "./viewas.js?v=202611101500";
 
 const PERM_TYPES = ["إذن تأخير", "إذن انصراف مبكر", "إذن خلال اليوم", "إجازة اعتيادية", "إجازة عارضة", "إجازة مرضية", "إجازة بدون مرتب"];
 const STATUSES = ["معتمد", "قيد المراجعة", "مرفوض"];
@@ -59,6 +60,9 @@ let NOTIF = [], LIVE = null, LIVE_AT = "", COMP = null, CMT = {}, AUDIT = null, 
 // to-do lists; "شوف شاشته" keeps the admin's own identity in REAL while VIEW is someone else
 let TODO = [], TODO_EMP = "", TODO_EDIT = 0, VIEW = null, REAL = null, VSCOPE = null;
 let ORG = null, ORG_SEL = "", ORG_UNIT = 0, ORG_DIRTY = new Set(), DEV = null, NOPUNCH = null;
+// punching from the phone (neon/021_mobile_punch.sql)
+let PUNCH = null, PUNCH_CH = null, PUNCH_MSG = "", PUNCH_LOCK = true, PDEV = null, PLIST = null, PPHOTO = {};
+const WANT_PUNCH = new URLSearchParams(location.search).has("punch");
 
 const $ = (s) => document.querySelector(s);
 // links stored by an admin open only when they are plain https
@@ -136,13 +140,18 @@ const CRM_ERR = [[/section hidden/, "الجزء ده مقفول عليك. الم
   [/bad phone/, "رقم الموبايل مش مظبوط."], [/name required/, "اكتب اسم العميل."], [/next within 24h/, "لو العميل مردّش، لازم تحدد المكالمة الجاية خلال 24 ساعة (اللائحة 4.6)."],
   [/next within 3 days/, "لو العميل بيفكر، لازم تحدد المتابعة الجاية خلال 3 أيام (اللائحة 4.6)."], [/next required/, "حدد ميعاد الخطوة الجاية."],
   [/note too short/, "اكتب إيه اللي حصل بالتفصيل (10 حروف على الأقل)."], [/reason required/, "اكتب السبب."], [/next in the past/, "ميعاد الخطوة الجاية لازم يكون في المستقبل."],
+  [/outside office (\d+)/, "انت على بعد $1 متر من المكتب. بصمة الموبايل بتتقبل جوه المكتب بس."], [/poor accuracy/, "الموقع مش دقيق كفاية. اطلع جنب شباك أو شغّل الـ GPS وجرب تاني."],
+  [/no location/, "مقدرتش أحدد موقعك."], [/no office/, "موقع المكتب لسه مش متسجل. كلم مدير النظام يسجله من الإعدادات."], [/too soon/, "انت لسه باصم من أقل من دقيقتين."],
+  [/punch not allowed/, "بصمة الموبايل مش مفعّلة لحسابك. كلم الإدارة."], [/no device/, "موبايلك لسه مش متوافق عليه من الإدارة."], [/no consent/, "وافق على إشعار صورة السيلفي الأول."],
+  [/bad challenge/, "الطلب اتأخر. دوس (ابصم دلوقتي) تاني."], [/not verified/, "الموبايل ماتأكدش منك. جرب تاني ببصمة الوش أو الإصبع."], [/bad signature|bad origin|bad key/, "الموبايل ده مش المتسجل لحسابك. سجّل موبايلك من جديد أو كلم الإدارة."],
+  [/bad photo/, "صورة السيلفي ماتاخدتش. اسمح للكاميرا وجرب تاني."],
   [/lead closed/, "العميل ده اتقفل."], [/no such employee/, "الموظف ده مش موجود أو ساب الشغل."]];
 function errMsg(e) { const m0 = String(e?.message || e); for (const [re, txt] of CRM_ERR) if (re.test(m0)) return m0.replace(new RegExp(".*?" + re.source + ".*", "s"), txt); if (e?.readOnly) return e.message; const m = String(e?.message || e); if (/not allowed|permission|policy|42501/i.test(m)) return "مالكش صلاحية تعمل ده."; return `حصلت مشكلة: ${m}`; }
 
 // ---------------------------------------------------------------- boot / auth
 // GitHub Pages lets browsers keep the page for up to 10 minutes. If a newer
 // build is out, reload once so nobody has to press Ctrl+Shift+R.
-const BUILD = "202611050100";
+const BUILD = "202611101500";
 // A plain reload can come back from the browser's cache (GitHub Pages lets it keep
 // pages for 10 minutes), still on the old build. Asking for the page under a new
 // address skips that cache, so every file comes from the new build.
@@ -287,7 +296,9 @@ async function beforeTab() {
   if (tab === "field" && ME.code) await loadThreads("meetings", S.meetings.filter((m) => m.code === ME.code).map((m) => m.id));
   if (tab === "live") await loadLive();
   if (tab === "org") { await orgLoad(); if (R.admin) await evalLoad(); }
-  if (tab === "upload") { DEV = await db.deviceStatus().catch(() => null); if (R.admin) NOPUNCH = await db.noPunch().catch(() => null); }
+  if (tab === "upload") { DEV = await db.deviceStatus().catch(() => null); if (R.admin) { NOPUNCH = await db.noPunch().catch(() => null); PDEV = await db.punchDevices().catch(() => null); } }
+  if (tab === "home" && ME.code && !VIEW) await punchLoad();
+  if (tab === "daily") PLIST = await db.punchList(S.meta.month).catch(() => null);
   if (tab === "weekly" || tab === "reports" || tab === "trainees" || (tab === "home" && ME.code)) await evalLoad();
   if (tab === "home" || tab === "actions") await loadThreads("actions", S.actions.map((a) => a.id));
   if (tab === "inbox" && unread() && !VIEW) { const ids = NOTIF.filter((n) => !n.read_at).map((n) => n.id); db.markRead(ids).then(() => { const t = new Date().toISOString(); NOTIF.forEach((n) => (n.read_at ??= t)); renderTabs(); }).catch(() => {}); }
@@ -418,6 +429,7 @@ function home(ym) {
     </div>
     <div class="row"><button class="btn primary" data-go="field">${icon("map-pin")}سجل تواجدي</button><button class="btn" data-go="mine">${icon("calendar-event")}اطلب إذن أو إجازة</button>
     ${lastCheck ? `<span class="note">آخر تسجيل: ${esc(checkKind(lastCheck.kind))} ${fmtTs(lastCheck.ts)}</span>` : ""}</div></div>
+  ${punchCard()}
   ${todoCard()}
   ${fresh.length ? `<div class="banner">${icon("bell")}عندك ${fresh.length} ${fresh.length === 1 ? "إجراء جديد" : "إجراءات جديدة"} من الإدارة. راجعها في (الجزاءات والمنح) تحت وأكد إنك اطلعت.</div>` : ""}
   ${myEvalCard()}
@@ -1470,7 +1482,95 @@ function daily(ym) {
     <label class="row field-inline">الحالة <select id="dailyFilter">${opts(["غياب", "تأخير", "انصراف مبكر", "بصمة ناقصة", "مهمة خارجية", "إجازة", "حاضر", "معفى"], dailyFilter, "الكل")}</select></label>
     <button class="btn" id="exportDaily">تصدير CSV</button></div>
   ${dailyTable(e, ym, R.admin)}
+  ${punchListCard()}
   ${R.admin ? '<p class="note">اكتب في (تعديل الخصم) الرقم اللي انت عايزه بالأيام، أو 0 لإلغاء الخصم.</p>' : ""}`;
+}
+
+// ---------------------------------------------------------------- punching from the phone
+async function punchLoad() {
+  PUNCH = await db.punchState().catch(() => null);
+  if (!PUNCH?.allowed) return;
+  PUNCH_LOCK = await P.hasLock();
+  // the challenge is fetched ahead, so the tap goes straight to the phone's Face ID prompt
+  if (PUNCH.device?.status === "active" && PUNCH_LOCK) PUNCH_CH = await db.punchChallenge().then((c) => ({ ...c, at: Date.now() })).catch(() => null);
+}
+function punchCard() {
+  if (VIEW || !PUNCH?.allowed) return "";
+  const dev = PUNCH.device, today = PUNCH.today || [];
+  const head = `<h2>${icon("fingerprint")}بصمة الموبايل</h2>`;
+  const msg = PUNCH_MSG ? `<p class="note" id="punchMsg" role="status">${esc(PUNCH_MSG)}</p>` : '<p class="note" id="punchMsg" role="status"></p>';
+  if (!PUNCH_LOCK) return `<div class="card">${head}<p class="note">الموبايل أو المتصفح ده مش بيدعم بصمة الوش أو الإصبع. افتح البوابة من موبايلك (Safari على الآيفون أو Chrome على الأندرويد) واتأكد إن عليه قفل شاشة ببصمة.</p></div>`;
+  if (!PUNCH.consent) return `<div class="card">${head}
+    <p>عشان تبصم من موبايلك، مع كل بصمة بتتاخد صورة سيلفي صغيرة وموقعك.</p>
+    <p class="note">الصورة بيشوفها مدير النظام ومديرك بس، وبتتمسح بعد 90 يوم. بصمة وشك نفسها بتفضل على موبايلك ومبتتبعتش لينا.</p>
+    <div><button class="btn primary" type="button" data-punch="consent">موافق</button></div></div>`;
+  if (!dev) return `<div class="card">${head}
+    <p>سجّل الموبايل ده مرة واحدة. هيطلب منك بصمة الوش أو الإصبع، وبعدها الإدارة توافق عليه.</p>
+    <div><button class="btn primary" type="button" data-punch="register">${icon("plus")}سجّل موبايلي</button></div>${msg}</div>`;
+  if (dev.status === "pending") return `<div class="card">${head}<p><span class="pill p-warn">مستني موافقة الإدارة</span> ${esc(dev.label || "")}</p>
+    <p class="note">أول ما الإدارة توافق على موبايلك هيوصلك إشعار وتقدر تبصم.</p></div>`;
+  return `<div class="card punch${WANT_PUNCH ? " want" : ""}" id="punchCard">${head}
+    <div class="punch-row"><button class="btn primary punch-btn" type="button" data-punch="go">${icon("fingerprint")}ابصم دلوقتي</button>
+      <video id="punchCam" class="punch-cam" playsinline muted hidden aria-label="معاينة الكاميرا"></video></div>
+    ${msg}
+    ${today.length ? `<p class="note">بصمات النهارده من الموبايل: ${today.map((t) => `<b class="tabnum">${to12(toMin(db.cairoTime(t.ts)))}</b>`).join(" · ")}</p>` : '<p class="note">جوه المكتب بس. هياخد بصمة الوش وصورة سيلفي وموقعك.</p>'}</div>`;
+}
+const punchSay = (m) => { PUNCH_MSG = m; const el = $("#punchMsg"); if (el) el.textContent = tr(m); };
+async function punchDo(what) {
+  if (what === "consent") { try { await db.punchConsent(); PUNCH_MSG = ""; await punchLoad(); } catch (e) { toast(errMsg(e), true); } render(); return; }
+  if (what === "register") {
+    try {
+      punchSay("الموبايل هيطلب منك البصمة...");
+      const k = await P.register(PUNCH.rp_id || location.hostname, ME.email || ME.code, empName(empBy(ME.code)));
+      await db.punchRegister(k); PUNCH_MSG = ""; toast("اتسجل الموبايل. مستني موافقة الإدارة"); await punchLoad(); render();
+    } catch (e) { punchSay(punchErr(e)); }
+    return;
+  }
+  const btn = $("[data-punch=go]"); if (btn?.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    if (!PUNCH_CH || Date.now() - PUNCH_CH.at > 100000) PUNCH_CH = { ...(await db.punchChallenge()), at: Date.now() };
+    punchSay("بص للموبايل...");
+    const a = await P.assert(PUNCH_CH); PUNCH_CH = null;
+    punchSay("باخد الصورة والموقع...");
+    const cam = $("#punchCam"); if (cam) cam.hidden = false;
+    const [photo, pos] = await Promise.all([P.selfie(cam || document.createElement("video")), locate()]);
+    if (cam) cam.hidden = true;
+    const r = await db.punchMobile(a, pos, photo);
+    PUNCH_MSG = `اتسجلت بصمتك ${to12(toMin(db.cairoTime(r.ts)))} · داخل المكتب`;
+    toast("اتسجلت البصمة"); await refresh(); await punchLoad(); render();
+  } catch (e) { PUNCH_CH = null; punchSay(punchErr(e)); db.punchChallenge().then((c) => { PUNCH_CH = { ...c, at: Date.now() }; }).catch(() => {}); }
+  finally { const b2 = $("[data-punch=go]"); if (b2) b2.disabled = false; const cam = $("#punchCam"); if (cam) cam.hidden = true; }
+}
+// the browser's own refusals (the person cancelled, or blocked the camera) in plain words
+function punchErr(e) {
+  const n = e?.name || "";
+  if (n === "NotAllowedError" && /camera|video|Permission|device/i.test(e.message || "")) return "اسمح للبوابة تستخدم الكاميرا من إعدادات المتصفح وجرب تاني.";
+  if (n === "NotAllowedError" || n === "AbortError") return "البصمة ماكملتش. دوس تاني وبص للموبايل.";
+  if (n === "NotFoundError" || n === "NotReadableError") return "الكاميرا مش متاحة. اقفل أي برنامج تاني بيستخدمها وجرب تاني.";
+  if (n === "InvalidStateError") return "الموبايل ده متسجل قبل كده.";
+  if (n === "SecurityError" || /unsupported phone/.test(e?.message || "")) return "الموبايل أو المتصفح ده مش بيدعم بصمة الموبايل.";
+  return errMsg(e);
+}
+// admin: phones waiting for approval, and the ones in use
+function punchDevCard() {
+  if (!PDEV) return "";
+  const pend = PDEV.filter((d) => d.status === "pending"), act2 = PDEV.filter((d) => d.status === "active");
+  return `<div class="card"><h2>${icon("fingerprint")}بصمة الموبايل${pend.length ? ` <span class="badge">${pend.length}</span>` : ""}</h2>
+    <p class="note">الموظف اللي عليه علامة (بصمة موبايل) في صفحة الموظفين بيسجّل موبايله، وانت توافق عليه هنا. كل موظف ليه موبايل واحد: الموافقة على موبايل جديد بتوقف القديم.</p>
+    ${PDEV.length ? `<div class="tbl flat"><table><thead><tr><th>الموظف</th><th>الموبايل</th><th>الحالة</th><th>آخر بصمة</th><th></th></tr></thead><tbody>
+    ${[...pend, ...act2].map((d) => `<tr><td>${esc(d.name)} <span class="note">${esc(d.code)}</span></td><td>${esc(d.label || "-")}<div class="note">اتسجل ${fmtTs(d.created)}</div></td>
+      <td>${d.status === "pending" ? '<span class="pill p-warn">مستني موافقة</span>' : '<span class="pill p-ok">شغال</span>'}</td><td>${d.last_used ? fmtTs(d.last_used) : "-"}</td>
+      <td><div class="row nowrap">${d.status === "pending" ? `<button type="button" class="btn sm ok" data-pdev="${d.id}|active">وافق</button><button type="button" class="btn sm danger" data-pdev="${d.id}|revoked">ارفض</button>` : `<button type="button" class="btn sm danger" data-pdev="${d.id}|revoked">وقّفه</button>`}</div></td></tr>`).join("")}
+    </tbody></table></div>` : '<p class="note">لسه مفيش موبايلات متسجلة.</p>'}</div>`;
+}
+// the month's punches that came from phones, with the selfie on demand
+function punchListCard() {
+  if (!PLIST?.length) return "";
+  return fold("fingerprint#plist", `بصمات الموبايل الشهر ده (${PLIST.length})`, `<div class="tbl flat"><table><thead><tr><th>الموظف</th><th>الوقت</th><th>البعد عن المكتب</th><th>الصورة</th></tr></thead><tbody>
+    ${[...PLIST].reverse().slice(0, 300).map((m) => `<tr><td>${esc(nameOf(m.code))}</td><td>${fmtTs(m.ts)}</td><td class="num">${m.distance} متر</td>
+      <td>${PPHOTO[m.id] ? `<img class="punch-shot" src="data:image/jpeg;base64,${PPHOTO[m.id]}" alt="صورة البصمة">` : m.photo ? `<button type="button" class="btn sm" data-pphoto="${m.id}">${icon("eye")}شوف الصورة</button>` : '<span class="note">اتمسحت بعد 90 يوم</span>'}</td></tr>`).join("")}
+    </tbody></table></div>`);
 }
 
 // employee self-service: send requests, follow them, see own attendance
@@ -1583,7 +1683,7 @@ function upload() {
     <p class="note">ارفع ملف التصدير من جهاز البصمة (.xls زي ملف سبتمبر، أو CSV). البصمات المتكررة مش بتتضاف مرتين.${R.admin ? " الأكواد الجديدة بتتضاف للموظفين." : " لو فيه أكواد جديدة، مدير النظام هيضيفهم للموظفين."}</p>
     <div class="row"><input type="file" id="imp" accept=".xls,.csv,.txt" aria-label="ملف البصمة"><span class="note" id="impMsg"></span></div></div>
   <div class="card"><h2>بصمات الشهر ده</h2><p class="note">${counts.reduce((a, [, n]) => a + n, 0)} بصمة لـ ${counts.length} كود. آخر يوم فيه بصمات: ${LAST || "-"}.</p></div>
-  ${R.admin ? noPunchCard() : ""}`;
+  ${R.admin ? `${punchDevCard()}${noPunchCard()}` : ""}`;
 }
 // working people with no punch in the last 14 days of device data, and what to do with each (neon/019_no_punch.sql)
 function noPunchCard() {
@@ -1659,7 +1759,7 @@ function emp() {
   const teamOpts = (sel) => opts(S.teams.map((t) => [t.id, t.name]), sel, "بدون فريق");
   return `<div class="row"><label class="row field-inline">عرض <select id="empFilter">${opts([["nameless", "بدون اسم"], ["exempt", "مرفوع عنهم البصمة"], ["noteam", "بدون فريق"], ["freelance", "فريلانس"], ["left", "سابوا الشغل"]], empFilter, "كل الموظفين")}</select></label>
   <p class="note">أي تعديل بيتحفظ على طول. الفرق ومديرينها بتتعدل من (الإعدادات والفرق).</p></div>
-  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>شغال</th><th>نوع الشغل</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
+  <div class="tbl"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الفريق</th><th>الوظيفة</th><th>حضور خاص</th><th>انصراف خاص</th><th>يوم راحة</th><th>مرفوع عنه البصمة</th><th>بصمة موبايل</th><th>شغال</th><th>نوع الشغل</th><th>تاريخ التعيين</th><th>الخبرة</th><th>الاسم بالكامل (للبنك)</th><th>الراتب</th><th>رقم الحساب</th><th>طريقة الصرف</th></tr></thead><tbody>
   ${list.map((e) => { const c = esc(e.code); return `<tr class="${!e.name?.trim() ? "missing-name" : ""}${e.active === false ? " off" : ""}"><td>${c}</td>
     <td><input type="text" data-e="${c}" data-f="name" value="${esc(e.name)}" style="width:160px"></td>
     <td><select data-e="${c}" data-f="teamId">${teamOpts(e.teamId)}</select></td>
@@ -1667,6 +1767,7 @@ function emp() {
     <td><input type="time" data-e="${c}" data-f="in" value="${esc(e.in)}"></td><td><input type="time" data-e="${c}" data-f="out" value="${esc(e.out)}"></td>
     <td><select data-e="${c}" data-f="off">${opts(DAYS.map((d, i) => [i, d]), e.off, "لا يوجد")}</select></td>
     <td class="num"><input type="checkbox" data-e="${c}" data-f="exempt"${e.exempt ? " checked" : ""} aria-label="مرفوع عنه البصمة"></td>
+    <td class="num"><input type="checkbox" data-e="${c}" data-f="mobilePunch"${e.mobilePunch ? " checked" : ""} aria-label="بصمة موبايل"></td>
     <td class="num"><input type="checkbox" data-e="${c}" data-f="active"${e.active !== false ? " checked" : ""} aria-label="شغال">${e.active === false && e.leftOn ? `<div class="note">من ${fmtDate(e.leftOn)}</div>` : ""}</td>
     <td><select data-e="${c}" data-f="workType" aria-label="نوع الشغل">${opts([["staff", "موظف"], ["freelance", "فريلانس"]], e.workType)}</select></td>
     <td><input type="date" data-e="${c}" data-f="hireDate" value="${esc(e.hireDate)}"></td>
@@ -2674,6 +2775,14 @@ document.addEventListener("click", async (ev) => {
   }
   if (d.posdel) { const k = d.posdel; if (await ask(`تمسح منصب (${posOf(k)?.title})؟`, "محدش في المنصب ده دلوقتي.", "امسحه", true)) await orgAct(() => db.dropOrgPosition(k), "اتمسح المنصب", true); return; }
   if (d.apply) { const k = d.apply; await orgAct(async () => { const n = await db.applyTemplate(k); ORG_DIRTY.delete(k); toast(`اتطبق قالب (${posOf(k)?.title}) على ${n} ${n === 1 ? "حساب" : "حسابات"}`); }, null, true); return; }
+  if (d.punch) { punchDo(d.punch); return; }
+  if (d.pdev) {
+    const [id, status] = d.pdev.split("|"), dv = PDEV?.find((x) => String(x.id) === id);
+    if (status === "revoked" && !(await ask(dv?.status === "pending" ? "ترفض الموبايل ده؟" : "توقّف بصمة الموبايل على الموبايل ده؟", `${dv?.name || ""} · ${dv?.label || ""}`, dv?.status === "pending" ? "ارفض" : "وقّفه", true))) return;
+    try { await db.punchDeviceSet(Number(id), status); PDEV = await db.punchDevices().catch(() => null); toast(status === "active" ? "اتوافق على الموبايل ووصل للموظف إشعار" : "اتوقف الموبايل"); } catch (e) { toast(errMsg(e), true); }
+    render(); return;
+  }
+  if (d.pphoto) { try { PPHOTO[d.pphoto] = await db.punchPhoto(Number(d.pphoto)); } catch (e) { toast(errMsg(e), true); } render(); return; }
   if (d.nopunch) {
     const [code, choice] = d.nopunch.split("|"), who = empName(empBy(code)) || code;
     const Q = { left: [`${who} ساب الشغل؟`, "حسابه هيتقفل على طول ومش هيتحسب في الحضور. مرتب الشهر ده بيفضل، ومن الشهر الجاي مش هيظهر في المرتبات. بياناته بتفضل، ولو رجع علّمه (شغال) تاني من صفحة الموظفين.", "أيوه ساب", true],
